@@ -180,18 +180,44 @@ function __maybeFinishLoader() {
 setLoaderPct(0);
 
 // ============================================================
-// ✅ DEBUG: If anything crashes, show it on the loader instead of 0% forever
+// ✅ DEBUG: show load errors on the loader (but ignore harmless iOS rejections)
 // ============================================================
+const __IGNORE_ERR = [
+  /notallowederror/i,                 // autoplay/user gesture blocks
+  /play\(\) failed/i,
+  /the operation is insecure/i,
+  /resizeobserver loop limit exceeded/i,
+  /webkit/i
+];
+
+function __shouldIgnoreMsg(msg = "") {
+  return __IGNORE_ERR.some((re) => re.test(String(msg)));
+}
+
 window.addEventListener("error", (e) => {
-  console.error("💥 Uncaught error:", e.error || e.message);
-  if (loaderTextEl) loaderTextEl.textContent = "ERROR (check console)";
+  const msg = e?.message || "";
+  console.error("💥 Uncaught error:", e.error || msg);
+
+  // Ignore common harmless ones
+  if (__shouldIgnoreMsg(msg)) return;
+
+  // Only show ERROR while loader is still visible
+  if (!__loaderFinished && loaderTextEl) loaderTextEl.textContent = "ERROR (check console)";
 });
 
 window.addEventListener("unhandledrejection", (e) => {
-  console.error("💥 Unhandled promise rejection:", e.reason);
-  if (loaderTextEl) loaderTextEl.textContent = "ERROR (check console)";
-});
+  const reason = e?.reason;
+  const msg =
+    (typeof reason === "string" ? reason : reason?.message) || String(reason || "");
 
+  console.error("💥 Unhandled promise rejection:", reason);
+
+  // Ignore autoplay / gesture blocked rejections (super common on iOS)
+  if (__shouldIgnoreMsg(msg)) return;
+
+  // Only show ERROR while loader is still visible
+  if (!__loaderFinished && loaderTextEl) loaderTextEl.textContent = "ERROR (check console)";
+});
 
 let composer = null;
 let nightVisionPass = null;
@@ -650,6 +676,21 @@ const camera = new THREE.PerspectiveCamera(
   1000000
 );
 
+function adjustCameraForMobile() {
+  const aspect = window.innerWidth / window.innerHeight;
+
+  // if screen is tall (portrait iPhone)
+  if (aspect < 1.2) {
+    camera.fov = 40;   // try 38–45 (40 is a great starting point)
+  } else {
+    camera.fov = 32.5; // your original desktop value
+  }
+
+  camera.aspect = aspect;
+  camera.updateProjectionMatrix();
+}
+
+adjustCameraForMobile();
 
 if (MOBILE_PROFILE.postFX) {
   initPostFX();
@@ -6012,9 +6053,10 @@ function handleResize() {
   if (!renderer || !renderer.domElement) return;
   if (!camera) return;
 
-  const w = window.innerWidth;
-  const h = window.innerHeight;
-  const aspect = w / h;
+const vv = window.visualViewport;
+const w = vv ? vv.width  : window.innerWidth;
+const h = vv ? vv.height : window.innerHeight;
+
 
   const dpr = window.devicePixelRatio || 1;
   // ✅ iOS crash guard: keep DPR low
@@ -6038,6 +6080,11 @@ function handleResize() {
       camera.fov = baseFovDeg;
     }
   }
+
+  // ✅ iPhone portrait feels too zoomed — widen FOV
+if (isIOS && aspect < 1.0) {
+  camera.fov = Math.max(camera.fov, 42); // try 40–48 to taste
+}
 
   camera.aspect = aspect;
   camera.updateProjectionMatrix();
