@@ -83,7 +83,7 @@ const renderer = new THREE.WebGLRenderer({
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = isIOS ? 0.75 : 0.8;
-renderer.physicallyCorrectLights = !isIOS;
+renderer.physicallyCorrectLights = true;
 
 renderer.shadowMap.enabled = MOBILE_PROFILE.shadows;
 renderer.shadowMap.type = isIOS
@@ -211,7 +211,6 @@ let aeMaxGain = 3.20;
 let aeSampleAccum = 0;      // to sample at ~10–15 Hz instead of every frame
 
 function updateNightVisionAutoGain(dt) {
-    if (isIOS) return; // ✅ iOS: avoid readRenderTargetPixels crash
   if (!nightVisionOn || !nightVisionPass) return;
 
   // sample ~12 times per second (adjust if you want)
@@ -874,10 +873,6 @@ const pmrem = new THREE.PMREMGenerator(renderer);
 const envRT = pmrem.fromScene(new RoomEnvironment(), 0.0);
 
 scene.environment = envRT.texture;
-
-pmrem.dispose();
-envRT.dispose();
-
 
 // Give GPU one frame to finish
 requestAnimationFrame(() => {
@@ -2394,8 +2389,8 @@ function closePhotoOverlay() {
 // TV UI (Option A: Canvas -> CanvasTexture)
 // ============================================================
 const tvCanvas = document.createElement("canvas");
-tvCanvas.width = isIOS ? 1024 : 1920;
-tvCanvas.height = isIOS ? 576 : 1080;
+tvCanvas.width = 1920;
+tvCanvas.height = 1080;
 
 const tvCtx = tvCanvas.getContext("2d");
 tvCtx.imageSmoothingEnabled = true;
@@ -3252,14 +3247,10 @@ function clearTvScreen() {
 function applyTvTextureEnabled(enabled) {
   if (!tvScreenMatRef) return;
 
-  // ✅ Keep the canvas texture assigned always
-  tvScreenMatRef.map = tvTex;
-  tvScreenMatRef.emissiveMap = tvTex;
-
-  // Just control how "awake" it looks via intensity
+  tvScreenMatRef.map = enabled ? tvTex : null;
+  tvScreenMatRef.emissiveMap = enabled ? tvTex : null;
   tvScreenMatRef.needsUpdate = true;
 }
-
 
 const tracks = [
   "./assets/Audio/01-dunkelheit-02.mp3",
@@ -3368,7 +3359,6 @@ async function playCurrent() {
     isPlaying = true;
     console.log("▶️ Playing track:", trackIndex, tracks[trackIndex]);
   } catch (err) {
-    isPlaying = false;
     console.warn("Audio play blocked:", err);
   }
 }
@@ -3599,7 +3589,7 @@ function updateTv() {
 
 
   // emissive animation (OFF -> ON)
-  const offI = 0.6;
+  const offI = 0.0;
   const onI = 1.25;
 
   const pop = a * (1 - a) * 4;
@@ -3626,7 +3616,7 @@ if (tvBooting) {
 tvScreenMatRef.emissiveIntensity = intensity;
 
 
-  const baseOff = new THREE.Color(0x2a2a2a);  // off = dark
+  const baseOff = new THREE.Color(0x111111);  // off = dark
   const baseOn  = new THREE.Color(0xd0d0d0);  // on  = bright (IMPORTANT)
   tvScreenMatRef.color.lerpColors(baseOff, baseOn, a);
 
@@ -4383,17 +4373,19 @@ function makePBR({ albedo, normal, roughness, metalness, ao }, opts = {}) {
   });
 }
 
+
+// ✅ ADD THIS DIRECTLY UNDER makePBR()
 function makeTransparentPBR({ albedo, normal }, opts = {}) {
-  const mapTex = albedo ? loadSRGB(albedo) : null;
+  const alphaTex = albedo ? loadLinear(albedo) : null; // use PNG alpha
 
   return new THREE.MeshStandardMaterial({
-    map: mapTex,
+    map: albedo ? loadSRGB(albedo) : null,
     normalMap: normal ? loadLinear(normal) : null,
 
-    transparent: true,
-    alphaMap: mapTex,              // ✅ reuse same texture (alpha channel only)
+    transparent: true,        // ✅ REQUIRED
+    alphaMap: alphaTex,       // ✅ READS alpha from your PNG
     opacity: opts.opacity ?? 1.0,
-    depthWrite: false,
+    depthWrite: false,        // ✅ helps transparency sort issues
 
     roughness: opts.roughness ?? 0.05,
     metalness: opts.metalness ?? 0.0,
@@ -4839,11 +4831,11 @@ cabnet_hinge3: (() => {
     {
       albedo: "./assets/Textures/Hinge/Hinge Albeto.jpg",
     },
-    { roughness: 0.9, metalness: 0.4 }
+    { roughness: 0.9, metalness: 0.2}
   );
 
   // 2️⃣ DARKEN IT HERE 👇 (THIS is where multiplyScalar goes)
-  m.color.multiplyScalar(0.65);
+  m.color.multiplyScalar(0.37);
 
   // 3️⃣ Optional: subtle reflection
   m.envMapIntensity = 0.10;
@@ -4860,11 +4852,11 @@ cabnet_hinge4: (() => {
     {
       albedo: "./assets/Textures/Hinge/Hinge Albeto.jpg",
     },
-    { roughness: 0.9, metalness: 0.4 }
+    { roughness: 0.9, metalness: 0.2 }
   );
 
   // 2️⃣ DARKEN IT HERE 👇 (THIS is where multiplyScalar goes)
-  m.color.multiplyScalar(0.65);
+  m.color.multiplyScalar(0.37);
 
   // 3️⃣ Optional: subtle reflection
   m.envMapIntensity = 0.10;
@@ -4881,11 +4873,11 @@ cabnet_hinge5: (() => {
     {
       albedo: "./assets/Textures/Hinge/Hinge Albeto.jpg",
     },
-    { roughness: 0.9, metalness: 0.4 }
+    { roughness: 0.9, metalness: 0.2 }
   );
 
   // 2️⃣ DARKEN IT HERE 👇 (THIS is where multiplyScalar goes)
-  m.color.multiplyScalar(0.65);
+  m.color.multiplyScalar(0.37);
 
   // 3️⃣ Optional: subtle reflection
   m.envMapIntensity = 0.10;
@@ -5267,6 +5259,22 @@ for (const k of keysToTry) {
 
 // ✅ only fallback if nothing matched
 o.material = mat ? mat : fallbackMat;
+
+
+      // ✅ Make door more cream colored
+if (n.includes("door") && o.material && o.material.color) {
+  o.material = o.material.clone();
+
+  // Brighten
+  o.material.color.multiplyScalar(1.8);
+
+  // Warm / cream tint
+  o.material.color.r *= 1.10;
+  o.material.color.g *= 1.07;
+  o.material.color.b *= 0.88;
+
+  o.material.needsUpdate = true;
+}
 
       // Global IBL control
       if (o.material && "envMapIntensity" in o.material) {
@@ -5710,8 +5718,8 @@ console.log("✅ Interactives loaded");
 tvOn = false;
 tvAnim = null;
 if (tvScreenMatRef) {
-  tvScreenMatRef.emissiveIntensity = 0.06;
-  tvScreenMatRef.color.setHex(0x2a2a2a);
+  tvScreenMatRef.emissiveIntensity = 0.0;
+  tvScreenMatRef.color.setHex(0x111111);
   tvScreenMatRef.needsUpdate = true;
 }
 
@@ -5853,7 +5861,6 @@ window.addEventListener("pointermove", markUserInput, { passive: true });
 window.addEventListener("wheel", markUserInput, { passive: true });
 window.addEventListener("keydown", markUserInput, { passive: true });
 window.addEventListener("touchstart", markUserInput, { passive: true });
-window.addEventListener("click", unlockAudioOnce, { once: true });
 window.addEventListener("touchmove", markUserInput, { passive: true });
 
 function updateBreath2(dt) {
