@@ -6056,45 +6056,37 @@ grainStyle.innerHTML = `
 
 document.head.appendChild(grainStyle);
 
-// ============================================================
-// CLEAN RESIZE HANDLER (GitHub + VSC consistent)
-// ============================================================
-
 function handleResize() {
   if (!renderer || !renderer.domElement) return;
   if (!camera) return;
 
-const vv = window.visualViewport;
-const w = vv ? vv.width  : window.innerWidth;
-const h = vv ? vv.height : window.innerHeight;
-
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const aspect = w / h;
 
   const dpr = window.devicePixelRatio || 1;
-  // ✅ iOS crash guard: keep DPR low
   renderer.setPixelRatio(isIOS ? 1 : Math.min(dpr, 2.0));
   renderer.setSize(w, h, true);
 
-  // Always fullscreen
+  // fullscreen viewport (your raycast mapping expects this)
   viewX = 0;
   viewY = 0;
   viewW = w;
   viewH = h;
 
- // ✅ Keep FOV constant (no proportion changes)
-if (baseCamFov0 != null) camera.fov = baseCamFov0;
+  // ✅ Keep proportions: DO NOT change FOV dynamically
+  if (baseCamFov0 != null) camera.fov = baseCamFov0;
 
-// ✅ iPhone/tall screens: push camera backward instead of changing FOV
-if (baseCamPos0 && baseCamDir0) {
-  // how much taller than your design aspect we are
-  const tallFactor = Math.max(1, BASE_ASPECT / aspect); // >1 on tall screens (phones)
+  // ✅ Push camera back on tall (portrait) screens
+  if (baseCamPos != null) {
+    // 0 when landscape-ish, approaches 1 as it gets taller
+    const t = THREE.MathUtils.clamp((1.0 - aspect) / 0.55, 0, 1);
 
-  // tune this number: higher = more zoomed-out on iPhone
-  const PUSH_STRENGTH = isIOS ? 0.28 : 0.0;  // try 0.22–0.40
+    // tweak this number to taste (start here)
+    const push = (roomMaxDim || 1) * 0.22 * t;
 
-  const push = (tallFactor - 1) * roomMaxDim * PUSH_STRENGTH;
-
-  camera.position.copy(baseCamPos0).addScaledVector(baseCamDir0, -push);
-}
+    camera.position.copy(baseCamPos).add(new THREE.Vector3(0, 0, push));
+  }
 
   camera.aspect = aspect;
   camera.updateProjectionMatrix();
@@ -6104,6 +6096,7 @@ if (baseCamPos0 && baseCamDir0) {
     nightVisionPass.uniforms.uResolution.value.set(w, h);
   }
 }
+
 
 window.addEventListener("resize", handleResize);
 window.addEventListener("orientationchange", () => {
