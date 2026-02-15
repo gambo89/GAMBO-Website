@@ -24,7 +24,8 @@ const DESIGN_H = 1080;
 const DESIGN_ASPECT = DESIGN_W / DESIGN_H;
 
 const BASE_ASPECT = DESIGN_ASPECT;
-let baseFovDeg = null;
+let baseFovDeg = 0;          // ✅ numeric default
+let baseFovCaptured = false; // ✅ add this
 
 // current viewport inside the full canvas
 let viewX = 0, viewY = 0, viewW = window.innerWidth, viewH = window.innerHeight;
@@ -5326,7 +5327,6 @@ lampMeshRef = (() => {
   m.needsUpdate = true;
 }
 
-
     if (skateboardMeshRef) {
       const skatePos = new THREE.Vector3();
       skateboardMeshRef.getWorldPosition(skatePos);
@@ -5370,6 +5370,10 @@ baseCamPos = camera.position.clone();
     camera.near = maxDim / 1000;
     camera.far = maxDim * 1000;
     camera.updateProjectionMatrix();
+
+    baseFovDeg = camera.fov;
+    baseFovCaptured = true;
+    handleResize();
 
     captureBreathBaseline();
   },
@@ -5944,53 +5948,52 @@ grainStyle.innerHTML = `
 
 document.head.appendChild(grainStyle);
 
-window.addEventListener("resize", () => {
+// ============================================================
+// CLEAN RESIZE HANDLER (GitHub + VSC consistent)
+// ============================================================
+
+function handleResize() {
   if (!renderer || !renderer.domElement) return;
   if (!camera) return;
 
   const w = window.innerWidth;
   const h = window.innerHeight;
+  const aspect = w / h;
 
   const dpr = window.devicePixelRatio || 1;
   renderer.setPixelRatio(isIOS ? Math.min(dpr, 1.5) : Math.min(dpr, 2.0));
   renderer.setSize(w, h, true);
 
-  const aspect = w / h;
+  // Always fullscreen
+  viewX = 0;
+  viewY = 0;
+  viewW = w;
+  viewH = h;
 
-  // Always render fullscreen (NO LETTERBOX BARS)
-  viewX = 0; viewY = 0; viewW = w; viewH = h;
-
-  // If baseFovDeg hasn't been captured yet, don't break resize
-  if (baseFovDeg == null) {
-    camera.aspect = aspect;
-    camera.updateProjectionMatrix();
-  } else {
-    // ✅ COVER behavior:
-    // - if window is wider than 16:9, zoom in (crop top/bottom) so you DON'T reveal extra sides
-    // - if window is narrower than 16:9, normal aspect crops sides (no revealing more)
+  // Apply cover math only after baseline captured
+  if (baseFovCaptured) {
     if (aspect > BASE_ASPECT) {
       const baseV = THREE.MathUtils.degToRad(baseFovDeg);
-      const baseH = 2 * Math.atan(Math.tan(baseV * 0.5) * BASE_ASPECT); // horizontal FOV at 16:9
-      const newV  = 2 * Math.atan(Math.tan(baseH * 0.5) / aspect);      // vertical FOV for current aspect
+      const baseH = 2 * Math.atan(Math.tan(baseV * 0.5) * BASE_ASPECT);
+      const newV  = 2 * Math.atan(Math.tan(baseH * 0.5) / aspect);
       camera.fov = THREE.MathUtils.radToDeg(newV);
     } else {
       camera.fov = baseFovDeg;
     }
-
-    camera.aspect = aspect;
-    camera.updateProjectionMatrix();
   }
 
-  // Postprocessing matches fullscreen too
+  camera.aspect = aspect;
+  camera.updateProjectionMatrix();
+
   if (composer) composer.setSize(w, h);
   if (nightVisionPass?.uniforms?.uResolution?.value) {
     nightVisionPass.uniforms.uResolution.value.set(w, h);
   }
-});
+}
 
-
+window.addEventListener("resize", handleResize);
 window.addEventListener("orientationchange", () => {
-  setTimeout(() => window.dispatchEvent(new Event("resize")), 250);
+  setTimeout(handleResize, 250);
 });
 
 // ============================================================
