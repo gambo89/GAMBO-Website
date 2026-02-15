@@ -45,19 +45,37 @@ const renderer = new THREE.WebGLRenderer({
   powerPreference: "low-power",
 });
 
-// ============================================================
-// RENDERER SETTINGS (darker + filmic)
-// ============================================================
+const isIOS =
+  /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+  (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+// renderer settings...
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.8;
+renderer.toneMappingExposure = isIOS ? 0.75 : 0.8;
 renderer.physicallyCorrectLights = true;
 
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = isIOS
+  ? THREE.PCFShadowMap
+  : THREE.PCFSoftShadowMap;
 
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2.0));
+const dpr = window.devicePixelRatio || 1;
+renderer.setPixelRatio(isIOS ? Math.min(dpr, 1.5) : Math.min(dpr, 2.0));
 renderer.setSize(window.innerWidth, window.innerHeight);
+
+// ✅ iOS SAFARI INPUT FIX (does NOT change desktop look)
+if (isIOS) {
+  renderer.domElement.style.touchAction = "none";
+  renderer.domElement.style.webkitUserSelect = "none";
+  renderer.domElement.style.userSelect = "none";
+
+  renderer.domElement.addEventListener(
+    "touchmove",
+    (e) => e.preventDefault(),
+    { passive: false }
+  );
+}
 
 // ============================================================
 // SCENE + CAMERA
@@ -3307,6 +3325,7 @@ async function togglePlayPause() {
   updateSpeakerHintText?.();
 }
 
+
 async function nextTrack(forcePlay = false) {
   const wasPlaying = isPlaying || forcePlay;
 
@@ -4112,7 +4131,7 @@ function setupNightLights(maxDim) {
   lampShadow.distance = maxDim *0.9;
 
   lampShadow.castShadow = true;
-  lampShadow.shadow.mapSize.set(4096, 4096);
+  lampShadow.shadow.mapSize.set(isIOS ? 2048 : 4096, isIOS ? 2048 : 4096);
   lampShadow.shadow.radius = 6;
   lampShadow.shadow.bias = -0.00004;
   lampShadow.shadow.normalBias = 0.02;
@@ -4196,7 +4215,7 @@ scene.add(pinRight);
   underShelfUp.distance = maxDim * 1.2;
 
   underShelfUp.castShadow = true;
-  underShelfUp.shadow.mapSize.set(2048, 2048);
+  underShelfUp.shadow.mapSize.set(isIOS ? 1024 : 2048, isIOS ? 1024 : 2048);
   underShelfUp.shadow.bias = -0.00003;
   underShelfUp.shadow.normalBias = 0.02;
 
@@ -5874,17 +5893,30 @@ grainStyle.innerHTML = `
 document.head.appendChild(grainStyle);
 
 window.addEventListener("resize", () => {
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  camera.aspect = window.innerWidth / window.innerHeight;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+
+  // ✅ IMPORTANT: re-apply DPR on iOS after rotate / toolbar changes
+  const dpr = window.devicePixelRatio || 1;
+  renderer.setPixelRatio(isIOS ? Math.min(dpr, 1.5) : Math.min(dpr, 2.0));
+
+  renderer.setSize(w, h, true);
+
+  camera.aspect = w / h;
   camera.updateProjectionMatrix();
 
   // ✅ keep postprocessing size in sync
-  if (composer) composer.setSize(window.innerWidth, window.innerHeight);
+  if (composer) composer.setSize(w, h);
 
-    // ✅ NEW: keep shader resolution correct
-  if (nightVisionPass) {
-    nightVisionPass.uniforms.uResolution.value.set(window.innerWidth, window.innerHeight);
+  // ✅ keep shader resolution correct
+  if (nightVisionPass?.uniforms?.uResolution?.value) {
+    nightVisionPass.uniforms.uResolution.value.set(w, h);
   }
-
 });
+
+window.addEventListener("orientationchange", () => {
+  setTimeout(() => window.dispatchEvent(new Event("resize")), 250);
+});
+
+
 
