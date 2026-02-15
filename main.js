@@ -4671,7 +4671,7 @@ Door4: (() => {
 ),
 
  cloth: makePBR({
-    albedo: "./assets/Textures/Cloth/Cloth Albeto.jpg",
+    albedo: "./assets/Textures/Cloth/Cloth Albeto copy.jpg",
     },
     { roughness: 1.0, metalness: 0.0}
 ),
@@ -5012,7 +5012,7 @@ Lamp1: (() => {
 
 
 Treck_Screw4: makePBR({
-    albedo: "./assets/Textures/Skatebaord/Treck screw.jpg",
+    albedo: "./assets/Textures/Skateboard/Treck screw.jpg",
     },
     { roughness: 0.0, metalness: 0.0}
 ),
