@@ -4641,9 +4641,9 @@ Door4: (() => {
 ),
 
  Dunkeheit_Album: makePBR({
-    albedo: "./assets/Textures/Dunkeheit Cover/Dunkeheit Albeto.jpg",
+    albedo: "./assets/Textures/Bathory/Blood-fire Albeto.jpg",
     },
-    { roughness: 0.0, metalness: 0.0}
+    { roughness: 1.0, metalness: 0.0}
 ),
 
  Sony_Handicam1: makePBR({
