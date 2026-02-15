@@ -3253,7 +3253,7 @@ function applyTvTextureEnabled(enabled) {
 }
 
 const tracks = [
-  "./assets/Audio/01-dunkelheit-02.mp3",
+  "./assets/Audio/01-Bathory.mp3",
   "./assets/Audio/02-rip-fredo-notice-me-01.mp3",
   "./assets/Audio/03-floor-555-01.mp3",
   "./assets/Audio/04-12r-01.mp3",
