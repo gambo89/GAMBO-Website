@@ -4913,7 +4913,7 @@ Yellow_VCR_Cable: makePBR({
 ),
 
 Black_VCR_Cable: makePBR({
-    albedo: "./assets/Textures/VCR Cords/Black VCR Albeto.jpg",
+    albedo: "./assets/Textures/VCR Cords/Black VCR Cable Albeto.jpg",
     },
     { roughness: 1.0, metalness: 0.0}
 ),
