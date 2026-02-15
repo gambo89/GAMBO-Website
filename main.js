@@ -4530,7 +4530,7 @@ TV_stand: makePBR({
 ),
 
  Cig10: makePBR({
-    albedo: "./assets/Textures/Cigarettes/Cig0 Albeto.jpg",
+    albedo: "./assets/Textures/Cigarettes/Cig10 Albeto.jpg",
     },
     { roughness: 1.0, metalness: 0.0}
 ),
