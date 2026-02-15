@@ -3204,6 +3204,22 @@ function drawModelFrameToTv() {
     tvCtx.restore();
   }
 
+    // ✅ DEBUG TAP DOT (shows where the click mapped onto the TV canvas)
+  if (tvTapDebug.on) {
+    const age = (performance.now() - tvTapDebug.t) / 1000;
+    if (age < 1.0) {
+      tvCtx.save();
+      tvCtx.globalAlpha = 1.0 - age; // fade out
+      tvCtx.beginPath();
+      tvCtx.arc(tvTapDebug.x, tvTapDebug.y, 14, 0, Math.PI * 2);
+      tvCtx.fillStyle = "#ff2a2a";
+      tvCtx.fill();
+      tvCtx.restore();
+    } else {
+      tvTapDebug.on = false;
+    }
+  }
+
   tvTex.needsUpdate = true;
 }
 
@@ -3620,6 +3636,9 @@ const DOUBLE_CLICK_MS = 280;
 
 let pendingExternalUrl = null;
 
+// ✅ DEBUG: draw a dot where the TV screen was clicked (UV->pixel)
+let tvTapDebug = { on: false, x: 0, y: 0, t: 0 };
+
 // ============================================================
 // POINTER -> NDC USING FIXED VIEWPORT (keeps raycast correct)
 // ============================================================
@@ -3648,9 +3667,15 @@ async function onPointerDown(e) {
   if (!setPointerFromEvent(e)) return; // ✅ ignore clicks in black bars
   raycaster.setFromCamera(pointer, camera);
 
-// ✅ we raycast the whole anchor so we can also hit the main model (lamp, etc.)
-const hits = raycaster.intersectObject(anchor, true);
-if (!hits.length) return; // ✅ prevents crash when clicking empty space
+let hits = [];
+if (interactivesRootRef) {
+  hits = raycaster.intersectObject(interactivesRootRef, true);
+}
+if (!hits.length) {
+  hits = raycaster.intersectObject(anchor, true);
+}
+if (!hits.length) return;
+
 
 if (overlayOpen || videoOverlayOpen || modelOverlayOpen) return;
 
@@ -3939,6 +3964,12 @@ if (tvOn && tvUiState === "3D MODEL" && tvScreenMeshRef && isInHierarchy(hit, tv
     const px = u * w;
     const py = v * h;
 
+        // ✅ DEBUG: show where the tap landed on the TV canvas
+    tvTapDebug.on = true;
+    tvTapDebug.x = px;
+    tvTapDebug.y = py;
+    tvTapDebug.t = performance.now();
+
     const bx = w - TV_MENU_BTN.pad - TV_MENU_BTN.w;
     const by = TV_MENU_BTN.pad;
 
@@ -4012,12 +4043,13 @@ window.addEventListener("pointercancel", () => {
 // ============================================================
 
 renderer.domElement.addEventListener("pointermove", (e) => {
-  if (overlayOpen || videoOverlayOpen) {
-  setHoverKey(null);
-  clearAllButtonGlows();
-  clearAllButtonPresses();
-  return;
-}
+  if (overlayOpen || videoOverlayOpen || modelOverlayOpen) {
+    setHoverKey(null);
+    clearAllButtonGlows();
+    clearAllButtonPresses();
+    return;
+  }
+
 
   if (!setPointerFromEvent(e)) {
     setHoverKey(null);
@@ -5606,6 +5638,7 @@ tvTex.wrapT = THREE.ClampToEdgeWrapping;
 tvTex.repeat.set(1.0, 1.00);
 tvTex.offset.set(0.0, 0.00);
 
+
 tvTex.needsUpdate = true;
 
 
@@ -5679,10 +5712,11 @@ console.log("✅ Interactives loaded");
 tvOn = false;
 tvAnim = null;
 if (tvScreenMatRef) {
-  tvScreenMatRef.emissiveIntensity = 0.3;
-  tvScreenMatRef.color.setHex(0xffffff);
+  tvScreenMatRef.emissiveIntensity = 0.0;
+  tvScreenMatRef.color.setHex(0x111111);
   tvScreenMatRef.needsUpdate = true;
 }
+
 
 },
 undefined,
