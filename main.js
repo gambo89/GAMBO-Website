@@ -90,6 +90,12 @@ renderer.shadowMap.type = isIOS
   ? THREE.PCFShadowMap
   : THREE.PCFSoftShadowMap;
 
+  // ✅ iOS CRASH GUARD: disable shadows entirely on iPhone/iPad
+if (isIOS) {
+  console.log("📱 iOS detected → disabling shadow maps");
+  renderer.shadowMap.enabled = false;
+}
+
 const dpr = window.devicePixelRatio || 1;
 renderer.setPixelRatio(Math.min(dpr, MOBILE_PROFILE.maxDpr));
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -4359,20 +4365,17 @@ function loadLinear(path) {
 
 function makePBR({ albedo, normal, roughness, metalness, ao }, opts = {}) {
   return new THREE.MeshStandardMaterial({
-    map: albedo ? loadSRGB(albedo) : null,
-    normalMap: normal ? loadLinear(normal) : null,
-    roughnessMap: roughness ? loadLinear(roughness) : null,
-    metalnessMap: metalness ? loadLinear(metalness) : null,
+  map: albedo ? loadSRGB(albedo) : null,
+  normalMap: null,
+  roughnessMap: null,
+  metalnessMap: null,
+  aoMap: null,
+  roughness: opts.roughness ?? 1.0,
+  metalness: opts.metalness ?? 0.0,
+  side: THREE.DoubleSide,
+});
 
-    aoMap: ao ? loadLinear(ao) : null, 
-    aoMapIntensity: opts.aoIntensity ?? 2.5,
-
-    roughness: opts.roughness ?? 1.0,
-    metalness: opts.metalness ?? 0.0,
-    side: THREE.DoubleSide,
-  });
 }
-
 
 // ✅ ADD THIS DIRECTLY UNDER makePBR()
 function makeTransparentPBR({ albedo, normal }, opts = {}) {
@@ -5283,7 +5286,7 @@ if (n.includes("door") && o.material && o.material.color) {
 
       o.castShadow = true;
       o.receiveShadow = true;
-      o.frustumCulled = false;
+    ;
     });
 
    // Center the whole anchor based on the ROOM bounds
@@ -5662,7 +5665,7 @@ tvTex.needsUpdate = true;
     // ensure shadows + no cull
     o.castShadow = true;
     o.receiveShadow = true;
-    o.frustumCulled = false;
+    o.frustumCulled = true;
 
     return; // ✅ STOP HERE so nothing else overwrites screen material
   }
@@ -5708,7 +5711,7 @@ tvTex.needsUpdate = true;
 
   o.castShadow = true;
   o.receiveShadow = true;
-  o.frustumCulled = false;
+  o.frustumCulled = true;
 });
 
 
@@ -6014,7 +6017,8 @@ function handleResize() {
   const aspect = w / h;
 
   const dpr = window.devicePixelRatio || 1;
-  renderer.setPixelRatio(isIOS ? Math.min(dpr, 1.5) : Math.min(dpr, 2.0));
+  // ✅ iOS crash guard: keep DPR low
+  renderer.setPixelRatio(isIOS ? 1 : Math.min(dpr, 2.0));
   renderer.setSize(w, h, true);
 
   // Always fullscreen
