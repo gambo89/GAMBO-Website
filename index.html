@@ -3,11 +3,26 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Bedroom</title>
+  <title>bedroom</title>
 
 <style>
-  body { margin: 0; background: #000; overflow: hidden; }
-  canvas { display: block; width: 100vw; height: 100vh; }
+  /* ==========================================================
+     FULLSCREEN CANVAS (NO BARS, NO PAGE SHIFT)
+  ========================================================== */
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #000;
+  }
+
+  #c {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+  }
 
   /* ✅ LOADING SCREEN */
   #loader {
@@ -28,8 +43,8 @@
     pointer-events: none;
     transition: opacity 0.8s ease;
   }
-  
 </style>
+
 </head>
 
 <body>

@@ -9,9 +9,26 @@ import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 
+const DEBUG = false;
+const log  = (...args) => DEBUG && console.log(...args);
+const warn = (...args) => DEBUG && console.warn(...args);
+const err  = (...args) => DEBUG && console.error(...args);
+
+
 const LAYER_WORLD = 0;
 const LAYER_ACCENT = 2;
 const LAYER_PIN = 3;
+
+const DESIGN_W = 1920;
+const DESIGN_H = 1080;
+const DESIGN_ASPECT = DESIGN_W / DESIGN_H;
+
+const BASE_ASPECT = DESIGN_ASPECT;
+let baseFovDeg = null;
+
+// current viewport inside the full canvas
+let viewX = 0, viewY = 0, viewW = window.innerWidth, viewH = window.innerHeight;
+
 
 const canvas = document.querySelector("#c");
 if (!canvas) throw new Error('Canvas "#c" not found. Check your HTML id="c".');
@@ -613,6 +630,7 @@ const camera = new THREE.PerspectiveCamera(
   0.001,
   1000000
 );
+
 
 initPostFX();
 
@@ -3470,7 +3488,7 @@ function openExternal(url) {
 
 
 function setTvPower(nextOn) {
-  console.log("setTvPower", nextOn, {
+  log("setTvPower", nextOn, {
     hasScreenMesh: !!tvScreenMeshRef,
     hasScreenMat: !!tvScreenMatRef
   });
@@ -3589,12 +3607,32 @@ const DOUBLE_CLICK_MS = 280;
 
 let pendingExternalUrl = null;
 
-async function onPointerDown(e) {
+// ============================================================
+// POINTER -> NDC USING FIXED VIEWPORT (keeps raycast correct)
+// ============================================================
+function setPointerFromEvent(e) {
   const rect = renderer.domElement.getBoundingClientRect();
+  if (!viewW || !viewH) return false;
 
-  pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-  pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  // mouse position in canvas pixels
+  const cx = e.clientX - rect.left;
+  const cy = e.clientY - rect.top;
 
+  // viewport-local 0..1
+  const vx = (cx - viewX) / viewW;
+  const vy = (cy - viewY) / viewH;
+
+  // clicked in the black bars -> ignore
+  if (vx < 0 || vx > 1 || vy < 0 || vy > 1) return false;
+
+  pointer.x = vx * 2 - 1;
+  pointer.y = -(vy * 2 - 1);
+
+  return true;
+}
+
+async function onPointerDown(e) {
+  if (!setPointerFromEvent(e)) return; // ✅ ignore clicks in black bars
   raycaster.setFromCamera(pointer, camera);
 
 // ✅ we raycast the whole anchor so we can also hit the main model (lamp, etc.)
@@ -3654,8 +3692,8 @@ if (hitIsBoard2(hit)) {
   return;
 }
 
-  console.log("🖱️ HIT:", hit.name, "layer:", hit.layers.mask, "parent:", hit.parent?.name);
-console.log("💡 lampMeshRef:", lampMeshRef?.name, "layer:", lampMeshRef?.layers?.mask);
+  log("🖱️ HIT:", hit.name, "layer:", hit.layers.mask, "parent:", hit.parent?.name);
+log("💡 lampMeshRef:", lampMeshRef?.name, "layer:", lampMeshRef?.layers?.mask);
 
 
    // ✅ Press animation target ON (only for the button you clicked)
@@ -3699,7 +3737,7 @@ if (tvOn && tvUiState === "PHOTO" && tvScreenMeshRef && isInHierarchy(hit, tvScr
 
   const uv = hits[0].uv;
   if (!uv) {
-    console.warn("❌ No UV on TV screen hit — MENU cannot be clicked until TV screen mesh has UVs.");
+    warn("❌ No UV on TV screen hit — MENU cannot be clicked until TV screen mesh has UVs.");
   }
 
   if (uv) {
@@ -3968,12 +4006,15 @@ renderer.domElement.addEventListener("pointermove", (e) => {
   return;
 }
 
-  const rect = renderer.domElement.getBoundingClientRect();
-
-  pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-  pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  if (!setPointerFromEvent(e)) {
+    setHoverKey(null);
+    clearAllButtonGlows();
+    clearAllButtonPresses();
+    return;
+  }
 
   raycaster.setFromCamera(pointer, camera);
+
 
     if (!interactivesRootRef) {
   setHoverKey(null);
@@ -5315,6 +5356,8 @@ lampMeshRef = (() => {
     camera.position.set(camX, camY, camZ);
     camera.lookAt(targetX, targetY, targetZ);
 
+    if (baseFovDeg === null) baseFovDeg = camera.fov;
+
     // ✅ store base camera position for breathing offsets
 baseCamPos = camera.position.clone();
 
@@ -5324,6 +5367,7 @@ baseCamPos = camera.position.clone();
 
     captureBreathBaseline();
   },
+  
 
   undefined,
   (err) => {
@@ -5857,6 +5901,8 @@ else if (tvUiState === "3D MODEL") {
 }
 }
 
+renderer.setScissorTest(false);
+renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
 
 if (nightVisionOn && composer && nightVisionPass) {
   updateNightVisionAutoGain(dt); // ✅ ADD THIS
@@ -5893,30 +5939,74 @@ grainStyle.innerHTML = `
 document.head.appendChild(grainStyle);
 
 window.addEventListener("resize", () => {
+  if (!renderer || !renderer.domElement) return;
+  if (!camera) return;
+
   const w = window.innerWidth;
   const h = window.innerHeight;
 
-  // ✅ IMPORTANT: re-apply DPR on iOS after rotate / toolbar changes
   const dpr = window.devicePixelRatio || 1;
   renderer.setPixelRatio(isIOS ? Math.min(dpr, 1.5) : Math.min(dpr, 2.0));
-
   renderer.setSize(w, h, true);
 
-  camera.aspect = w / h;
-  camera.updateProjectionMatrix();
+  const aspect = w / h;
 
-  // ✅ keep postprocessing size in sync
+  // Always render fullscreen (NO LETTERBOX BARS)
+  viewX = 0; viewY = 0; viewW = w; viewH = h;
+
+  // If baseFovDeg hasn't been captured yet, don't break resize
+  if (baseFovDeg == null) {
+    camera.aspect = aspect;
+    camera.updateProjectionMatrix();
+  } else {
+    // ✅ COVER behavior:
+    // - if window is wider than 16:9, zoom in (crop top/bottom) so you DON'T reveal extra sides
+    // - if window is narrower than 16:9, normal aspect crops sides (no revealing more)
+    if (aspect > BASE_ASPECT) {
+      const baseV = THREE.MathUtils.degToRad(baseFovDeg);
+      const baseH = 2 * Math.atan(Math.tan(baseV * 0.5) * BASE_ASPECT); // horizontal FOV at 16:9
+      const newV  = 2 * Math.atan(Math.tan(baseH * 0.5) / aspect);      // vertical FOV for current aspect
+      camera.fov = THREE.MathUtils.radToDeg(newV);
+    } else {
+      camera.fov = baseFovDeg;
+    }
+
+    camera.aspect = aspect;
+    camera.updateProjectionMatrix();
+  }
+
+  // Postprocessing matches fullscreen too
   if (composer) composer.setSize(w, h);
-
-  // ✅ keep shader resolution correct
   if (nightVisionPass?.uniforms?.uResolution?.value) {
     nightVisionPass.uniforms.uResolution.value.set(w, h);
   }
 });
 
+
 window.addEventListener("orientationchange", () => {
   setTimeout(() => window.dispatchEvent(new Event("resize")), 250);
 });
 
+// ============================================================
+// ✅ MOBILE FIX: react to browser UI (address bar) resizing
+// ============================================================
+if (window.visualViewport) {
+  const vv = window.visualViewport;
 
+  const onVV = () => {
+    // fire your existing resize logic
+    window.dispatchEvent(new Event("resize"));
+  };
 
+  vv.addEventListener("resize", onVV);
+  vv.addEventListener("scroll", onVV); // Safari sometimes changes viewport on scroll
+}
+
+// ✅ Run initial resize only when renderer + camera exist
+(function initResizeWhenReady() {
+  if (renderer && renderer.domElement && camera) {
+    window.dispatchEvent(new Event("resize"));
+  } else {
+    requestAnimationFrame(initResizeWhenReady);
+  }
+})();
