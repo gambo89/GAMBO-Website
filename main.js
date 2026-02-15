@@ -705,6 +705,10 @@ if (MOBILE_PROFILE.postFX) {
 // (translation only — no rotation = no nausea)
 // ============================================================
 let baseCamPos = null; // will be set after you position the camera
+let baseCamPos0 = null;
+let baseCamDir0 = null;
+let baseCamFov0 = null;
+
 
 // ============================================================
 // CALM BREATHING PRESET ✅ (slow + grounded)
@@ -5451,6 +5455,13 @@ lampMeshRef = (() => {
     camera.position.set(camX, camY, camZ);
     camera.lookAt(targetX, targetY, targetZ);
 
+    // ✅ capture baseline for resize-based camera push-back
+    baseCamPos0 = camera.position.clone();
+    baseCamDir0 = new THREE.Vector3();
+    camera.getWorldDirection(baseCamDir0); // direction camera is looking
+    baseCamFov0 = camera.fov;              // lock this forever
+
+
     if (baseFovDeg === null) baseFovDeg = camera.fov;
 
     // 🔥 Force resize AFTER camera baseline is locked
@@ -6069,21 +6080,20 @@ const h = vv ? vv.height : window.innerHeight;
   viewW = w;
   viewH = h;
 
-  // Apply cover math only after baseline captured
-  if (baseFovCaptured) {
-    if (aspect > BASE_ASPECT) {
-      const baseV = THREE.MathUtils.degToRad(baseFovDeg);
-      const baseH = 2 * Math.atan(Math.tan(baseV * 0.5) * BASE_ASPECT);
-      const newV  = 2 * Math.atan(Math.tan(baseH * 0.5) / aspect);
-      camera.fov = THREE.MathUtils.radToDeg(newV);
-    } else {
-      camera.fov = baseFovDeg;
-    }
-  }
+ // ✅ Keep FOV constant (no proportion changes)
+if (baseCamFov0 != null) camera.fov = baseCamFov0;
 
-  // ✅ iPhone portrait feels too zoomed — widen FOV
-if (isIOS && aspect < 1.0) {
-  camera.fov = Math.max(camera.fov, 42); // try 40–48 to taste
+// ✅ iPhone/tall screens: push camera backward instead of changing FOV
+if (baseCamPos0 && baseCamDir0) {
+  // how much taller than your design aspect we are
+  const tallFactor = Math.max(1, BASE_ASPECT / aspect); // >1 on tall screens (phones)
+
+  // tune this number: higher = more zoomed-out on iPhone
+  const PUSH_STRENGTH = isIOS ? 0.28 : 0.0;  // try 0.22–0.40
+
+  const push = (tallFactor - 1) * roomMaxDim * PUSH_STRENGTH;
+
+  camera.position.copy(baseCamPos0).addScaledVector(baseCamDir0, -push);
 }
 
   camera.aspect = aspect;
