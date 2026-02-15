@@ -4659,7 +4659,7 @@ Door4: (() => {
 ),
 
  Headphones1: makePBR({
-    albedo: "./assets/Textures/Headphones Albeto.jpg",
+    albedo: "./assets/Textures/Headphones/Headphones Albeto.jpg",
     },
     { roughness: 0.5, metalness: 0.0}
 ),
