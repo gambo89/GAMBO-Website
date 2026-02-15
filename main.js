@@ -676,9 +676,21 @@ const camera = new THREE.PerspectiveCamera(
   1000000
 );
 
-// ✅ Keep your lens consistent across all devices
-camera.aspect = window.innerWidth / window.innerHeight;
-camera.updateProjectionMatrix();
+function adjustCameraForMobile() {
+  const aspect = window.innerWidth / window.innerHeight;
+
+  // if screen is tall (portrait iPhone)
+  if (aspect < 1.2) {
+    camera.fov = 40;   // try 38–45 (40 is a great starting point)
+  } else {
+    camera.fov = 32.5; // your original desktop value
+  }
+
+  camera.aspect = aspect;
+  camera.updateProjectionMatrix();
+}
+
+adjustCameraForMobile();
 
 if (MOBILE_PROFILE.postFX) {
   initPostFX();
@@ -693,8 +705,12 @@ if (MOBILE_PROFILE.postFX) {
 // (translation only — no rotation = no nausea)
 // ============================================================
 let baseCamPos = null; // will be set after you position the camera
+let baseCamPos0 = null;
+let baseCamDir0 = null;
+let baseCamFov0 = null;
 
-// ===========================================================
+
+// ============================================================
 // CALM BREATHING PRESET ✅ (slow + grounded)
 // ============================================================
 const BREATH = {
@@ -5439,18 +5455,30 @@ lampMeshRef = (() => {
     camera.position.set(camX, camY, camZ);
     camera.lookAt(targetX, targetY, targetZ);
 
+    // ✅ capture baseline for resize-based camera push-back
+    baseCamPos0 = camera.position.clone();
+    baseCamDir0 = new THREE.Vector3();
+    camera.getWorldDirection(baseCamDir0); // direction camera is looking
+    baseCamFov0 = camera.fov;              // lock this forever
+
+
+    if (baseFovDeg === null) baseFovDeg = camera.fov;
+
     // 🔥 Force resize AFTER camera baseline is locked
     setTimeout(() => {
       window.dispatchEvent(new Event("resize"));
     }, 0);
 
+
     // ✅ store base camera position for breathing offsets
-    baseCamPos = camera.position.clone();
+baseCamPos = camera.position.clone();
 
     camera.near = maxDim / 1000;
     camera.far = maxDim * 1000;
     camera.updateProjectionMatrix();
 
+    baseFovDeg = camera.fov;
+    baseFovCaptured = true;
     handleResize();
 
     captureBreathBaseline();
@@ -5991,16 +6019,8 @@ else if (tvUiState === "3D MODEL") {
 }
 }
 
-// Clear the full screen (black bars)
 renderer.setScissorTest(false);
 renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
-renderer.clear();
-
-// Render ONLY into the “landscape window”
-renderer.setViewport(viewX, viewY, viewW, viewH);
-renderer.setScissor(viewX, viewY, viewW, viewH);
-renderer.setScissorTest(true);
-
 if (MOBILE_PROFILE.postFX && nightVisionOn && composer && nightVisionPass) {
   updateNightVisionAutoGain(dt);
   nightVisionPass.uniforms.uTime.value = performance.now() * 0.001;
@@ -6008,9 +6028,6 @@ if (MOBILE_PROFILE.postFX && nightVisionOn && composer && nightVisionPass) {
 } else {
   renderer.render(scene, camera);
 }
-
-renderer.setScissorTest(false);
-
 
 }
 animate();
@@ -6045,42 +6062,33 @@ function handleResize() {
 
   const w = window.innerWidth;
   const h = window.innerHeight;
+  const aspect = w / h;
 
   const dpr = window.devicePixelRatio || 1;
   renderer.setPixelRatio(isIOS ? 1 : Math.min(dpr, 2.0));
   renderer.setSize(w, h, true);
 
-// ============================================================
-// ✅ iPhone portrait = render a DESKTOP-LIKE landscape viewport (letterbox)
-// ============================================================
-const wantLetterbox = isIOS && (w / h) < 1.0; // portrait iPhone
-
-if (wantLetterbox) {
-  // Fit BASE_ASPECT (your desktop aspect) INSIDE the phone screen
-  const targetAspect = BASE_ASPECT; // 16:9
-  let vw = w;
-  let vh = Math.round(w / targetAspect);
-
-  // If too tall, fit by height instead
-  if (vh > h) {
-    vh = h;
-    vw = Math.round(h * targetAspect);
-  }
-
-  viewW = vw;
-  viewH = vh;
-  viewX = Math.floor((w - vw) * 0.5);
-  viewY = Math.floor((h - vh) * 0.5);
-} else {
-  // Desktop / landscape / iPad landscape
+  // fullscreen viewport (your raycast mapping expects this)
   viewX = 0;
   viewY = 0;
   viewW = w;
   viewH = h;
-}
 
-  // ✅ IMPORTANT: do NOT change camera.fov here
-  camera.aspect = viewW / viewH;
+  // ✅ Keep proportions: DO NOT change FOV dynamically
+  if (baseCamFov0 != null) camera.fov = baseCamFov0;
+
+  // ✅ Push camera back on tall (portrait) screens
+  if (baseCamPos != null) {
+    // 0 when landscape-ish, approaches 1 as it gets taller
+    const t = THREE.MathUtils.clamp((1.0 - aspect) / 0.55, 0, 1);
+
+    // tweak this number to taste (start here)
+    const push = (roomMaxDim || 1) * 0.12 * t;
+
+    camera.position.copy(baseCamPos).add(new THREE.Vector3(0, 0, push));
+  }
+
+  camera.aspect = aspect;
   camera.updateProjectionMatrix();
 
   if (composer) composer.setSize(w, h);
@@ -6088,6 +6096,7 @@ if (wantLetterbox) {
     nightVisionPass.uniforms.uResolution.value.set(w, h);
   }
 }
+
 
 window.addEventListener("resize", handleResize);
 window.addEventListener("orientationchange", () => {
