@@ -3206,6 +3206,33 @@ const tracks = [
 let trackIndex = 0;
 let isPlaying = false;
 
+// 🔓 ADD THIS BLOCK RIGHT HERE
+let audioUnlocked = false;
+
+async function unlockAudioOnce() {
+  if (audioUnlocked) return;
+
+  const a = currentAudio();
+
+  try {
+    a.muted = true;
+    await a.play();
+    a.pause();
+    a.currentTime = 0;
+    a.muted = false;
+
+    audioUnlocked = true;
+    console.log("🔓 Audio unlocked");
+  } catch (e) {
+    console.warn("Audio unlock failed:", e);
+    audioUnlocked = false;
+  }
+}
+
+// Unlock on first real user gesture
+window.addEventListener("pointerdown", unlockAudioOnce, { once: true });
+window.addEventListener("touchstart", unlockAudioOnce, { once: true });
+
 const audioEls = tracks.map((src) => {
   const a = new Audio(src);
   a.preload = "metadata"; // ✅ lighter than "auto" (doesn't download whole mp3 immediately)
@@ -3265,15 +3292,19 @@ async function playCurrent() {
   }
 }
 
-function togglePlayPause() {
+async function togglePlayPause() {
+  await unlockAudioOnce();
+
   const a = currentAudio();
   if (!isPlaying || a.paused) {
-    playCurrent();
+    await playCurrent();
   } else {
     a.pause();
     isPlaying = false;
     console.log("⏸ Paused track:", trackIndex);
   }
+
+  updateSpeakerHintText?.();
 }
 
 async function nextTrack(forcePlay = false) {
@@ -3539,7 +3570,7 @@ const DOUBLE_CLICK_MS = 280;
 
 let pendingExternalUrl = null;
 
-function onPointerDown(e) {
+async function onPointerDown(e) {
   const rect = renderer.domElement.getBoundingClientRect();
 
   pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
@@ -3551,8 +3582,7 @@ function onPointerDown(e) {
 const hits = raycaster.intersectObject(anchor, true);
 if (!hits.length) return; // ✅ prevents crash when clicking empty space
 
-if (overlayOpen || videoOverlayOpen) return;
-
+if (overlayOpen || videoOverlayOpen || modelOverlayOpen) return;
 
   const hit = hits[0].object;
   const hitInfo = hits[0];
@@ -3861,24 +3891,28 @@ if (tvOn && tvUiState === "3D MODEL" && tvScreenMeshRef && isInHierarchy(hit, tv
   return;
 }
 
-  // --------------------------------------------------
-  // BLUETOOTH SPEAKER
-  // --------------------------------------------------
-  if (speakerMeshRef && isInHierarchy(hit, speakerMeshRef)) {
-    const now = performance.now();
-    const isDouble = now - lastClickTime < DOUBLE_CLICK_MS;
-    lastClickTime = now;
+// --------------------------------------------------
+// BLUETOOTH SPEAKER
+// --------------------------------------------------
+if (speakerMeshRef && isInHierarchy(hit, speakerMeshRef)) {
+  const now = performance.now();
+  const isDouble = now - lastClickTime < DOUBLE_CLICK_MS;
+  lastClickTime = now;
 
-    if (isDouble) {
-      console.log("🔁 Speaker double click → next song");
-      nextTrack(true); //force play
-    } else {
-      console.log("▶️/⏸ Speaker click → play / pause");
-      togglePlayPause();
-    }
+  // 🔓 make sure audio is unlocked on the same user click
+  await unlockAudioOnce();
 
-    return;
+  if (isDouble) {
+    console.log("🔁 Speaker double click → next song");
+    await nextTrack(true); // force play
+  } else {
+    console.log("▶️/⏸ Speaker click → play / pause");
+    await togglePlayPause();
   }
+
+  return;
+}
+
 }
 
 renderer.domElement.addEventListener("pointerdown", onPointerDown);
