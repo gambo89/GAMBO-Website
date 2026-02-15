@@ -14,6 +14,22 @@ const log  = (...args) => DEBUG && console.log(...args);
 const warn = (...args) => DEBUG && console.warn(...args);
 const err  = (...args) => DEBUG && console.error(...args);
 
+// ============================================================
+// iOS / MOBILE SAFE MODE (prevents 99% crash)
+// ============================================================
+const isIOS =
+  /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+  (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+const SAFE_MOBILE = isIOS; // flip to true to test on desktop
+
+const MOBILE_PROFILE = {
+  maxDpr: SAFE_MOBILE ? 1.0 : 2.0,                 // ✅ huge win
+  shadows: SAFE_MOBILE ? false : true,             // ✅ biggest win (try false first)
+  maxAniso: SAFE_MOBILE ? 1 : null,                // ✅ reduce texture cost
+  shadowMapSize: SAFE_MOBILE ? 1024 : 4096,        // if you re-enable shadows later
+  postFX: SAFE_MOBILE ? false : true,              // disable composer on iPhone
+};
 
 const LAYER_WORLD = 0;
 const LAYER_ACCENT = 2;
@@ -63,23 +79,19 @@ const renderer = new THREE.WebGLRenderer({
   powerPreference: "low-power",
 });
 
-const isIOS =
-  /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-  (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-
 // renderer settings...
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = isIOS ? 0.75 : 0.8;
 renderer.physicallyCorrectLights = true;
 
-renderer.shadowMap.enabled = true;
+renderer.shadowMap.enabled = MOBILE_PROFILE.shadows;
 renderer.shadowMap.type = isIOS
   ? THREE.PCFShadowMap
   : THREE.PCFSoftShadowMap;
 
 const dpr = window.devicePixelRatio || 1;
-renderer.setPixelRatio(isIOS ? Math.min(dpr, 1.5) : Math.min(dpr, 2.0));
+renderer.setPixelRatio(Math.min(dpr, MOBILE_PROFILE.maxDpr));
 renderer.setSize(window.innerWidth, window.innerHeight);
 
 // ✅ iOS SAFARI INPUT FIX (does NOT change desktop look)
@@ -4273,7 +4285,8 @@ scene.add(pinRight);
 // ============================================================
 const tl = new THREE.TextureLoader();
 const texCache = new Map();
-const maxAniso = renderer.capabilities.getMaxAnisotropy?.() ?? 1;
+const maxAniso =
+  MOBILE_PROFILE.maxAniso ?? (renderer.capabilities.getMaxAnisotropy?.() ?? 1);
 
 function loadTexture(path, { srgb = false } = {}) {
   const key = `${path}__${srgb ? "srgb" : "lin"}`;
@@ -5913,14 +5926,14 @@ else if (tvUiState === "3D MODEL") {
 
 renderer.setScissorTest(false);
 renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
-
-if (nightVisionOn && composer && nightVisionPass) {
-  updateNightVisionAutoGain(dt); // ✅ ADD THIS
+if (MOBILE_PROFILE.postFX && nightVisionOn && composer && nightVisionPass) {
+  updateNightVisionAutoGain(dt);
   nightVisionPass.uniforms.uTime.value = performance.now() * 0.001;
   composer.render();
 } else {
   renderer.render(scene, camera);
 }
+
 }
 animate();
 
