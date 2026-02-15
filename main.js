@@ -5358,6 +5358,12 @@ lampMeshRef = (() => {
 
     if (baseFovDeg === null) baseFovDeg = camera.fov;
 
+    // 🔥 Force resize AFTER camera baseline is locked
+    setTimeout(() => {
+      window.dispatchEvent(new Event("resize"));
+    }, 0);
+
+
     // ✅ store base camera position for breathing offsets
 baseCamPos = camera.position.clone();
 
