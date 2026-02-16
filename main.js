@@ -709,6 +709,7 @@ let baseCamPos = null; // will be set after you position the camera
 let baseCamPos0 = null;
 let baseCamDir0 = null;
 let baseCamFov0 = null;
+let baseCamTarget0 = null; // ✅ NEW: the lookAt point we want to keep
 
 
 // ============================================================
@@ -5469,18 +5470,22 @@ lampMeshRef = (() => {
     const camY = maxDim * -0.146; // (+) Up (-) Down
     const camZ = baseDist * 0.282; // (+) Farther (-) Closer
 
-    const targetX = 1.18; // (+) Right (-) Left
-    const targetY = maxDim * -0.186; // (+) Up (-) Down
-    const targetZ = 0; // (+) Farther (-) Closer
+    const targetX = 1.18;
+    const targetY = maxDim * -0.186;
+    const targetZ = 0;
 
     camera.position.set(camX, camY, camZ);
     camera.lookAt(targetX, targetY, targetZ);
+
+    // ✅ NEW: store the exact target we framed for desktop
+    baseCamTarget0 = new THREE.Vector3(targetX, targetY, targetZ);
 
     // ✅ capture baseline for resize-based camera push-back
     baseCamPos0 = camera.position.clone();
     baseCamDir0 = new THREE.Vector3();
     camera.getWorldDirection(baseCamDir0); // direction camera is looking
-    baseCamFov0 = camera.fov;              // lock this forever
+    baseCamFov0 = camera.fov;
+
 
 
     if (baseFovDeg === null) baseFovDeg = camera.fov;
@@ -5505,7 +5510,6 @@ baseCamPos = camera.position.clone();
     captureBreathBaseline();
   },
   
-
   undefined,
   (err) => {
     console.error("GLB failed to load ❌", err);
@@ -6101,16 +6105,31 @@ function handleResize() {
   // ✅ Keep proportions: DO NOT change FOV dynamically
   if (baseCamFov0 != null) camera.fov = baseCamFov0;
 
-  // ✅ Push camera back on tall (portrait) screens
-  if (baseCamPos != null) {
-    // 0 when landscape-ish, approaches 1 as it gets taller
-    const t = THREE.MathUtils.clamp((1.0 - aspect) / 0.55, 0, 1);
+// ✅ Always start from the original “desktop” camera position
+if (baseCamPos0 && baseCamDir0) {
+  camera.position.copy(baseCamPos0);
 
-    // tweak this number to taste (start here)
-    const push = (roomMaxDim || 1) * 0.22 * t;
+  // 0 when landscape-ish, approaches 1 as it gets taller
+  const t = THREE.MathUtils.clamp((1.0 - aspect) / 0.55, 0, 1);
 
-    camera.position.copy(baseCamPos).add(new THREE.Vector3(0, 0, push));
-  }
+  // Portrait push-back (same idea you had, but do it along view direction)
+  const portraitPush = (roomMaxDim || 1) * 0.12 * t;
+
+  // ✅ Extra iOS pull-back even in landscape (this helps match desktop)
+  const iosExtraPush = isIOSDevice() ? (roomMaxDim || 1) * 0.08 : 0;
+
+  const totalPush = portraitPush + iosExtraPush;
+
+  // Move backwards along the camera's viewing direction (NOT world Z)
+  camera.position.addScaledVector(baseCamDir0, -totalPush);
+
+  // ✅ Re-apply the original lookAt so framing stays consistent
+  if (baseCamTarget0) camera.lookAt(baseCamTarget0);
+
+  // ✅ IMPORTANT: update breathing baseline so it doesn't “snap” back
+  baseCamPos = camera.position.clone();
+  captureBreathBaseline();
+}
 
   camera.aspect = aspect;
   camera.updateProjectionMatrix();
