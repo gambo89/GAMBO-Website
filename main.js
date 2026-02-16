@@ -5507,7 +5507,7 @@ let iosTargetYOff = 0;
 
 if (isiOS) {
   iosCamYOff = maxDim * -5.5;      // camera DOWN (more negative = lower)
-  iosCamZOff = maxDim * -0.7;     //closer to TV (negative = closer)
+  iosCamZOff = maxDim * -1.0;     //closer to TV (negative = closer)
   iosTargetYOff = maxDim * +0.1;   // aim UP (more positive = higher)
 }
 
