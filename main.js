@@ -3475,6 +3475,29 @@ function isIOSPortraitBlocked() {
   return isIOSDevice() && !isLandscapeNow();
 }
 
+// ============================================================
+// ✅ iOS LANDSCAPE FRAMING FIX
+// Match desktop-like horizontal crop on ultra-wide iPhone landscape
+// ============================================================
+const DESKTOP_REF_ASPECT = 16 / 9; // what you want iPhone to "feel like"
+
+function applyIOSLandscapeFovFix(camera, aspect) {
+  if (!isIOSDevice()) return;
+  if (!isLandscapeNow()) return;
+  if (baseCamFov0 == null) return;
+
+  // Convert your baseline (desktop-ish) vertical FOV to a reference horizontal FOV
+  const refVFovRad = THREE.MathUtils.degToRad(baseCamFov0);
+  const refHFovRad = 2 * Math.atan(Math.tan(refVFovRad / 2) * DESKTOP_REF_ASPECT);
+
+  // Now compute the vertical FOV needed to keep the SAME horizontal FOV on this (wider) screen
+  const newVFovRad = 2 * Math.atan(Math.tan(refHFovRad / 2) / aspect);
+  const newVFovDeg = THREE.MathUtils.radToDeg(newVFovRad);
+
+  camera.fov = newVFovDeg;
+}
+
+
 function isInHierarchy(obj, target) {
   let o = obj;
   while (o) {
@@ -6092,8 +6115,13 @@ function handleResize() {
   const h = window.innerHeight;
   const aspect = w / h;
 
-  const dpr = window.devicePixelRatio || 1;
-  renderer.setPixelRatio(isIOS ? 1 : Math.min(dpr, 2.0));
+ const dpr = window.devicePixelRatio || 1;
+
+// ✅ iOS was forced to 1 (blurry). Give it a higher cap.
+const maxDpr = isIOS ? 2.2 : 2.0;
+
+renderer.setPixelRatio(Math.min(dpr, maxDpr));
+
   renderer.setSize(w, h, true);
 
   // fullscreen viewport (your raycast mapping expects this)
@@ -6102,8 +6130,12 @@ function handleResize() {
   viewW = w;
   viewH = h;
 
-  // ✅ Keep proportions: DO NOT change FOV dynamically
+  // ✅ Default: lock base FOV
   if (baseCamFov0 != null) camera.fov = baseCamFov0;
+
+  // ✅ iPhone landscape: tighten crop so it matches desktop framing
+  applyIOSLandscapeFovFix(camera, aspect);
+
 
 // ✅ Always start from the original “desktop” camera position
 if (baseCamPos0 && baseCamDir0) {
