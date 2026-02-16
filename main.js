@@ -6084,7 +6084,7 @@ function handleResize() {
     const t = THREE.MathUtils.clamp((1.0 - aspect) / 0.55, 0, 1);
 
     // tweak this number to taste (start here)
-    const push = (roomMaxDim || 1) * 0.44 * t;
+    const push = (roomMaxDim || 1) * 0.12 * t;
 
     camera.position.copy(baseCamPos).add(new THREE.Vector3(0, 0, push));
   }
