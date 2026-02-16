@@ -5497,32 +5497,50 @@ lampMeshRef = (() => {
     const targetY = maxDim * -0.186;
     const targetZ = 0;
 
-    // ✅ iOS-only framing tweaks (landscape)
-const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-              (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    // ✅ iOS-only framing tweaks
+const isiOS =
+  /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+  (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
+let iosCamXOff = 0;
 let iosCamYOff = 0;
 let iosCamZOff = 0;
+
+let iosTargetXOff = 0;
 let iosTargetYOff = 0;
+let iosTargetZOff = 0;
 
 if (isiOS) {
-  iosCamYOff = maxDim * -5.5;      // camera DOWN (more negative = lower)
-  iosCamZOff = maxDim * -2.0;     //closer to TV (negative = closer)
-  iosTargetYOff = maxDim * +0.1;   // aim UP (more positive = higher)
+  iosCamXOff = maxDim * 0.0;        // ← add this for left/right tuning
+  iosCamYOff = maxDim * -5.5;       // camera DOWN
+  iosCamZOff = baseDist * -0.05;    // closer (try -0.03 to -0.12)
+
+  iosTargetXOff = 0.0;              // optional
+  iosTargetYOff = maxDim * +0.1;    // aim UP
+  iosTargetZOff = 0.0;              // optional
 }
 
-    camera.position.set(camX, camY, camZ);
-    camera.lookAt(targetX, targetY, targetZ);
+// ✅ apply iOS offsets
+const camXFinal = camX + iosCamXOff;
+const camYFinal = camY + iosCamYOff;
+const camZFinal = camZ + iosCamZOff;
 
-    // ✅ NEW: store the exact target we framed for desktop
-    baseCamTarget0 = new THREE.Vector3(targetX, targetY, targetZ);
+const targetXFinal = targetX + iosTargetXOff;
+const targetYFinal = targetY + iosTargetYOff;
+const targetZFinal = targetZ + iosTargetZOff;
 
-    // ✅ capture baseline for resize-based camera push-back
-    baseCamPos0 = camera.position.clone();
-    baseCamDir0 = new THREE.Vector3();
-    camera.getWorldDirection(baseCamDir0); // direction camera is looking
-    baseCamFov0 = camera.fov;
+// ✅ set camera ONCE
+camera.position.set(camXFinal, camYFinal, camZFinal);
+camera.lookAt(targetXFinal, targetYFinal, targetZFinal);
 
+// ✅ store the exact target we framed for (desktop OR iOS)
+baseCamTarget0 = new THREE.Vector3(targetXFinal, targetYFinal, targetZFinal);
+
+// ✅ capture baseline for resize-based camera push-back
+baseCamPos0 = camera.position.clone();
+baseCamDir0 = new THREE.Vector3();
+camera.getWorldDirection(baseCamDir0);
+baseCamFov0 = camera.fov;
 
 
     if (baseFovDeg === null) baseFovDeg = camera.fov;
