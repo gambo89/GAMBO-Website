@@ -5511,15 +5511,12 @@ if (isiOS) {
   iosTargetYOff = maxDim * +0.1;   // aim UP (more positive = higher)
 }
 
-  const camYFinal = camY + iosCamYOff;
-  const camZFinal = camZ + iosCamZOff;
-  const targetYFinal = targetY + iosTargetYOff;
 
-    camera.position.set(camX, camYFinal, camZFinal);
-    camera.lookAt(targetX, targetYFinal, targetZ);
+    camera.position.set(camX, camY, camZ);
+    camera.lookAt(targetX, targetY, targetZ);
 
     // ✅ NEW: store the exact target we framed for desktop
-    baseCamTarget0 = new THREE.Vector3(targetX, targetYFinal, targetZ);
+    baseCamTarget0 = new THREE.Vector3(targetX, targetY, targetZ);
 
     // ✅ capture baseline for resize-based camera push-back
     baseCamPos0 = camera.position.clone();
