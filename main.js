@@ -682,7 +682,7 @@ function adjustCameraForMobile() {
 
   // if screen is tall (portrait iPhone)
   if (aspect < 1.2) {
-    camera.fov = 40;   // try 38–45 (40 is a great starting point)
+    camera.fov = 38;   // try 38–45 (40 is a great starting point)
   } else {
     camera.fov = 32.5; // your original desktop value
   }
