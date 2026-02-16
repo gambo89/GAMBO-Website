@@ -9,7 +9,6 @@ import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 
-
 const DEBUG = false;
 const log  = (...args) => DEBUG && console.log(...args);
 const warn = (...args) => DEBUG && console.warn(...args);
@@ -682,7 +681,7 @@ function adjustCameraForMobile() {
 
   // if screen is tall (portrait iPhone)
   if (aspect < 1.2) {
-    camera.fov = 40.5;   // try 38–45 (40 is a great starting point)
+    camera.fov = 45;   // try 38–45 (40 is a great starting point)
   } else {
     camera.fov = 32.5; // your original desktop value
   }
@@ -1485,6 +1484,13 @@ function hideAllHintsImmediate() {
   hideRemoteHints();
 }
 
+function getIosTvHintText() {
+  if (tvUiState === "PHOTO") return "double tap: full screen";
+  if (tvUiState === "VIDEO") return "double tap: full screen";
+  if (tvUiState === "3D MODEL") return "double tap: full screen";
+  return "";
+}
+
 function showHintForKey(key) {
   // Always show ONLY ONE hint at a time
   hideAllHintsImmediate();
@@ -1502,9 +1508,19 @@ function showHintForKey(key) {
   }
 
   if (key === "tv") {
-    showTvHint(true);
-    return;
+
+  // ✅ iOS-specific TV hint text
+  if (isIOSDevice()) {
+    const text = getIosTvHintText();
+    if (text && typeof updateTvHintText === "function") {
+      updateTvHintText(text);
+    }
   }
+
+  showTvHint(true);
+  return;
+}
+
 
   // Remote mini hints
   if (key === "ok") okHint.show(true);
@@ -1720,13 +1736,34 @@ function updateSpeakerHintText() {
   speakerHintMain.innerText = isPlaying ? "click to pause" : "click to play";
 }
 
+// ============================================================
+// ✅ iOS SAFE OVERLAY SIZING (fixes "vh" cropping in fullscreen overlays)
+// Put ABOVE: const photoOverlay = document.createElement("div");
+// ============================================================
+function getVisualSize() {
+  const vv = window.visualViewport;
+  return {
+    w: Math.round(vv?.width  ?? window.innerWidth),
+    h: Math.round(vv?.height ?? window.innerHeight),
+  };
+}
+
+function sizeOverlayToVisible(overlayEl) {
+  const { w, h } = getVisualSize();
+
+  overlayEl.style.width  = w + "px";
+  overlayEl.style.height = h + "px";
+  overlayEl.style.left   = "0";
+  overlayEl.style.top    = "0";
+}
+
 
 const photoOverlay = document.createElement("div");
 photoOverlay.style.position = "fixed";
 photoOverlay.style.left = "0";
 photoOverlay.style.top = "0";
-photoOverlay.style.width = "100vw";
-photoOverlay.style.height = "100vh";
+// ✅ do NOT use 100vh on iOS
+sizeOverlayToVisible(photoOverlay);
 photoOverlay.style.background = "rgba(0,0,0,0.92)";
 photoOverlay.style.display = "none";
 photoOverlay.style.zIndex = "9999";
@@ -1747,7 +1784,7 @@ overlayCenter.style.justifyContent = "center";
 
 const photoOverlayImg = document.createElement("img");
 photoOverlayImg.style.maxWidth = "96vw";
-photoOverlayImg.style.maxHeight = "96vh";
+photoOverlayImg.style.maxHeight = "96%";
 photoOverlayImg.style.objectFit = "contain";
 photoOverlayImg.style.boxShadow = "0 20px 80px rgba(0,0,0,0.6)";
 photoOverlayImg.style.pointerEvents = "none"; // ✅ clicks go to buttons/overlay
@@ -1832,8 +1869,8 @@ const videoOverlay = document.createElement("div");
 videoOverlay.style.position = "fixed";
 videoOverlay.style.left = "0";
 videoOverlay.style.top = "0";
-videoOverlay.style.width = "100vw";
-videoOverlay.style.height = "100vh";
+// ✅ do NOT use 100vh on iOS
+sizeOverlayToVisible(videoOverlay);
 videoOverlay.style.background = "rgba(0,0,0,0.92)";
 videoOverlay.style.display = "none";
 videoOverlay.style.zIndex = "9999";
@@ -1851,7 +1888,7 @@ videoOverlayCenter.style.justifyContent = "center";
 
 const videoOverlayEl = document.createElement("video");
 videoOverlayEl.style.maxWidth = "96vw";
-videoOverlayEl.style.maxHeight = "96vh";
+videoOverlayEl.style.maxHeight = "96%";
 videoOverlayEl.style.objectFit = "contain";
 videoOverlayEl.style.boxShadow = "0 20px 80px rgba(0,0,0,0.6)";
 videoOverlayEl.style.background = "#000";
@@ -2001,6 +2038,24 @@ videoOverlay.appendChild(videoOverlayNext);
 videoOverlay.appendChild(videoOverlayExit);
 document.body.appendChild(videoOverlay);
 
+// ============================================================
+// ✅ keep overlays sized correctly on iOS (address bar / rotate)
+// Put RIGHT AFTER: document.body.appendChild(videoOverlay);
+// ============================================================
+function refreshOverlays() {
+  if (photoOverlay && photoOverlay.style.display !== "none") sizeOverlayToVisible(photoOverlay);
+  if (videoOverlay && videoOverlay.style.display !== "none") sizeOverlayToVisible(videoOverlay);
+}
+
+window.addEventListener("resize", refreshOverlays);
+window.addEventListener("orientationchange", () => setTimeout(refreshOverlays, 250));
+
+if (window.visualViewport) {
+  window.visualViewport.addEventListener("resize", refreshOverlays);
+  window.visualViewport.addEventListener("scroll", refreshOverlays);
+}
+
+
 // Click outside video closes
 videoOverlay.addEventListener("click", (e) => {
   if (e.target === videoOverlay) closeVideoOverlay();
@@ -2032,8 +2087,12 @@ const modelOverlay = document.createElement("div");
 modelOverlay.style.position = "fixed";
 modelOverlay.style.left = "0";
 modelOverlay.style.top = "0";
-modelOverlay.style.width = "100vw";
-modelOverlay.style.height = "100vh";
+modelOverlay.style.width = "100%";
+modelOverlay.style.height = "100%";
+modelOverlay.style.inset = "0";                // ✅ iOS friendly
+modelOverlay.style.boxSizing = "border-box";   // ✅ so padding counts
+modelOverlay.style.padding =
+  "env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)";
 modelOverlay.style.background = "rgba(0,0,0,0.92)";
 modelOverlay.style.display = "none";
 modelOverlay.style.zIndex = "9999";
@@ -2074,6 +2133,24 @@ modelOverlayImg.style.pointerEvents = "none";
 modelOverlayCenter.appendChild(modelOverlayEl);
 modelOverlayCenter.appendChild(modelOverlayImg);
 modelOverlay.appendChild(modelOverlayCenter);
+
+function sizeModelOverlayMedia() {
+  // ✅ Use the real visible viewport on iOS (avoids bottom crop)
+  const vv = window.visualViewport;
+
+  const vw = (vv ? vv.width : window.innerWidth);
+  const vh = (vv ? vv.height : window.innerHeight);
+
+  // give it a little breathing room so it never hits the home bar / safari UI
+  const maxW = Math.floor(vw * 0.96);
+  const maxH = Math.floor(vh * 0.92);
+
+  modelOverlayEl.style.maxWidth = `${maxW}px`;
+  modelOverlayEl.style.maxHeight = `${maxH}px`;
+
+  modelOverlayImg.style.maxWidth = `${maxW}px`;
+  modelOverlayImg.style.maxHeight = `${maxH}px`;
+}
 
 function freezeTvModelForOverlay() {
   tvModelSuppressed = true;
@@ -2212,9 +2289,10 @@ async function openModelOverlay() {
 if (modelMediaType === "video" && !modelVideoEl) return;
 if (modelMediaType === "image" && !currentModelUrl) return;
 
-
   modelOverlayOpen = true;
   modelOverlay.style.display = "block";
+
+  sizeModelOverlayMedia();
 
   tvModelSuppressed = false;
   pauseModel();
@@ -3353,9 +3431,6 @@ async function unlockAudioOnce() {
   }
 }
 
-// Unlock on first real user gesture
-window.addEventListener("pointerdown", unlockAudioOnce, { once: true });
-window.addEventListener("touchstart", unlockAudioOnce, { once: true });
 
 const audioEls = tracks.map((src) => {
   const a = new Audio(src);
@@ -3456,6 +3531,7 @@ let tvPower = 0;
 let tvBootT0 = 0;
 let tvBooting = false; 
 let tvUIReady = false;
+
 
 // ============================================================
 // ✅ iOS LANDSCAPE LOCK (pairs with index.html overlay)
@@ -3588,6 +3664,147 @@ function hitIsBoard2(obj) {
   }
   return false;
 }
+
+// ============================================================
+// ✅ iOS TV TOUCH CONTROLS (tap zones on the TV screen)
+// ============================================================
+function getTvCanvasPxPyFromUv(uv) {
+  if (!uv) return null;
+
+  const w = tvCanvas.width;
+  const h = tvCanvas.height;
+
+  // account for tvTex repeat/offset
+  const u = uv.x * (tvTex.repeat?.x ?? 1) + (tvTex.offset?.x ?? 0);
+  const v = uv.y * (tvTex.repeat?.y ?? 1) + (tvTex.offset?.y ?? 0);
+
+  return { w, h, px: u * w, py: v * h };
+}
+
+function handleIOSTvTap(uv) {
+  const pos = getTvCanvasPxPyFromUv(uv);
+  if (!pos) return false;
+
+  const { w, h, px, py } = pos;
+
+  // ✅ If TV is OFF, any tap on the screen turns it ON and shows MENU
+  if (!tvOn) {
+    setTvPower(true);
+    // setTvPower already sets tvUiState="MENU" and draws menu
+    return true;
+  }
+
+  // MENU button area (top-right) works in all states that show it
+  const bx = w - TV_MENU_BTN.pad - TV_MENU_BTN.w;
+  const by = TV_MENU_BTN.pad;
+
+  const inMenuBtn =
+    px >= bx && px <= bx + TV_MENU_BTN.w &&
+    py >= by && py <= by + TV_MENU_BTN.h;
+
+  if (inMenuBtn) {
+    // return to menu from anything
+    stopVideoCompletely?.();
+    stopModelCompletely?.();
+    tvUiState = "MENU";
+    blinkT0 = performance.now();
+    drawTvMenu();
+    return true;
+  }
+
+  // ✅ Double-tap anywhere else = fullscreen overlay (when relevant)
+  const now = performance.now();
+  const isDoubleTap = (now - lastTvTapTime) < TV_DOUBLE_TAP_MS;
+  lastTvTapTime = now;
+
+  // Split screen into tap zones
+  const x01 = px / w; // 0..1
+  const y01 = py / h; // 0..1
+
+  // ------------------------------------------------------------
+  // ✅ MENU: tap top = UP, bottom = DOWN, middle = OK
+  // ------------------------------------------------------------
+  if (tvUiState === "MENU") {
+    if (y01 < 0.33) {
+      moveMenuSelection(-1);
+      return true;
+    }
+    if (y01 > 0.66) {
+      moveMenuSelection(+1);
+      return true;
+    }
+    confirmMenuSelection();
+    return true;
+  }
+
+  // ------------------------------------------------------------
+  // ✅ PHOTO: left/right = prev/next, center = fullscreen
+  // ------------------------------------------------------------
+  if (tvUiState === "PHOTO") {
+    if (x01 < 0.33) {
+      nextPhoto(-1);
+      return true;
+    }
+    if (x01 > 0.66) {
+      nextPhoto(+1);
+      return true;
+    }
+    // center
+    openPhotoOverlay(currentPhotoUrl);
+    return true;
+  }
+
+  // ------------------------------------------------------------
+  // ✅ VIDEO: left/right = prev/next, center = play/pause
+  // Double tap = fullscreen overlay
+  // ------------------------------------------------------------
+  if (tvUiState === "VIDEO") {
+    if (isDoubleTap) {
+      openVideoOverlay();
+      return true;
+    }
+
+    if (x01 < 0.33) {
+      nextVideo(-1);
+      return true;
+    }
+    if (x01 > 0.66) {
+      nextVideo(+1);
+      return true;
+    }
+
+    toggleVideoPlayPause();
+    drawVideoFrameToTv(); // refresh paused overlay text
+    return true;
+  }
+
+  // ------------------------------------------------------------
+  // ✅ 3D MODEL: left/right = prev/next, center = play/pause
+  // Double tap = fullscreen overlay
+  // ------------------------------------------------------------
+  if (tvUiState === "3D MODEL") {
+    if (isDoubleTap) {
+      openModelOverlay();
+      return true;
+    }
+
+    if (x01 < 0.33) {
+      nextModel(-1);
+      return true;
+    }
+    if (x01 > 0.66) {
+      nextModel(+1);
+      return true;
+    }
+
+    toggleModelPlayPause();
+    drawModelFrameToTv();
+    return true;
+  }
+
+  return false;
+}
+
 
 function openExternal(url) {
   if (!url) return false;
@@ -3734,6 +3951,9 @@ tvScreenMatRef.emissiveIntensity = intensity;
 let lastClickTime = 0;
 const DOUBLE_CLICK_MS = 280;
 
+let lastTvTapTime = 0;
+const TV_DOUBLE_TAP_MS = 320;
+
 let pendingExternalUrl = null;
 
 // ✅ DEBUG: draw a dot where the TV screen was clicked (UV->pixel)
@@ -3782,6 +4002,17 @@ if (overlayOpen || videoOverlayOpen || modelOverlayOpen) return;
 
   const hit = hits[0].object;
   const hitInfo = hits[0];
+
+  // ✅ iOS: tap the TV screen to control everything (no remote needed)
+if (
+  isIOSDevice() &&
+  tvScreenMeshRef &&
+  isInHierarchy(hit, tvScreenMeshRef)
+) {
+  const uv = hits[0].uv;
+  if (handleIOSTvTap(uv)) return;
+}
+
 
   // ✅ only toggle lamp + night vision when lamp is clicked
 if (hitIsLamp(hit)) {
@@ -4118,6 +4349,106 @@ if (speakerMeshRef && isInHierarchy(hit, speakerMeshRef)) {
 }
 
 renderer.domElement.addEventListener("pointerdown", onPointerDown);
+
+// ============================================================
+// ✅ iOS MICRO-PAN (1-finger drag) — VERY SUBTLE
+// Put directly under: renderer.domElement.addEventListener("pointerdown", onPointerDown);
+// ============================================================
+renderer.domElement.style.touchAction = "none"; // prevent page scroll / Safari rubber band
+
+const IOS_MICROPAN = {
+  // how far the user can pan (world units scaled by roomMaxDim)
+  maxWorld: 0.020,      // ✅ subtle (try 0.015–0.03)
+  // how quickly the pan follows finger
+  follow: 0.12,         // ✅ smoothing toward desired
+  // how quickly it returns to center after release
+  return: 0.10,         // ✅ smoothing back to 0
+  // how many px you can move before we consider it a "drag" (not a tap)
+  dragThresholdPx: 8,
+};
+
+let iosPanActive = false;
+let iosPanDragging = false;
+
+let iosPanStart = { x: 0, y: 0 };
+let iosPanDesired = { x: 0, y: 0 }; // normalized -1..1
+let iosPanNow = { x: 0, y: 0 };     // smoothed -1..1
+
+function _clamp01(v, a, b) {
+  return Math.max(a, Math.min(b, v));
+}
+
+// Start tracking 1-finger touch drag (pointer events)
+renderer.domElement.addEventListener("pointerdown", (e) => {
+  if (!isIOSDevice()) return;
+  if (e.pointerType !== "touch") return;
+  if (overlayOpen || videoOverlayOpen || modelOverlayOpen) return;
+
+  iosPanActive = true;
+  iosPanDragging = false;
+
+  iosPanStart.x = e.clientX;
+  iosPanStart.y = e.clientY;
+
+  // capture this pointer so moves keep coming even if finger leaves canvas
+  try { renderer.domElement.setPointerCapture(e.pointerId); } catch {}
+
+}, { passive: true });
+
+renderer.domElement.addEventListener("pointermove", (e) => {
+  if (!isIOSDevice()) return;
+  if (!iosPanActive) return;
+  if (e.pointerType !== "touch") return;
+
+  const dxPx = e.clientX - iosPanStart.x;
+  const dyPx = e.clientY - iosPanStart.y;
+
+  // Only become a "drag" if movement is beyond threshold (so taps still work)
+  if (!iosPanDragging) {
+    if (Math.abs(dxPx) < IOS_MICROPAN.dragThresholdPx && Math.abs(dyPx) < IOS_MICROPAN.dragThresholdPx) {
+      return;
+    }
+    iosPanDragging = true;
+  }
+
+  const w = Math.max(1, window.innerWidth);
+  const h = Math.max(1, window.innerHeight);
+
+  // normalize to -1..1 range (small)
+  const nx = _clamp01(dxPx / w, -1, 1);
+  const ny = _clamp01(dyPx / h, -1, 1);
+
+  // finger right -> pan right, finger down -> pan down (invert if you want)
+  iosPanDesired.x = nx;
+  iosPanDesired.y = ny;
+
+  // IMPORTANT: only prevent default once we're dragging
+  // (prevents Safari page scroll)
+  e.preventDefault();
+
+}, { passive: false });
+
+function _endIOSPan() {
+  iosPanActive = false;
+  iosPanDragging = false;
+
+  // ease back to center
+  iosPanDesired.x = 0;
+  iosPanDesired.y = 0;
+}
+
+renderer.domElement.addEventListener("pointerup", (e) => {
+  if (!isIOSDevice()) return;
+  if (e.pointerType !== "touch") return;
+  _endIOSPan();
+}, { passive: true });
+
+renderer.domElement.addEventListener("pointercancel", (e) => {
+  if (!isIOSDevice()) return;
+  if (e.pointerType !== "touch") return;
+  _endIOSPan();
+}, { passive: true });
+
 
 window.addEventListener("pointerup", () => {
   // ✅ If something was queued on pointerdown, open it now
@@ -5504,15 +5835,28 @@ const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
 let iosCamYOff = 0;
 let iosCamZOff = 0;
 let iosTargetYOff = 0;
+let iosCamXOff = 0;
 
 if (isiOS) {
-  iosCamYOff = maxDim * 0.0;      // camera DOWN (more negative = lower)
-  iosCamZOff = maxDim * 0.0;     //closer to TV (negative = closer)
-  iosTargetYOff = maxDim * +0.0;   // aim UP (more positive = higher)
+  iosCamXOff = maxDim * -0.01;
+  iosCamYOff = maxDim * +0.003;   // small nudge down
+  iosCamZOff = maxDim * +0.05;   // small nudge closer
+  iosTargetYOff = maxDim * -0.04;
 }
 
-    camera.position.set(camX, camY, camZ);
-    camera.lookAt(targetX, targetY, targetZ);
+
+  camera.position.set(
+  camX + iosCamXOff,
+  camY + iosCamYOff,
+  camZ + iosCamZOff
+);
+
+camera.lookAt(
+  targetX,
+  targetY + iosTargetYOff,
+  targetZ
+);
+
 
     // ✅ NEW: store the exact target we framed for desktop
     baseCamTarget0 = new THREE.Vector3(targetX, targetY, targetZ);
@@ -5523,8 +5867,7 @@ if (isiOS) {
     camera.getWorldDirection(baseCamDir0); // direction camera is looking
     baseCamFov0 = camera.fov;
 
-
-
+    
     if (baseFovDeg === null) baseFovDeg = camera.fov;
 
     // 🔥 Force resize AFTER camera baseline is locked
@@ -6039,6 +6382,42 @@ function updateBreath2(dt) {
   camera.fov = baseCamFov;
 }
 
+// ============================================================
+// ✅ APPLY iOS MICRO-PAN (moves camera + target very slightly)
+// Call this every frame (in animate)
+// ============================================================
+function applyIOSMicroPan() {
+  if (!isIOSDevice()) return;
+  if (!roomMaxDim) return;
+
+  // Smooth pan toward desired, and return toward 0 when released
+  const k = iosPanActive ? IOS_MICROPAN.follow : IOS_MICROPAN.return;
+
+  iosPanNow.x += (iosPanDesired.x - iosPanNow.x) * k;
+  iosPanNow.y += (iosPanDesired.y - iosPanNow.y) * k;
+
+  // Convert normalized pan -> subtle world shift
+  const amt = roomMaxDim * IOS_MICROPAN.maxWorld;
+
+  // camera right + up vectors
+  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+  const up    = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+
+  // desired world offset
+  const off = new THREE.Vector3()
+    .addScaledVector(right,  iosPanNow.x * amt)
+    .addScaledVector(up,    -iosPanNow.y * amt); // minus so drag down reveals bottom
+
+  // We apply pan on TOP of your baseline (baseCamPos / baseCamTarget0)
+  // baseCamPos is already your "authoritative" camera position after resize
+  if (!baseCamPos0 || !baseCamTarget0) return;
+
+  camera.position.copy(baseCamPos0).add(off);
+
+  // Move look target a bit too (less than camera for nice parallax)
+  const targetOff = off.clone().multiplyScalar(0.65);
+  camera.lookAt(baseCamTarget0.clone().add(targetOff));
+}
 
 //ANIMATE
 const clock = new THREE.Clock();
@@ -6060,7 +6439,8 @@ if (bugMixer) bugMixer.update(dt);
     updatePress();
   }
 
- 
+    applyIOSMicroPan(); // ✅ iOS subtle pan
+
  // ✅ Throttle TV redraw so it doesn't hammer performance
 if (!window.__tvRedrawAcc) window.__tvRedrawAcc = 0;
 window.__tvRedrawAcc += dt;
@@ -6161,8 +6541,10 @@ if (baseCamPos0 && baseCamDir0) {
   // Portrait push-back (same idea you had, but do it along view direction)
   const portraitPush = (roomMaxDim || 1) * 0.12 * t;
 
-  // ✅ Extra iOS pull-back even in landscape (this helps match desktop)
-  const iosExtraPush = isIOSDevice() ? (roomMaxDim || 1) * 0.08 : 0;
+// ✅ only push back on iOS when portrait/tall (so landscape can stay closer)
+const iosExtraPush =
+  (isIOSDevice() && aspect < 1.0) ? (roomMaxDim || 1) * 0.08 : 0;
+
 
   const totalPush = portraitPush + iosExtraPush;
 
@@ -6175,6 +6557,7 @@ if (baseCamPos0 && baseCamDir0) {
   // ✅ IMPORTANT: update breathing baseline so it doesn't “snap” back
   baseCamPos = camera.position.clone();
   captureBreathBaseline();
+  baseCamPos0 = camera.position.clone();
 }
 
   camera.aspect = aspect;
