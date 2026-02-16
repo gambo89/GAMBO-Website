@@ -5502,6 +5502,7 @@ const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
               (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
 let iosCamYOff = 0;
+let iosCamZOff = 0;
 let iosTargetYOff = 0;
 
 if (isiOS) {
