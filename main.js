@@ -5497,6 +5497,18 @@ lampMeshRef = (() => {
     const targetY = maxDim * -0.186;
     const targetZ = 0;
 
+    // ✅ iOS-only framing tweaks (landscape)
+const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+              (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+let iosCamYOff = 0;
+let iosTargetYOff = 0;
+
+if (isiOS) {
+  iosCamYOff = maxDim * -0.020;      // camera DOWN (more negative = lower)
+  iosTargetYOff = maxDim * +0.030;   // aim UP (more positive = higher)
+}
+
     camera.position.set(camX, camY, camZ);
     camera.lookAt(targetX, targetY, targetZ);
 
