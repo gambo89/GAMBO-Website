@@ -5508,7 +5508,7 @@ let iosTargetYOff = 0;
 if (isiOS) {
   iosCamYOff = maxDim * -4.5;      // camera DOWN (more negative = lower)
   iosCamZOff = maxDim * -0.2;     //closer to TV (negative = closer)
-  iosTargetYOff = maxDim * +0.05;   // aim UP (more positive = higher)
+  iosTargetYOff = maxDim * +0.07;   // aim UP (more positive = higher)
 }
 
     camera.position.set(camX, camY, camZ);
