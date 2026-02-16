@@ -5,46 +5,77 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>bedroom</title>
 
-<style>
-  /* ==========================================================
-     FULLSCREEN CANVAS (NO BARS, NO PAGE SHIFT)
-  ========================================================== */
-  html, body {
-    margin: 0;
-    padding: 0;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    background: #000;
-  }
+  <style>
+    /* ==========================================================
+       FULLSCREEN CANVAS (NO BARS, NO PAGE SHIFT)
+    ========================================================== */
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+    }
 
-  #c {
-    display: block;
-    width: 100vw;
-    height: 100vh;
-  }
+    #c {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
 
-  /* ✅ LOADING SCREEN */
-  #loader {
-    position: fixed;
-    inset: 0;
-    background: #000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 9999;
-    font-family: monospace;
-    font-size: 25px;
-    color: #ffffff;
-  }
+    /* ✅ LOADING SCREEN */
+    #loader {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      font-family: monospace;
+      font-size: 25px;
+      color: #ffffff;
+    }
 
-  #loader.hidden {
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.8s ease;
-  }
-</style>
+    #loader.hidden {
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.8s ease;
+    }
 
+    /* ==========================================================
+       ✅ iOS LANDSCAPE-ONLY OVERLAY (iOS portrait blocker)
+    ========================================================== */
+    #ios-rotate-lock {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      color: #fff;
+      display: none;               /* hidden by default */
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;              /* above loader */
+      font-family: monospace;
+      text-align: center;
+      padding: 24px;
+    }
+
+    #ios-rotate-lock .box {
+      max-width: 520px;
+      line-height: 1.4;
+    }
+
+    #ios-rotate-lock .title {
+      font-size: 26px;
+      margin-bottom: 10px;
+    }
+
+    #ios-rotate-lock .sub {
+      opacity: 0.8;
+      font-size: 16px;
+    }
+  </style>
 </head>
 
 <body>
@@ -52,6 +83,14 @@
   <!-- ✅ LOADING SCREEN -->
   <div id="loader">
     <div id="loader-text">0</div>
+  </div>
+
+  <!-- ✅ iOS rotate-to-landscape lock -->
+  <div id="ios-rotate-lock">
+    <div class="box">
+      <div class="title">Rotate your phone</div>
+      <div class="sub">This experience is landscape-only on iOS.</div>
+    </div>
   </div>
 
   <canvas id="c"></canvas>
@@ -66,7 +105,44 @@
     }
   </script>
 
+  <!-- ✅ iOS portrait blocker logic -->
+  <script>
+    function isIOS() {
+      return (
+        /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+      );
+    }
+
+    function isLandscape() {
+      return window.matchMedia("(orientation: landscape)").matches;
+    }
+
+    function updateIOSRotateLock() {
+      const lock = document.getElementById("ios-rotate-lock");
+      if (!lock) return;
+
+      // Only enforce on iOS
+      if (!isIOS()) {
+        lock.style.display = "none";
+        return;
+      }
+
+      // iOS: block portrait, allow landscape
+      lock.style.display = isLandscape() ? "none" : "flex";
+    }
+
+    updateIOSRotateLock();
+
+    window.addEventListener("orientationchange", () => {
+      setTimeout(updateIOSRotateLock, 150);
+    });
+
+    window.addEventListener("resize", () => {
+      setTimeout(updateIOSRotateLock, 150);
+    });
+  </script>
+
   <script type="module" src="./main.js?v=1"></script>
 </body>
 </html>
-

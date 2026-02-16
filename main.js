@@ -3456,6 +3456,24 @@ let tvBootT0 = 0;
 let tvBooting = false; 
 let tvUIReady = false;
 
+// ============================================================
+// ✅ iOS LANDSCAPE LOCK (pairs with index.html overlay)
+// ============================================================
+function isIOSDevice() {
+  return (
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+  );
+}
+
+function isLandscapeNow() {
+  return window.matchMedia("(orientation: landscape)").matches;
+}
+
+function isIOSPortraitBlocked() {
+  return isIOSDevice() && !isLandscapeNow();
+}
+
 function isInHierarchy(obj, target) {
   let o = obj;
   while (o) {
@@ -3722,6 +3740,7 @@ function setPointerFromEvent(e) {
 }
 
 async function onPointerDown(e) {
+  if (isIOSPortraitBlocked()) return;
   if (!setPointerFromEvent(e)) return; // ✅ ignore clicks in black bars
   raycaster.setFromCamera(pointer, camera);
 
@@ -4101,6 +4120,7 @@ window.addEventListener("pointercancel", () => {
 // ============================================================
 
 renderer.domElement.addEventListener("pointermove", (e) => {
+  if (isIOSPortraitBlocked()) return;
   if (overlayOpen || videoOverlayOpen || modelOverlayOpen) {
     setHoverKey(null);
     clearAllButtonGlows();
@@ -5985,23 +6005,26 @@ function animate() {
   requestAnimationFrame(animate);
 
   const dt = clock.getDelta();
-// ✅ breathing is now screen-space (post FX), so camera stays perfectly still
 
+  const blocked = isIOSPortraitBlocked();
 
   // ✅ advance bug animations
 if (bugMixer) bugMixer.update(dt);
 
- updateTv(); // ✅ animate TV turning on/off
- updateLampFlicker();
- updateDust(dt);
- updateGlow();
- updatePress(); // ✅ ADD HERE
+  if (!blocked) {
+    updateTv();
+    updateLampFlicker();
+    updateDust(dt);
+    updateGlow();
+    updatePress();
+  }
+
  
  // ✅ Throttle TV redraw so it doesn't hammer performance
 if (!window.__tvRedrawAcc) window.__tvRedrawAcc = 0;
 window.__tvRedrawAcc += dt;
 
-if (tvOn && tvScreenMatRef && window.__tvRedrawAcc > (1 / 12)) {
+if (!blocked && tvOn && tvScreenMatRef && window.__tvRedrawAcc > (1 / 12)) {
   window.__tvRedrawAcc = 0;
 
   if (tvUiState === "MENU") {
