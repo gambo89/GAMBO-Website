@@ -5511,7 +5511,6 @@ if (isiOS) {
   iosTargetYOff = maxDim * +0.1;   // aim UP (more positive = higher)
 }
 
-
     camera.position.set(camX, camY, camZ);
     camera.lookAt(targetX, targetY, targetZ);
 
@@ -5523,6 +5522,8 @@ if (isiOS) {
     baseCamDir0 = new THREE.Vector3();
     camera.getWorldDirection(baseCamDir0); // direction camera is looking
     baseCamFov0 = camera.fov;
+
+
 
     if (baseFovDeg === null) baseFovDeg = camera.fov;
 
