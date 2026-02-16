@@ -9,6 +9,7 @@ import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 
+
 const DEBUG = false;
 const log  = (...args) => DEBUG && console.log(...args);
 const warn = (...args) => DEBUG && console.warn(...args);
@@ -6083,7 +6084,7 @@ function handleResize() {
     const t = THREE.MathUtils.clamp((1.0 - aspect) / 0.55, 0, 1);
 
     // tweak this number to taste (start here)
-    const push = (roomMaxDim || 1) * 0.12 * t;
+    const push = (roomMaxDim || 1) * 0.44 * t;
 
     camera.position.copy(baseCamPos).add(new THREE.Vector3(0, 0, push));
   }
