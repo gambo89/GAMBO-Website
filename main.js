@@ -9,6 +9,25 @@ import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 
+console.log("🔥 MAIN.JS LIVE:", new Date().toLocaleTimeString(), Math.random());
+
+document.body.insertAdjacentHTML(
+  "beforeend",
+  `<div style="
+    position:fixed;
+    top:60px;
+    left:0;
+    z-index:999999;
+    background:#000;
+    color:#0ff;
+    padding:6px 10px;
+    font:12px monospace;
+    border:1px solid #0ff;">
+    MAIN.JS LIVE: ${new Date().toLocaleTimeString()} / ${Math.random().toString(16).slice(2)}
+  </div>`
+);
+
+
 const DEBUG = false;
 const log  = (...args) => DEBUG && console.log(...args);
 const warn = (...args) => DEBUG && console.warn(...args);
@@ -757,6 +776,29 @@ let baseCamDir0 = null;
 let baseCamFov0 = null;
 let baseCamTarget0 = null; // ✅ NEW: the lookAt point we want to keep
 
+// ============================================================
+// ✅ FIXED CAMERA BASELINE (never changes after boot)
+// ============================================================
+let fixedCamPos0 = null;
+let fixedCamQuat0 = null;
+let fixedCamFov0  = null;
+let fixedCamTarget0 = null;
+let fixedCamCaptured = false;
+
+function captureFixedCameraBaseline() {
+  if (fixedCamCaptured) return;
+
+  fixedCamPos0 = camera.position.clone();
+  fixedCamQuat0 = camera.quaternion.clone();
+  fixedCamFov0  = camera.fov;
+
+  // you already set this earlier, but ensure it's stored
+  if (baseCamTarget0) fixedCamTarget0 = baseCamTarget0.clone();
+  else fixedCamTarget0 = new THREE.Vector3(0,0,0);
+
+  fixedCamCaptured = true;
+  console.log("✅ Fixed camera baseline captured");
+}
 
 // ============================================================
 // CALM BREATHING PRESET ✅ (slow + grounded)
@@ -5958,17 +6000,28 @@ camera.lookAt(
 
 
     // ✅ store base camera position for breathing offsets
-baseCamPos = camera.position.clone();
+    baseCamPos = camera.position.clone();
 
     camera.near = maxDim / 1000;
     camera.far = maxDim * 1000;
     camera.updateProjectionMatrix();
 
-    baseFovDeg = camera.fov;
-    baseFovCaptured = true;
-    handleResize();
+baseFovDeg = camera.fov;
+baseFovCaptured = true;
 
-    captureBreathBaseline();
+// ✅ iOS first-load framing fix: let the viewport settle, then lock camera baseline
+scheduleResize();
+setTimeout(scheduleResize, 120);
+setTimeout(() => {
+  scheduleResize();
+
+  // ✅ NOW that the final resize has happened, lock the “never move” camera
+  captureFixedCameraBaseline();
+
+  // ✅ Make breathing start from the locked pose
+  captureBreathBaseline();
+}, 260);
+
   },
   
   undefined,
@@ -6463,42 +6516,33 @@ function updateBreath2(dt) {
   camera.fov = baseCamFov;
 }
 
-// ============================================================
-// ✅ APPLY iOS MICRO-PAN (moves camera + target very slightly)
-// Call this every frame (in animate)
-// ============================================================
 function applyIOSMicroPan() {
   if (!isIOSDevice()) return;
   if (!roomMaxDim) return;
+  if (!fixedCamCaptured) return;
 
-  // Smooth pan toward desired, and return toward 0 when released
+  // Smooth toward desired
   const k = iosPanActive ? IOS_MICROPAN.follow : IOS_MICROPAN.return;
-
   iosPanNow.x += (iosPanDesired.x - iosPanNow.x) * k;
   iosPanNow.y += (iosPanDesired.y - iosPanNow.y) * k;
 
-  // Convert normalized pan -> subtle world shift
   const amt = roomMaxDim * IOS_MICROPAN.maxWorld;
 
-  // camera right + up vectors
-  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
-  const up    = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+  // IMPORTANT: use the FIXED quaternion basis (not current)
+  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(fixedCamQuat0);
+  const up    = new THREE.Vector3(0, 1, 0).applyQuaternion(fixedCamQuat0);
 
-  // desired world offset
   const off = new THREE.Vector3()
     .addScaledVector(right,  iosPanNow.x * amt)
-    .addScaledVector(up,    -iosPanNow.y * amt); // minus so drag down reveals bottom
+    .addScaledVector(up,    -iosPanNow.y * amt);
 
-  // We apply pan on TOP of your baseline (baseCamPos / baseCamTarget0)
-  // baseCamPos is already your "authoritative" camera position after resize
-  if (!baseCamPos0 || !baseCamTarget0) return;
+  // Apply offset on top of fixed pose
+  camera.position.copy(fixedCamPos0).add(off);
 
-  camera.position.copy(baseCamPos0).add(off);
-
-  // Move look target a bit too (less than camera for nice parallax)
   const targetOff = off.clone().multiplyScalar(0.65);
-  camera.lookAt(baseCamTarget0.clone().add(targetOff));
+  camera.lookAt(fixedCamTarget0.clone().add(targetOff));
 }
+
 
 //ANIMATE
 const clock = new THREE.Clock();
@@ -6589,64 +6633,40 @@ grainStyle.innerHTML = `
 
 document.head.appendChild(grainStyle);
 
+// ✅ track the *actual* render size used by renderer.setSize()
+let renderW = window.innerWidth;
+let renderH = window.innerHeight;
+
+
 function handleResize() {
   if (!renderer || !renderer.domElement) return;
   if (!camera) return;
 
-  const w = window.innerWidth;
-  const h = window.innerHeight;
+  const vv = window.visualViewport;
+  const w = Math.round(vv?.width  ?? window.innerWidth);
+  const h = Math.round(vv?.height ?? window.innerHeight);
+
+  renderW = w;
+  renderH = h;
+
   const aspect = w / h;
 
- const dpr = window.devicePixelRatio || 1;
-
-// ✅ iOS was forced to 1 (blurry). Give it a higher cap.
-const maxDpr = isIOS ? 2.2 : 2.0;
-
-renderer.setPixelRatio(Math.min(dpr, maxDpr));
-
+  const dpr = window.devicePixelRatio || 1;
+  const maxDpr = isIOS ? 2.2 : 2.0;
+  renderer.setPixelRatio(Math.min(dpr, maxDpr));
   renderer.setSize(w, h, true);
 
-  // fullscreen viewport (your raycast mapping expects this)
-  viewX = 0;
-  viewY = 0;
-  viewW = w;
-  viewH = h;
+  viewX = 0; viewY = 0; viewW = w; viewH = h;
 
-  // ✅ Default: lock base FOV
-  if (baseCamFov0 != null) camera.fov = baseCamFov0;
+  if (fixedCamCaptured) {
+    camera.position.copy(fixedCamPos0);
+    camera.quaternion.copy(fixedCamQuat0);
+    camera.fov = fixedCamFov0;
 
-  // ✅ iPhone landscape: tighten crop so it matches desktop framing
-  applyIOSLandscapeFovFix(camera, aspect);
+    applyIOSLandscapeFovFix(camera, aspect);
 
-
-// ✅ Always start from the original “desktop” camera position
-if (baseCamPos0 && baseCamDir0) {
-  camera.position.copy(baseCamPos0);
-
-  // 0 when landscape-ish, approaches 1 as it gets taller
-  const t = THREE.MathUtils.clamp((1.0 - aspect) / 0.55, 0, 1);
-
-  // Portrait push-back (same idea you had, but do it along view direction)
-  const portraitPush = (roomMaxDim || 1) * 0.12 * t;
-
-// ✅ only push back on iOS when portrait/tall (so landscape can stay closer)
-const iosExtraPush =
-  (isIOSDevice() && aspect < 1.0) ? (roomMaxDim || 1) * 0.08 : 0;
-
-
-  const totalPush = portraitPush + iosExtraPush;
-
-  // Move backwards along the camera's viewing direction (NOT world Z)
-  camera.position.addScaledVector(baseCamDir0, -totalPush);
-
-  // ✅ Re-apply the original lookAt so framing stays consistent
-  if (baseCamTarget0) camera.lookAt(baseCamTarget0);
-
-  // ✅ IMPORTANT: update breathing baseline so it doesn't “snap” back
-  baseCamPos = camera.position.clone();
-  captureBreathBaseline();
-  baseCamPos0 = camera.position.clone();
-}
+    if (fixedCamTarget0) camera.lookAt(fixedCamTarget0);
+  }
 
   camera.aspect = aspect;
   camera.updateProjectionMatrix();
@@ -6657,31 +6677,38 @@ const iosExtraPush =
   }
 }
 
-
-window.addEventListener("resize", handleResize);
-window.addEventListener("orientationchange", () => {
-  setTimeout(handleResize, 250);
-});
-
 // ============================================================
-// ✅ MOBILE FIX: react to browser UI (address bar) resizing
+// ✅ SMART RESIZE WRAPPER (prevents iOS framing shift)
 // ============================================================
+let __resizeRaf = 0;
+
+function scheduleResize() {
+  cancelAnimationFrame(__resizeRaf);
+
+  __resizeRaf = requestAnimationFrame(() => {
+    handleResize();
+
+    // iOS Safari often needs a second pass after address bar settles
+    if (isIOSDevice()) {
+      setTimeout(handleResize, 120);
+    }
+  });
+}
+
+window.addEventListener("resize", scheduleResize);
+window.addEventListener("orientationchange", scheduleResize);
+
 if (window.visualViewport) {
   const vv = window.visualViewport;
-
-  const onVV = () => {
-    // fire your existing resize logic
-    window.dispatchEvent(new Event("resize"));
-  };
-
-  vv.addEventListener("resize", onVV);
-  vv.addEventListener("scroll", onVV); // Safari sometimes changes viewport on scroll
+  vv.addEventListener("resize", scheduleResize);
+  vv.addEventListener("scroll", scheduleResize);
 }
+
 
 // ✅ Run initial resize only when renderer + camera exist
 (function initResizeWhenReady() {
   if (renderer && renderer.domElement && camera) {
-    window.dispatchEvent(new Event("resize"));
+    scheduleResize();
   } else {
     requestAnimationFrame(initResizeWhenReady);
   }
