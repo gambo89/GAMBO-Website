@@ -79,6 +79,14 @@ const renderer = new THREE.WebGLRenderer({
   powerPreference: "low-power",
 });
 
+// ============================================================
+// ✅ Color pipeline consistency (desktop + iOS)
+// Put directly after renderer creation
+// ============================================================
+renderer.outputColorSpace = THREE.SRGBColorSpace;     // modern three
+renderer.toneMapping = THREE.ACESFilmicToneMapping;  // if desktop uses this
+renderer.toneMappingExposure = renderer.toneMappingExposure ?? 1.0;
+
 // renderer settings...
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -635,34 +643,45 @@ gl_FragColor = vec4(outCol, 1.0);
   composer.addPass(nightVisionPass);
 }
 
+let __baseExposure = null;
+
 function setNightVision(on) {
-  nightVisionOn = on;
+  nightVisionOn = !!on;
 
-  if (nightVisionPass) nightVisionPass.uniforms.uOn.value = on ? 1 : 0;
+  // capture baseline exposure once
+  if (__baseExposure == null) {
+    __baseExposure = renderer.toneMappingExposure ?? 1.0;
+  }
 
-  if (on) {
-  baseExposure = renderer.toneMappingExposure;
+  const isiOS = isIOSDevice();
 
-  aeGain = 1.45;
-aeSampleAccum = 0;
-if (nightVisionPass) nightVisionPass.uniforms.uGain.value = aeGain;
+  // ============================================================
+  // ✅ Desktop: keep your EXACT current postFX behavior
+  // ============================================================
+  if (nightVisionPass) nightVisionPass.uniforms.uOn.value = nightVisionOn ? 1 : 0;
 
-  // ✅ less “neon lift”, more contrast like your reference
-  renderer.toneMappingExposure = 1.10;
-  hemi.intensity = 0.06;
-} else {
-  renderer.toneMappingExposure = baseExposure ?? 0.8;
-  hemi.intensity = 0.0;
-}
+  if (nightVisionOn) {
+    baseExposure = renderer.toneMappingExposure;
 
-  // ✅ VHS grain overlay: stronger during NV
+    aeGain = 1.45;
+    aeSampleAccum = 0;
+    if (nightVisionPass) nightVisionPass.uniforms.uGain.value = aeGain;
+
+    renderer.toneMappingExposure = 1.10;
+    hemi.intensity = 0.06;
+  } else {
+    renderer.toneMappingExposure = baseExposure ?? 0.8;
+    hemi.intensity = 0.0;
+  }
+
   if (typeof grainOverlay !== "undefined") {
-    grainOverlay.style.opacity = on ? "0.06" : "0.015";
-    grainOverlay.style.filter = on
+    grainOverlay.style.opacity = nightVisionOn ? "0.06" : "0.015";
+    grainOverlay.style.filter = nightVisionOn
       ? "contrast(155%) brightness(115%)"
       : "contrast(140%) brightness(90%)";
   }
 }
+
 
 const anchor = new THREE.Group();
 scene.add(anchor);
@@ -692,13 +711,41 @@ function adjustCameraForMobile() {
 
 adjustCameraForMobile();
 
-if (MOBILE_PROFILE.postFX) {
+// ============================================================
+// ✅ Composer render target (critical for iOS quality)
+// Replace your composer creation block with this
+// ============================================================
+function makeComposerRT() {
+  const w = Math.max(2, Math.floor(window.innerWidth));
+  const h = Math.max(2, Math.floor(window.innerHeight));
+
+  // Prefer HalfFloat on devices that can actually render to it (iOS varies)
+  const canHalfFloat =
+    renderer.capabilities.isWebGL2 &&
+    renderer.extensions?.has?.("EXT_color_buffer_float");
+
+  const type = canHalfFloat ? THREE.HalfFloatType : THREE.UnsignedByteType;
+
+  const rt = new THREE.WebGLRenderTarget(w, h, {
+    type,
+    format: THREE.RGBAFormat,
+    depthBuffer: true,
+    stencilBuffer: false,
+  });
+
+  // three r152+: colorSpace exists on textures
+  if ("colorSpace" in rt.texture) rt.texture.colorSpace = THREE.SRGBColorSpace;
+
+  return rt;
+}
+
+if (MOBILE_PROFILE.postFX || isIOSDevice()) {
+  composer = new EffectComposer(renderer, makeComposerRT());
   initPostFX();
 } else {
   composer = null;
   nightVisionPass = null;
 }
-
 
 // ============================================================
 // SUBTLE "FIRST PERSON" BREATHING CAMERA MOTION ✅
@@ -1635,6 +1682,40 @@ grainOverlay.style.animation = "grainBgMove 0.6s steps(1) infinite";
 
 document.body.appendChild(grainOverlay);
 
+const iosNightVisionOverlay = document.createElement("div");
+iosNightVisionOverlay.style.position = "fixed";
+iosNightVisionOverlay.style.left = "0";
+iosNightVisionOverlay.style.top = "0";
+iosNightVisionOverlay.style.width = "100vw";
+iosNightVisionOverlay.style.height = "100vh";
+iosNightVisionOverlay.style.pointerEvents = "none";
+iosNightVisionOverlay.style.zIndex = "9997"; // below overlays (9999) but above scene
+iosNightVisionOverlay.style.opacity = "0";
+iosNightVisionOverlay.style.transition = "opacity 0.18s ease";
+iosNightVisionOverlay.style.mixBlendMode = "screen";
+
+// green tint + subtle vignette (safe for iOS)
+iosNightVisionOverlay.style.background = `
+  radial-gradient(circle at 50% 45%,
+    rgba(120, 255, 160, 0.28) 0%,
+    rgba(80, 255, 120, 0.20) 35%,
+    rgba(0, 0, 0, 0.12) 70%,
+    rgba(0, 0, 0, 0.35) 100%)
+`;
+
+document.body.appendChild(iosNightVisionOverlay);
+
+// iOS likes this: keep overlay always sized correctly even with Safari bars
+function sizeIosNVOverlay() {
+  if (!window.visualViewport) return;
+  iosNightVisionOverlay.style.width = `${window.visualViewport.width}px`;
+  iosNightVisionOverlay.style.height = `${window.visualViewport.height}px`;
+}
+if (window.visualViewport) {
+  window.visualViewport.addEventListener("resize", sizeIosNVOverlay);
+  window.visualViewport.addEventListener("scroll", sizeIosNVOverlay);
+}
+sizeIosNVOverlay();
 
 function applyLampMood(mode) {
   if (!nightLights) return;
@@ -6466,7 +6547,14 @@ else if (tvUiState === "3D MODEL") {
 
 renderer.setScissorTest(false);
 renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
-if (MOBILE_PROFILE.postFX && nightVisionOn && composer && nightVisionPass) {
+
+const useNightVisionFX =
+  nightVisionOn &&
+  composer &&
+  nightVisionPass &&
+  (MOBILE_PROFILE.postFX || isIOSDevice());
+
+if (useNightVisionFX) {
   updateNightVisionAutoGain(dt);
   nightVisionPass.uniforms.uTime.value = performance.now() * 0.001;
   composer.render();
