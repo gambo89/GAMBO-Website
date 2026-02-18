@@ -9,24 +9,6 @@ import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 
-console.log("🔥 MAIN.JS LIVE:", new Date().toLocaleTimeString(), Math.random());
-
-document.body.insertAdjacentHTML(
-  "beforeend",
-  `<div style="
-    position:fixed;
-    top:60px;
-    left:0;
-    z-index:999999;
-    background:#000;
-    color:#0ff;
-    padding:6px 10px;
-    font:12px monospace;
-    border:1px solid #0ff;">
-    MAIN.JS LIVE: ${new Date().toLocaleTimeString()} / ${Math.random().toString(16).slice(2)}
-  </div>`
-);
-
 
 const DEBUG = false;
 const log  = (...args) => DEBUG && console.log(...args);
@@ -777,6 +759,35 @@ let baseCamFov0 = null;
 let baseCamTarget0 = null; // ✅ NEW: the lookAt point we want to keep
 
 // ============================================================
+// ✅ ONE TRUE CAMERA FRAMING FUNCTION (no iOS offsets)
+// Call this ONLY after viewport is correct.
+// ============================================================
+function setInitialCameraFraming(maxDim) {
+  // keep your original FOV
+  const fov = camera.fov * (Math.PI / 180);
+  const baseDist = maxDim / (2 * Math.tan(fov / 2));
+
+  // your original framing values
+  const camX = maxDim * 0.030;
+  const camY = maxDim * -0.146;
+  const camZ = baseDist * 0.282;
+
+  const targetX = 1.18;
+  const targetY = maxDim * -0.186;
+  const targetZ = 0;
+
+  camera.position.set(camX, camY, camZ);
+  camera.lookAt(targetX, targetY, targetZ);
+
+  // store the exact target used
+  baseCamTarget0 = new THREE.Vector3(targetX, targetY, targetZ);
+
+  // store base camera position for breathing
+  baseCamPos = camera.position.clone();
+}
+
+
+// ============================================================
 // ✅ FIXED CAMERA BASELINE (never changes after boot)
 // ============================================================
 let fixedCamPos0 = null;
@@ -1362,6 +1373,182 @@ function clearAllButtonGlows() {
   setGlowTarget(rightArrowMeshRef,  false, REMOTE_GLOW_COLOR);
 }
 
+// ============================================================
+// ✅ iOS REMOTE "ATTENTION PULSE"
+// ============================================================
+const IOS_PULSE_ON_MS  = 2000;
+const IOS_PULSE_OFF_MS = 8000;
+
+const IOS_POWER_ON_MS  = 2000;
+const IOS_POWER_OFF_MS = 4000;
+
+let iosPulseTimer = null;
+let iosPulseOn = false;
+let iosNextPulseAtMs = 0;     // when the next ON pulse should start
+let iosPulseStarted = false;  // helps initialize schedule once
+
+
+function setRemoteGlowPulse(on) {
+  if (iosSoloGlowActive) return;
+  if (overlayOpen || videoOverlayOpen || modelOverlayOpen) return;
+  if (!tvOn) {
+    setGlowTarget(powerButtonMeshRef, on, POWER_GLOW_COLOR);
+
+    // make sure remotes are OFF
+    setGlowTarget(okButtonMeshRef,    false, REMOTE_GLOW_COLOR);
+    setGlowTarget(upArrowMeshRef,     false, REMOTE_GLOW_COLOR);
+    setGlowTarget(downArrowMeshRef,   false, REMOTE_GLOW_COLOR);
+    setGlowTarget(leftArrowMeshRef,   false, REMOTE_GLOW_COLOR);
+    setGlowTarget(rightArrowMeshRef,  false, REMOTE_GLOW_COLOR);
+    return;
+  }
+
+  // --------------------------------------------------
+  // ✅ TV ON → only REMOTE pulses
+  // --------------------------------------------------
+  setGlowTarget(powerButtonMeshRef, false, POWER_GLOW_COLOR);
+
+  setGlowTarget(okButtonMeshRef,    on, REMOTE_GLOW_COLOR);
+  setGlowTarget(upArrowMeshRef,     on, REMOTE_GLOW_COLOR);
+  setGlowTarget(downArrowMeshRef,   on, REMOTE_GLOW_COLOR);
+  setGlowTarget(leftArrowMeshRef,   on, REMOTE_GLOW_COLOR);
+  setGlowTarget(rightArrowMeshRef,  on, REMOTE_GLOW_COLOR);
+}
+
+function stopIosRemotePulse() {
+  if (iosPulseTimer) {
+    clearTimeout(iosPulseTimer);
+    iosPulseTimer = null;
+  }
+  iosPulseOn = false;
+  setRemoteGlowPulse(false);
+}
+
+function startIosRemotePulse() {
+  if (!isIOSDevice()) return;
+
+  // prevent duplicates
+  stopIosRemotePulse();
+
+  const now = performance.now();
+
+  // If we haven't started a schedule yet, start it so user sees it soon:
+  // ON now (2s), then OFF (8s), repeat.
+  // If schedule exists (iosNextPulseAtMs set), we resume without changing it.
+  if (!iosPulseStarted || !iosNextPulseAtMs) {
+    iosPulseStarted = true;
+
+    iosPulseOn = true;
+    setRemoteGlowPulse(true);
+
+    // after ON window ends, schedule next ON time
+    iosNextPulseAtMs = now + IOS_PULSE_ON_MS + IOS_PULSE_OFF_MS;
+
+    iosPulseTimer = setTimeout(() => {
+      iosPulseOn = false;
+      setRemoteGlowPulse(false);
+
+      // schedule next ON
+      scheduleNextPulseTick();
+    }, IOS_PULSE_ON_MS);
+
+    return;
+  }
+
+  // Otherwise resume to the existing cadence:
+  scheduleNextPulseTick();
+}
+
+function scheduleNextPulseTick() {
+  // schedule the next ON based on iosNextPulseAtMs
+  const now = performance.now();
+  const waitMs = Math.max(0, iosNextPulseAtMs - now);
+
+  iosPulseTimer = setTimeout(() => {
+    // If we’re not in a state to pulse, keep cadence but don’t glow
+    if (overlayOpen || videoOverlayOpen || modelOverlayOpen) {
+      iosPulseOn = false;
+      setRemoteGlowPulse(false);
+
+      // keep cadence: next ON still 8s after what would have been ON start
+      iosNextPulseAtMs = performance.now() + IOS_PULSE_OFF_MS;
+      scheduleNextPulseTick();
+      return;
+    }
+
+    // turn ON for 2s
+    iosPulseOn = true;
+    setRemoteGlowPulse(true);
+
+    iosPulseTimer = setTimeout(() => {
+      iosPulseOn = false;
+      setRemoteGlowPulse(false);
+
+      // set next ON time (8s after this ON window ends)
+      iosNextPulseAtMs = performance.now() + IOS_PULSE_OFF_MS;
+      scheduleNextPulseTick();
+    }, IOS_PULSE_ON_MS);
+
+  }, waitMs);
+}
+
+function nudgeIosRemotePulse() {
+  if (!isIOSDevice()) return;
+  // turn off now, then restart timing so it doesn't instantly pulse again
+  stopIosRemotePulse();
+  startIosRemotePulse();
+}
+
+// ============================================================
+// ✅ iOS "SOLO PRESS" OVERRIDE
+// - Idle: pulse all remote buttons together
+// - On press: ONLY the pressed button glows briefly
+// ============================================================
+let iosSoloGlowTimer = null;
+let iosSoloGlowActive = false;
+
+function stopIosSoloGlow() {
+  if (iosSoloGlowTimer) {
+    clearTimeout(iosSoloGlowTimer);
+    iosSoloGlowTimer = null;
+  }
+  iosSoloGlowActive = false;
+}
+
+// Call this when a remote button is pressed on iOS
+function iosSoloGlow(mesh, ms = 900) {
+  if (!isIOSDevice()) return;
+
+  // Stop the repeating pulse so it doesn't fight the solo glow
+  stopIosRemotePulse();
+  stopIosSoloGlow();
+
+if (!iosNextPulseAtMs) iosNextPulseAtMs = performance.now() + IOS_PULSE_OFF_MS;
+
+  iosSoloGlowActive = true;
+
+  // Turn OFF everything first
+  setGlowTarget(powerButtonMeshRef, false, POWER_GLOW_COLOR);
+  setGlowTarget(okButtonMeshRef,    false, REMOTE_GLOW_COLOR);
+  setGlowTarget(upArrowMeshRef,     false, REMOTE_GLOW_COLOR);
+  setGlowTarget(downArrowMeshRef,   false, REMOTE_GLOW_COLOR);
+  setGlowTarget(leftArrowMeshRef,   false, REMOTE_GLOW_COLOR);
+  setGlowTarget(rightArrowMeshRef,  false, REMOTE_GLOW_COLOR);
+
+  // Turn ON only the pressed one
+  setGlowTarget(mesh, true, REMOTE_GLOW_COLOR);
+
+  iosSoloGlowTimer = setTimeout(() => {
+    // Turn it back OFF
+    setGlowTarget(mesh, false, REMOTE_GLOW_COLOR);
+
+    iosSoloGlowActive = false;
+
+    // Resume the normal "all together" pulse timing
+    startIosRemotePulse();
+  }, ms);
+}
+
 
 function updateGlow() {
   glowState.forEach((st, mesh) => {
@@ -1536,6 +1723,61 @@ const upHint    = makeMiniHint("up");
 const downHint  = makeMiniHint("down");
 const leftHint  = makeMiniHint("left");
 const rightHint = makeMiniHint("right");
+
+// ============================================================
+// ✅ iOS MENU CONTROLS HINT (shows for 4s when TV turns ON from TV tap)
+// ============================================================
+let iosMenuHintShown = false;
+let iosMenuHintTimeout = null;
+
+const iosMenuHint = document.createElement("div");
+iosMenuHint.style.position = "fixed";
+iosMenuHint.style.left = "48.35%";
+iosMenuHint.style.bottom = "110px";
+iosMenuHint.style.transform = "translateX(-50%)";
+iosMenuHint.style.padding = "12px 18px";
+iosMenuHint.style.borderRadius = "18px";
+iosMenuHint.style.background = "rgba(0,0,0,0.65)";
+iosMenuHint.style.color = "#fff";
+iosMenuHint.style.fontFamily = "Arial, sans-serif";
+iosMenuHint.style.textAlign = "center";
+iosMenuHint.style.pointerEvents = "none";
+iosMenuHint.style.opacity = "0";
+iosMenuHint.style.transition = "opacity 0.2s ease";
+iosMenuHint.style.zIndex = "9998";
+
+// 2-line layout
+const iosMenuHintLine1 = document.createElement("div");
+iosMenuHintLine1.style.fontSize = "14px";
+iosMenuHintLine1.style.fontWeight = "700";
+iosMenuHintLine1.innerText = "swipe to change selection";
+
+const iosMenuHintLine2 = document.createElement("div");
+iosMenuHintLine2.style.fontSize = "13px";
+iosMenuHintLine2.style.opacity = "0.9";
+iosMenuHintLine2.style.marginTop = "4px";
+iosMenuHintLine2.innerText = "tap to view selection";
+
+iosMenuHint.appendChild(iosMenuHintLine1);
+iosMenuHint.appendChild(iosMenuHintLine2);
+document.body.appendChild(iosMenuHint);
+
+function showIosMenuControlsHintOnce() {
+  if (!isIOSDevice()) return;
+  if (iosMenuHintShown) return;
+
+  iosMenuHintShown = true;
+
+  // show
+  iosMenuHint.style.opacity = "1";
+
+  // hide after 4s
+  if (iosMenuHintTimeout) clearTimeout(iosMenuHintTimeout);
+  iosMenuHintTimeout = setTimeout(() => {
+    iosMenuHint.style.opacity = "0";
+  }, 5000);
+}
+
 
 // Helper to hide all remote hints quickly
 function hideRemoteHints() {
@@ -1871,6 +2113,58 @@ function getVisualSize() {
   };
 }
 
+// ============================================================
+// ✅ iOS SAFARI DYNAMIC VIEWPORT FIX (tabs/address bar cropping)
+// - Uses visualViewport for real visible size
+// - Keeps renderer + camera aspect correct
+// ============================================================
+function getVisibleViewportSize() {
+  const vv = window.visualViewport;
+  return {
+    w: Math.round(vv?.width ?? window.innerWidth),
+    h: Math.round(vv?.height ?? window.innerHeight),
+  };
+}
+
+function applyVisibleViewportToRendererAndCamera() {
+  const vv = window.visualViewport;
+  const w = Math.round(vv?.width ?? window.innerWidth);
+  const h = Math.round(vv?.height ?? window.innerHeight);
+
+  renderer.setSize(w, h, false);
+
+  // keep css in sync (prevents iOS weird scaling)
+  renderer.domElement.style.width = w + "px";
+  renderer.domElement.style.height = h + "px";
+
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+
+  return { w, h };
+}
+
+function applyIOSViewportFix() {
+  const { w, h } = getVisibleViewportSize();
+
+  // 1) Keep the canvas physically sized to the visible viewport
+  renderer.setSize(w, h, false);
+
+  // 2) Make sure CSS matches too (prevents weird scaling/cropping)
+  renderer.domElement.style.width = w + "px";
+  renderer.domElement.style.height = h + "px";
+
+  // 3) Keep camera projection correct
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+
+  // 4) If you use your own viewport/scissor math (viewX/viewY/viewW/viewH),
+  // recompute it here too (so raycasting matches the new viewport).
+  if (typeof updateViewportRect === "function") {
+    updateViewportRect(); // <-- only if you have this function
+  }
+}
+
+
 function sizeOverlayToVisible(overlayEl) {
   const { w, h } = getVisualSize();
 
@@ -2178,6 +2472,36 @@ if (window.visualViewport) {
   window.visualViewport.addEventListener("scroll", refreshOverlays);
 }
 
+// ============================================================
+// ✅ iOS FIX: Safari reports wrong size on first load.
+// We re-apply viewport + reframe camera after viewport changes.
+// ============================================================
+let __roomMaxDimForCamera = null;
+
+function refitCameraAfterViewportChange() {
+  if (!__roomMaxDimForCamera) return;
+
+  applyVisibleViewportToRendererAndCamera();
+  setInitialCameraFraming(__roomMaxDimForCamera);
+}
+
+if (isIOS && window.visualViewport) {
+  window.visualViewport.addEventListener("resize", () => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(refitCameraAfterViewportChange);
+    });
+  });
+
+  window.visualViewport.addEventListener("scroll", () => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(refitCameraAfterViewportChange);
+    });
+  });
+}
+
+window.addEventListener("orientationchange", () => {
+  setTimeout(refitCameraAfterViewportChange, 250);
+});
 
 // Click outside video closes
 videoOverlay.addEventListener("click", (e) => {
@@ -2655,18 +2979,29 @@ tvTex.flipY = false;
 
 // UI state
 let tvUiState = "MENU";    // MENU for now
+
 let menuIndex = 0;         // 0=Photo, 1=Video, 2=3D Model
 let blinkT0 = performance.now();
 let menuHover = false;
 
-// ============================================================
-// TV "MENU" BUTTON (top-right in PHOTO mode)
-// ============================================================
-const TV_MENU_BTN = {
-  pad: 36,   // padding from edges (in TV canvas pixels)
-  w: 220,    // button width
-  h: 86,     // button height
-};
+function getTvMenuBtn() {
+  // Bigger button on iOS for easier tapping
+  if (isIOSDevice()) {
+    return {
+      pad: 48,
+      w: 320,
+      h: 120,
+    };
+  }
+
+  // Desktop size (unchanged)
+  return {
+    pad: 36,
+    w: 220,
+    h: 86,
+  };
+}
+
 
 // ============================================================
 // ✅ Canvas helper: rounded rectangle
@@ -2779,9 +3114,20 @@ if (tvUiState === "3D MODEL") {
   return;
 }
 
-
   // ✅ 3D MODEL (placeholder for now)
   // keep menu (or you can clear screen)
+  drawTvMenu();
+}
+
+function goBackToTvMenu() {
+  if (!tvOn) return;
+
+  // stop any active media so it doesn't keep running
+  if (tvUiState === "VIDEO") stopVideoCompletely();
+  if (tvUiState === "3D MODEL") stopModelCompletely();
+
+  tvUiState = "MENU";
+  blinkT0 = performance.now();
   drawTvMenu();
 }
 
@@ -2859,53 +3205,46 @@ function drawPhotoToTv(img) {
 
   tvCtx.drawImage(img, dx, dy, dw, dh);
 
-  // ------------------------------------------------------------
-  // ✅ MENU button (top-right) when in PHOTO mode
-  // ------------------------------------------------------------
- if (tvOn && (tvUiState === "PHOTO" || tvUiState === "3D MODEL")) {
-    const bx = w - TV_MENU_BTN.pad - TV_MENU_BTN.w;
-    const by = TV_MENU_BTN.pad;
+if (tvOn && (tvUiState === "PHOTO" || tvUiState === "3D MODEL")) {
+  const BTN = getTvMenuBtn();
+  const bx = w - BTN.pad - BTN.w;
+  const by = BTN.pad;
 
-    // background
-tvCtx.save();
+  tvCtx.save();
 
-if (menuHover) {
-  // ✅ hover glow
-  tvCtx.globalAlpha = 0.9;
-  tvCtx.fillStyle = "#222";
-
-  tvCtx.shadowColor = "rgba(255,255,255,0.5)";
-  tvCtx.shadowBlur = 25;
-} else {
-  tvCtx.globalAlpha = 0.65;
-  tvCtx.fillStyle = "#000";
-}
-
-roundRect(tvCtx, bx, by, TV_MENU_BTN.w, TV_MENU_BTN.h, 18);
-tvCtx.fill();
-
-tvCtx.restore();
-
-
-    // border
-    tvCtx.save();
-    tvCtx.globalAlpha = 0.35;
-    tvCtx.strokeStyle = "#fff";
-    tvCtx.lineWidth = 3;
-    roundRect(tvCtx, bx, by, TV_MENU_BTN.w, TV_MENU_BTN.h, 18);
-    tvCtx.stroke();
-    tvCtx.restore();
-
-    // text
-    tvCtx.save();
-    tvCtx.fillStyle = "#fff";
-    tvCtx.globalAlpha = 0.92;
-    tvCtx.font = "bold 46px Arial";
-    tvCtx.textAlign = "center";
-    tvCtx.textBaseline = "middle";
-    tvCtx.fillText("MENU", bx + TV_MENU_BTN.w * 0.5, by + TV_MENU_BTN.h * 0.52);
-    tvCtx.restore();
+  if (menuHover) {
+    tvCtx.globalAlpha = 0.9;
+    tvCtx.fillStyle = "#222";
+    tvCtx.shadowColor = "rgba(255,255,255,0.5)";
+    tvCtx.shadowBlur = 25;
+  } else {
+    tvCtx.globalAlpha = 0.65;
+    tvCtx.fillStyle = "#000";
   }
+
+  roundRect(tvCtx, bx, by, BTN.w, BTN.h, 18);
+  tvCtx.fill();
+  tvCtx.restore();
+
+  // border
+  tvCtx.save();
+  tvCtx.globalAlpha = 0.35;
+  tvCtx.strokeStyle = "#fff";
+  tvCtx.lineWidth = 3;
+  roundRect(tvCtx, bx, by, BTN.w, BTN.h, 18);
+  tvCtx.stroke();
+  tvCtx.restore();
+
+  // text
+  tvCtx.save();
+  tvCtx.fillStyle = "#fff";
+  tvCtx.globalAlpha = 0.92;
+  tvCtx.font = "bold 46px Arial";
+  tvCtx.textAlign = "center";
+  tvCtx.textBaseline = "middle";
+  tvCtx.fillText("MENU", bx + BTN.w * 0.5, by + BTN.h * 0.52);
+  tvCtx.restore();
+}
 
   tvTex.needsUpdate = true;
 }
@@ -3127,67 +3466,45 @@ function drawVideoFrameToTv() {
   // draw the current frame
   tvCtx.drawImage(videoEl, dx, dy, dw, dh);
 
-  // ------------------------------------------------------------
-  // ✅ MENU button (top-right) when in VIDEO mode
-  // ------------------------------------------------------------
   if (tvOn && tvUiState === "VIDEO") {
-    const bx = w - TV_MENU_BTN.pad - TV_MENU_BTN.w;
-    const by = TV_MENU_BTN.pad;
+  const BTN = getTvMenuBtn();
+  const bx = w - BTN.pad - BTN.w;
+  const by = BTN.pad;
 
-    tvCtx.save();
+  tvCtx.save();
 
-    if (menuHover) {
-      tvCtx.globalAlpha = 0.9;
-      tvCtx.fillStyle = "#222";
-      tvCtx.shadowColor = "rgba(255,255,255,0.5)";
-      tvCtx.shadowBlur = 25;
-    } else {
-      tvCtx.globalAlpha = 0.65;
-      tvCtx.fillStyle = "#000";
-    }
-
-    roundRect(tvCtx, bx, by, TV_MENU_BTN.w, TV_MENU_BTN.h, 18);
-    tvCtx.fill();
-    tvCtx.restore();
-
-    // border
-    tvCtx.save();
-    tvCtx.globalAlpha = 0.35;
-    tvCtx.strokeStyle = "#fff";
-    tvCtx.lineWidth = 3;
-    roundRect(tvCtx, bx, by, TV_MENU_BTN.w, TV_MENU_BTN.h, 18);
-    tvCtx.stroke();
-    tvCtx.restore();
-
-    // text
-    tvCtx.save();
-    tvCtx.fillStyle = "#fff";
-    tvCtx.globalAlpha = 0.92;
-    tvCtx.font = "bold 46px Arial";
-    tvCtx.textAlign = "center";
-    tvCtx.textBaseline = "middle";
-    tvCtx.fillText("MENU", bx + TV_MENU_BTN.w * 0.5, by + TV_MENU_BTN.h * 0.52);
-    tvCtx.restore();
+  if (menuHover) {
+    tvCtx.globalAlpha = 0.9;
+    tvCtx.fillStyle = "#222";
+    tvCtx.shadowColor = "rgba(255,255,255,0.5)";
+    tvCtx.shadowBlur = 25;
+  } else {
+    tvCtx.globalAlpha = 0.65;
+    tvCtx.fillStyle = "#000";
   }
 
-  // ------------------------------------------------------------
-  // ✅ Optional “paused” overlay
-  // ------------------------------------------------------------
-  if (videoEl.paused) {
-    tvCtx.save();
-    tvCtx.fillStyle = "rgba(0,0,0,0.35)";
-    tvCtx.fillRect(0, 0, w, h);
+  roundRect(tvCtx, bx, by, BTN.w, BTN.h, 18);
+  tvCtx.fill();
+  tvCtx.restore();
 
-    tvCtx.fillStyle = "#fff";
-    tvCtx.font = "bold 64px Arial";
-    tvCtx.textAlign = "center";
-    tvCtx.textBaseline = "middle";
-    tvCtx.fillText("PAUSED", w * 0.5, h * 0.5);
+  tvCtx.save();
+  tvCtx.globalAlpha = 0.35;
+  tvCtx.strokeStyle = "#fff";
+  tvCtx.lineWidth = 3;
+  roundRect(tvCtx, bx, by, BTN.w, BTN.h, 18);
+  tvCtx.stroke();
+  tvCtx.restore();
 
-    tvCtx.font = "32px Arial";
-    tvCtx.fillText("OK: Play/Pause    ◀/▶: Prev/Next", w * 0.5, h * 0.5 + 80);
-    tvCtx.restore();
-  }
+  tvCtx.save();
+  tvCtx.fillStyle = "#fff";
+  tvCtx.globalAlpha = 0.92;
+  tvCtx.font = "bold 46px Arial";
+  tvCtx.textAlign = "center";
+  tvCtx.textBaseline = "middle";
+  tvCtx.fillText("MENU", bx + BTN.w * 0.5, by + BTN.h * 0.52);
+  tvCtx.restore();
+}
+
 
   tvTex.needsUpdate = true;
 }
@@ -3410,8 +3727,9 @@ function drawModelFrameToTv() {
 
   // ✅ MENU button (top-right)
   if (tvOn && tvUiState === "3D MODEL") {
-    const bx = w - TV_MENU_BTN.pad - TV_MENU_BTN.w;
-    const by = TV_MENU_BTN.pad;
+    const BTN = getTvMenuBtn();
+    const bx = w - BTN.pad - BTN.w;
+    const by = BTN.pad;
 
     tvCtx.save();
 
@@ -3425,7 +3743,7 @@ function drawModelFrameToTv() {
       tvCtx.fillStyle = "#000";
     }
 
-    roundRect(tvCtx, bx, by, TV_MENU_BTN.w, TV_MENU_BTN.h, 18);
+    roundRect(tvCtx, bx, by, BTN.w, BTN.h, 18);
     tvCtx.fill();
     tvCtx.restore();
 
@@ -3433,7 +3751,7 @@ function drawModelFrameToTv() {
     tvCtx.globalAlpha = 0.35;
     tvCtx.strokeStyle = "#fff";
     tvCtx.lineWidth = 3;
-    roundRect(tvCtx, bx, by, TV_MENU_BTN.w, TV_MENU_BTN.h, 18);
+    roundRect(tvCtx, bx, by, BTN.w, BTN.h, 18);
     tvCtx.stroke();
     tvCtx.restore();
 
@@ -3443,7 +3761,7 @@ function drawModelFrameToTv() {
     tvCtx.font = "bold 46px Arial";
     tvCtx.textAlign = "center";
     tvCtx.textBaseline = "middle";
-    tvCtx.fillText("MENU", bx + TV_MENU_BTN.w * 0.5, by + TV_MENU_BTN.h * 0.52);
+    tvCtx.fillText("MENU", bx + BTN.w * 0.5, by + BTN.h * 0.52);
     tvCtx.restore();
   }
 
@@ -3462,22 +3780,6 @@ function drawModelFrameToTv() {
     tvCtx.font = "32px Arial";
     tvCtx.fillText("OK: Play/Pause    ◀/▶: Prev/Next", w * 0.5, h * 0.5 + 80);
     tvCtx.restore();
-  }
-
-    // ✅ DEBUG TAP DOT (shows where the click mapped onto the TV canvas)
-  if (tvTapDebug.on) {
-    const age = (performance.now() - tvTapDebug.t) / 1000;
-    if (age < 1.0) {
-      tvCtx.save();
-      tvCtx.globalAlpha = 1.0 - age; // fade out
-      tvCtx.beginPath();
-      tvCtx.arc(tvTapDebug.x, tvTapDebug.y, 14, 0, Math.PI * 2);
-      tvCtx.fillStyle = "#ff2a2a";
-      tvCtx.fill();
-      tvCtx.restore();
-    } else {
-      tvTapDebug.on = false;
-    }
   }
 
   tvTex.needsUpdate = true;
@@ -3788,18 +4090,30 @@ function hitIsBoard2(obj) {
   return false;
 }
 
-// ============================================================
-// ✅ iOS TV TOUCH CONTROLS (tap zones on the TV screen)
-// ============================================================
 function getTvCanvasPxPyFromUv(uv) {
   if (!uv) return null;
 
   const w = tvCanvas.width;
   const h = tvCanvas.height;
 
-  // account for tvTex repeat/offset
-  const u = uv.x * (tvTex.repeat?.x ?? 1) + (tvTex.offset?.x ?? 0);
-  const v = uv.y * (tvTex.repeat?.y ?? 1) + (tvTex.offset?.y ?? 0);
+  const rx = tvTex.repeat?.x ?? 1;
+  const ry = tvTex.repeat?.y ?? 1;
+  const ox = tvTex.offset?.x ?? 0;
+  const oy = tvTex.offset?.y ?? 0;
+
+  // base UV (0..1)
+  let u = uv.x * rx + ox;
+  let v = uv.y * ry + oy;
+
+  // ✅ normalize in case repeat/offset push out of range
+  u = ((u % 1) + 1) % 1;
+  v = ((v % 1) + 1) % 1;
+
+  // ✅ IMPORTANT:
+  // Your canvas draw coords use y=0 at TOP.
+  // Your current behavior shows taps landing bottom-right when you touch top-right.
+  // That means we must FLIP v here so top on screen maps to small py.
+  v = 1 - v;
 
   return { w, h, px: u * w, py: v * h };
 }
@@ -3809,31 +4123,43 @@ function handleIOSTvTap(uv) {
   if (!pos) return false;
 
   const { w, h, px, py } = pos;
+  
+// ✅ If TV is OFF, any tap on the screen turns it ON and shows MENU
+if (!tvOn) {
+  setTvPower(true);
 
-  // ✅ If TV is OFF, any tap on the screen turns it ON and shows MENU
-  if (!tvOn) {
-    setTvPower(true);
-    // setTvPower already sets tvUiState="MENU" and draws menu
-    return true;
-  }
+  // ✅ iOS onboarding hint (4 seconds)
+  showIosMenuControlsHintOnce();
 
-  // MENU button area (top-right) works in all states that show it
-  const bx = w - TV_MENU_BTN.pad - TV_MENU_BTN.w;
-  const by = TV_MENU_BTN.pad;
+  return true;
+}
 
-  const inMenuBtn =
-    px >= bx && px <= bx + TV_MENU_BTN.w &&
-    py >= by && py <= by + TV_MENU_BTN.h;
 
-  if (inMenuBtn) {
-    // return to menu from anything
-    stopVideoCompletely?.();
-    stopModelCompletely?.();
-    tvUiState = "MENU";
-    blinkT0 = performance.now();
-    drawTvMenu();
-    return true;
-  }
+ // MENU button area (top-right) works in all states that show it
+const BTN = getTvMenuBtn();   // ✅ ADD THIS
+
+const bx = w - BTN.pad - BTN.w;
+const by = BTN.pad;
+
+
+  // ✅ Robust hit test: some meshes have V flipped, some don’t.
+  // We check BOTH possibilities so the MENU button is always clickable.
+  const pyA = py;           // current mapping (whatever getTvCanvasPxPyFromUv returned)
+  const pyB = h - py;       // alternate mapping (flipped vertically)
+
+const inMenuBtnA =
+  px >= bx && px <= bx + BTN.w &&
+  pyA >= by && pyA <= by + BTN.h;
+
+const inMenuBtnB =
+  px >= bx && px <= bx + BTN.w &&
+  pyB >= by && pyB <= by + BTN.h;
+
+if (inMenuBtnA || inMenuBtnB) {
+  if (isIOSDevice()) tvIgnoreNextPointerUp = true;
+  goBackToTvMenu();
+  return true;
+}
 
   // ✅ Double-tap anywhere else = fullscreen overlay (when relevant)
   const now = performance.now();
@@ -3844,21 +4170,25 @@ function handleIOSTvTap(uv) {
   const x01 = px / w; // 0..1
   const y01 = py / h; // 0..1
 
-  // ------------------------------------------------------------
-  // ✅ MENU: tap top = UP, bottom = DOWN, middle = OK
-  // ------------------------------------------------------------
-  if (tvUiState === "MENU") {
-    if (y01 < 0.33) {
-      moveMenuSelection(-1);
-      return true;
-    }
-    if (y01 > 0.66) {
-      moveMenuSelection(+1);
-      return true;
-    }
-    confirmMenuSelection();
+if (tvUiState === "MENU") {
+  // ✅ iOS uses EDIT 2 swipe/tap on pointerup
+  if (isIOSDevice()) return false;
+
+  // ✅ Desktop/non-iOS: tap zones on the TV screen
+  // top third = up, bottom third = down, middle = OK
+  if (y01 < 0.33) {
+    moveMenuSelection(-1);
     return true;
   }
+  if (y01 > 0.66) {
+    moveMenuSelection(+1);
+    return true;
+  }
+
+  confirmMenuSelection();
+  return true;
+}
+
 
   // ------------------------------------------------------------
   // ✅ PHOTO: left/right = prev/next, center = fullscreen
@@ -3981,7 +4311,6 @@ if (!tvOn) {
   grainOverlay.style.opacity = "0.03"; // normal grain when TV is on
 }
 
-
     // when turning ON, reset blink and draw the menu immediately
  if (tvOn) {
   blinkT0 = performance.now();
@@ -4068,6 +4397,22 @@ tvScreenMatRef.emissiveIntensity = intensity;
   }
 }
 
+// ============================================================
+// ✅ iOS TV MENU SWIPE STATE (EDIT 2)
+// ============================================================
+let tvTouchActive = false;
+let tvTouchStartX = 0;
+let tvTouchStartY = 0;
+let tvTouchStartT = 0;
+
+let tvTouchStartedWhileOff = false;   // ✅ prevents “auto-enter PHOTO” on power-on tap
+let tvTouchPointerId = null;          // ✅ for pointer capture
+
+
+// swipe tuning
+const TV_SWIPE_MIN_PX = 34;       // how far finger must move
+const TV_TAP_MAX_PX   = 12;       // below this = tap
+const TV_SWIPE_MAX_MS = 650;      // ignore slow drags
 // ------------------------------------------------------------
 // CLICK / DOUBLE-CLICK HANDLER (TV + SPEAKER)
 // ------------------------------------------------------------
@@ -4076,8 +4421,8 @@ const DOUBLE_CLICK_MS = 280;
 
 let lastTvTapTime = 0;
 const TV_DOUBLE_TAP_MS = 320;
-
 let pendingExternalUrl = null;
+let tvIgnoreNextPointerUp = false;
 
 // ✅ DEBUG: draw a dot where the TV screen was clicked (UV->pixel)
 let tvTapDebug = { on: false, x: 0, y: 0, t: 0 };
@@ -4108,6 +4453,7 @@ function setPointerFromEvent(e) {
 
 async function onPointerDown(e) {
   if (isIOSPortraitBlocked()) return;
+  if (isIOSDevice()) nudgeIosRemotePulse();
   if (!setPointerFromEvent(e)) return; // ✅ ignore clicks in black bars
   raycaster.setFromCamera(pointer, camera);
 
@@ -4120,20 +4466,45 @@ if (!hits.length) {
 }
 if (!hits.length) return;
 
-
 if (overlayOpen || videoOverlayOpen || modelOverlayOpen) return;
 
-  const hit = hits[0].object;
-  const hitInfo = hits[0];
+ const hit = hits[0].object;
+const hitInfo = hits[0];
 
-  // ✅ iOS: tap the TV screen to control everything (no remote needed)
-if (
-  isIOSDevice() &&
-  tvScreenMeshRef &&
-  isInHierarchy(hit, tvScreenMeshRef)
-) {
-  const uv = hits[0].uv;
-  if (handleIOSTvTap(uv)) return;
+if (isIOSDevice() && tvScreenMeshRef && isInHierarchy(hit, tvScreenMeshRef)) {
+  tvTouchActive = true;
+  tvTouchStartedWhileOff = !tvOn;     // ✅ mark if this gesture began with TV off
+  tvTouchPointerId = e.pointerId;
+
+  tvTouchStartX = e.clientX;
+  tvTouchStartY = e.clientY;
+  tvTouchStartT = performance.now();
+
+  // ✅ keep receiving pointerup even if finger drifts
+  try { renderer.domElement.setPointerCapture(e.pointerId); } catch {}
+
+  const uv = hitInfo.uv;
+
+  // ✅ If TV is OFF, this gesture ONLY powers on (no menu confirm)
+  if (!tvOn) {
+    if (uv) handleIOSTvTap(uv);
+    else setTvPower(true);
+    return;
+  }
+
+  // ✅ If we’re in MENU, we let onPointerUp decide swipe vs tap
+  if (tvUiState === "MENU") return;
+
+  // ✅ Otherwise (PHOTO/VIDEO/3D MODEL), do NOT return — let unified TV handler run below
+}
+
+// ✅ Unified TV handler (paste this exactly)
+if (tvScreenMeshRef && isInHierarchy(hit, tvScreenMeshRef)) {
+  const uv = hitInfo?.uv;
+  if (uv) {
+    if (handleIOSTvTap(uv)) return;
+  }
+  return;
 }
 
 
@@ -4196,124 +4567,53 @@ if (powerButtonMeshRef && isInHierarchy(hit, powerButtonMeshRef)) {
 }
 
 if (okButtonMeshRef && isInHierarchy(hit, okButtonMeshRef)) {
+  if (isIOSDevice() && e.pointerType === "touch") iosSoloGlow(okButtonMeshRef);
   setPressAxisFromHit(okButtonMeshRef, hitInfo);
   setPressTarget(okButtonMeshRef, true);
 }
 
 if (upArrowMeshRef && isInHierarchy(hit, upArrowMeshRef)) {
+  if (isIOSDevice() && e.pointerType === "touch") iosSoloGlow(upArrowMeshRef);
   setPressAxisFromHit(upArrowMeshRef, hitInfo);
   setPressTarget(upArrowMeshRef, true);
 }
 
 if (downArrowMeshRef && isInHierarchy(hit, downArrowMeshRef)) {
+  if (isIOSDevice() && e.pointerType === "touch") iosSoloGlow(downArrowMeshRef);
   setPressAxisFromHit(downArrowMeshRef, hitInfo);
   setPressTarget(downArrowMeshRef, true);
 }
 
 if (leftArrowMeshRef && isInHierarchy(hit, leftArrowMeshRef)) {
+  if (isIOSDevice() && e.pointerType === "touch") iosSoloGlow(leftArrowMeshRef);
   setPressAxisFromHit(leftArrowMeshRef, hitInfo);
   setPressTarget(leftArrowMeshRef, true);
 }
 
 if (rightArrowMeshRef && isInHierarchy(hit, rightArrowMeshRef)) {
+  if (isIOSDevice() && e.pointerType === "touch") iosSoloGlow(rightArrowMeshRef);
   setPressAxisFromHit(rightArrowMeshRef, hitInfo);
   setPressTarget(rightArrowMeshRef, true);
 }
 
-
 // --------------------------------------------------
-// TV SCREEN CLICK (PHOTO mode)
-// 1) If they clicked the MENU button area -> go back to MENU
-// 2) Otherwise -> fullscreen photo
+// TV POWER BUTTON
 // --------------------------------------------------
-if (tvOn && tvUiState === "PHOTO" && tvScreenMeshRef && isInHierarchy(hit, tvScreenMeshRef)) {
+if (powerButtonMeshRef && isInHierarchy(hit, powerButtonMeshRef)) {
+  console.log("📺 TV Power pressed:", hit.name);
 
-  const uv = hits[0].uv;
-  if (!uv) {
-    warn("❌ No UV on TV screen hit — MENU cannot be clicked until TV screen mesh has UVs.");
+  const turningOn = !tvOn;
+
+  setTvPower(turningOn);
+
+  // ✅ iOS: show the MENU controls hint when turning ON via remote power button
+  if (turningOn) {
+    // optional: ensure it's only shown on iOS (your function already checks)
+    showIosMenuControlsHintOnce();
   }
 
-  if (uv) {
-    const w = tvCanvas.width;
-    const h = tvCanvas.height;
-
-    const u = uv.x * (tvTex.repeat?.x ?? 1) + (tvTex.offset?.x ?? 0);
-    const v = uv.y * (tvTex.repeat?.y ?? 1) + (tvTex.offset?.y ?? 0);
-
-    const px = u * w;
-    const py = v * h;
-
-    const bx = w - TV_MENU_BTN.pad - TV_MENU_BTN.w;
-    const by = TV_MENU_BTN.pad;
-
-    const inMenuBtn =
-      px >= bx && px <= bx + TV_MENU_BTN.w &&
-      py >= by && py <= by + TV_MENU_BTN.h;
-
-    if (inMenuBtn) {
-      console.log("📺 MENU button clicked -> back to main menu");
-      tvUiState = "MENU";
-      blinkT0 = performance.now();
-      drawTvMenu();
-      return;
-    }
-  }
-
-  console.log("🖥️📸 Fullscreen photo (single click)");
-  openPhotoOverlay(currentPhotoUrl);
   return;
 }
-
-// --------------------------------------------------
-// TV SCREEN CLICK (VIDEO mode)
-// 1) If they clicked the MENU button area -> go back to MENU
-// 2) Otherwise -> fullscreen video overlay
-// --------------------------------------------------
-if (tvOn && tvUiState === "VIDEO" && tvScreenMeshRef && isInHierarchy(hit, tvScreenMeshRef)) {
-
-  const uv = hits[0].uv;
-
-  if (uv) {
-    const w = tvCanvas.width;
-    const h = tvCanvas.height;
-
-    const u = uv.x * (tvTex.repeat?.x ?? 1) + (tvTex.offset?.x ?? 0);
-    const v = uv.y * (tvTex.repeat?.y ?? 1) + (tvTex.offset?.y ?? 0);
-
-    const px = u * w;
-    const py = v * h;
-
-    const bx = w - TV_MENU_BTN.pad - TV_MENU_BTN.w;
-    const by = TV_MENU_BTN.pad;
-
-    const inMenuBtn =
-      px >= bx && px <= bx + TV_MENU_BTN.w &&
-      py >= by && py <= by + TV_MENU_BTN.h;
-
-    if (inMenuBtn) {
-      console.log("📺 MENU button clicked -> back to main menu");
-      stopVideoCompletely();
-      tvUiState = "MENU";
-      blinkT0 = performance.now();
-      drawTvMenu();
-      return;
-    }
-  }
-
-  console.log("🖥️🎬 Fullscreen video (single click)");
-  openVideoOverlay();
-  return;
-}
-
-
-  // --------------------------------------------------
-  // TV POWER BUTTON
-  // --------------------------------------------------
-  if (powerButtonMeshRef && isInHierarchy(hit, powerButtonMeshRef)) {
-    console.log("📺 TV Power pressed:", hit.name);
-    setTvPower(!tvOn);
-    return;
-  }
 
   // --------------------------------------------------
 // REMOTE MENU BUTTONS (UP / DOWN / OK)
@@ -4401,53 +4701,6 @@ if (tvOn && tvUiState === "3D MODEL") {
 }
 
 // --------------------------------------------------
-// TV SCREEN CLICK (3D MODEL mode)
-// 1) MENU button -> back to MENU
-// 2) Otherwise -> fullscreen model overlay
-// --------------------------------------------------
-if (tvOn && tvUiState === "3D MODEL" && tvScreenMeshRef && isInHierarchy(hit, tvScreenMeshRef)) {
-
-  const uv = hits[0].uv;
-
-  if (uv) {
-    const w = tvCanvas.width;
-    const h = tvCanvas.height;
-
-    const u = uv.x * (tvTex.repeat?.x ?? 1) + (tvTex.offset?.x ?? 0);
-    const v = uv.y * (tvTex.repeat?.y ?? 1) + (tvTex.offset?.y ?? 0);
-
-    const px = u * w;
-    const py = v * h;
-
-        // ✅ DEBUG: show where the tap landed on the TV canvas
-    tvTapDebug.on = true;
-    tvTapDebug.x = px;
-    tvTapDebug.y = py;
-    tvTapDebug.t = performance.now();
-
-    const bx = w - TV_MENU_BTN.pad - TV_MENU_BTN.w;
-    const by = TV_MENU_BTN.pad;
-
-    const inMenuBtn =
-      px >= bx && px <= bx + TV_MENU_BTN.w &&
-      py >= by && py <= by + TV_MENU_BTN.h;
-
-    if (inMenuBtn) {
-      console.log("📺 MENU button clicked -> back to main menu");
-      stopModelCompletely();
-      tvUiState = "MENU";
-      blinkT0 = performance.now();
-      drawTvMenu();
-      return;
-    }
-  }
-
-  console.log("🖥️🧩 Fullscreen 3D Model video (single click)");
-  openModelOverlay();
-  return;
-}
-
-// --------------------------------------------------
 // BLUETOOTH SPEAKER
 // --------------------------------------------------
 if (speakerMeshRef && isInHierarchy(hit, speakerMeshRef)) {
@@ -4471,7 +4724,95 @@ if (speakerMeshRef && isInHierarchy(hit, speakerMeshRef)) {
 
 }
 
+// ============================================================
+// ✅ POINTER UP (EDIT 2): detect swipe vs tap on TV screen (iOS)
+// Paste this OUTSIDE onPointerDown, directly after it ends.
+// ============================================================
+async function onPointerUp(e) {
+  if (!tvTouchActive) return;
+  tvTouchActive = false;
+
+  // ✅ If we just tapped the MENU button on iOS, ignore this pointerup
+if (tvIgnoreNextPointerUp) {
+  tvIgnoreNextPointerUp = false;
+  return;
+}
+
+
+  try {
+    if (tvTouchPointerId != null)
+      renderer.domElement.releasePointerCapture(tvTouchPointerId);
+  } catch {}
+  tvTouchPointerId = null;
+
+  // ignore if overlays are open
+  if (overlayOpen || videoOverlayOpen || modelOverlayOpen) return;
+
+  // only applies while TV is ON and in MENU
+  if (!tvOn || tvUiState !== "MENU") return;
+
+  const dx = e.clientX - tvTouchStartX;
+  const dy = e.clientY - tvTouchStartY;
+
+  const adx = Math.abs(dx);
+  const ady = Math.abs(dy);
+
+  const dtMs = performance.now() - tvTouchStartT;
+
+  const isTap =
+    adx <= TV_TAP_MAX_PX &&
+    ady <= TV_TAP_MAX_PX;
+
+  const isSwipe =
+    dtMs <= TV_SWIPE_MAX_MS &&
+    (adx >= TV_SWIPE_MIN_PX || ady >= TV_SWIPE_MIN_PX);
+
+  // ✅ Swipe changes MENU selection
+  if (isSwipe) {
+    // pick dominant direction
+    if (adx > ady) {
+      // left/right swipe
+      if (dx > 0) moveMenuSelection(+1);
+      else        moveMenuSelection(-1);
+    } else {
+      // up/down swipe
+      if (dy > 0) moveMenuSelection(+1);
+      else        moveMenuSelection(-1);
+    }
+    return;
+  }
+
+// ✅ Tap confirms MENU selection
+if (isTap) {
+  // ✅ If this touch started when TV was OFF, ignore this first pointerup.
+  // This prevents “tap to power on” from instantly entering PHOTO.
+  if (tvTouchStartedWhileOff) {
+    tvTouchStartedWhileOff = false;
+    return;
+  }
+
+  confirmMenuSelection();
+  return;
+}
+
+}
+
+// ============================================================
+// ✅ POINTER CANCEL SAFETY (EDIT 2)
+// ============================================================
+function onPointerCancel() {
+  tvTouchActive = false;
+}
+
+// ============================================================
+// ✅ POINTER EVENTS (EDIT 2): hook down/up/cancel to canvas
+// ============================================================
 renderer.domElement.addEventListener("pointerdown", onPointerDown);
+renderer.domElement.addEventListener("pointerup", onPointerUp);
+renderer.domElement.addEventListener("pointerleave", onPointerCancel);
+renderer.domElement.addEventListener("pointercancel", onPointerCancel);
+
+startIosRemotePulse();
 
 // ============================================================
 // ✅ iOS MICRO-PAN (1-finger drag) — VERY SUBTLE
@@ -4506,6 +4847,14 @@ renderer.domElement.addEventListener("pointerdown", (e) => {
   if (!isIOSDevice()) return;
   if (e.pointerType !== "touch") return;
   if (overlayOpen || videoOverlayOpen || modelOverlayOpen) return;
+
+  // ✅ don’t start micro-pan if the touch began on the TV screen
+  if (tvScreenMeshRef) {
+    if (!setPointerFromEvent(e)) return;
+    raycaster.setFromCamera(pointer, camera);
+    const hits = raycaster.intersectObject(interactivesRootRef || anchor, true);
+    if (hits.length && isInHierarchy(hits[0].object, tvScreenMeshRef)) return;
+  }
 
   iosPanActive = true;
   iosPanDragging = false;
@@ -4648,10 +4997,10 @@ if (tvOn && (tvUiState === "PHOTO" || tvUiState === "VIDEO" || tvUiState === "3D
   hoveringTv = true;
 }
 
-
-  // ---------------------------------------------
-// MENU hover detection (PHOTO mode)
+ // ---------------------------------------------
+// MENU hover detection (robust)
 // ---------------------------------------------
+const prevMenuHover = menuHover;
 menuHover = false;
 
 if (
@@ -4661,31 +5010,44 @@ if (
   isInHierarchy(hit, tvScreenMeshRef) &&
   hits[0].uv
 ) {
-
   const uv = hits[0].uv;
 
   const w = tvCanvas.width;
   const h = tvCanvas.height;
 
-  const u = uv.x * (tvTex.repeat?.x ?? 1) + (tvTex.offset?.x ?? 0);
-  const v = uv.y * (tvTex.repeat?.y ?? 1) + (tvTex.offset?.y ?? 0);
+  // match the same mapping rules as click logic (repeat/offset + normalize)
+  let u = uv.x * (tvTex.repeat?.x ?? 1) + (tvTex.offset?.x ?? 0);
+  let v = uv.y * (tvTex.repeat?.y ?? 1) + (tvTex.offset?.y ?? 0);
+
+  u = ((u % 1) + 1) % 1;
+  v = ((v % 1) + 1) % 1;
 
   const px = u * w;
-  const py = v * h; // flipY=false fix
 
-  const bx = w - TV_MENU_BTN.pad - TV_MENU_BTN.w;
-  const by = TV_MENU_BTN.pad;
+  // ✅ check both vertical interpretations
+  const pyA = v * h;
+  const pyB = (1 - v) * h;
 
-  if (
-    px >= bx &&
-    px <= bx + TV_MENU_BTN.w &&
-    py >= by &&
-    py <= by + TV_MENU_BTN.h
-  ) {
-    menuHover = true;
-  }
+const BTN = getTvMenuBtn();   // ✅ ADD THIS
+
+const bx = w - BTN.pad - BTN.w;
+const by = BTN.pad;
+
+const inBtnA = px >= bx && px <= bx + BTN.w && pyA >= by && pyA <= by + BTN.h;
+const inBtnB = px >= bx && px <= bx + BTN.w && pyB >= by && pyB <= by + BTN.h;
+
+  menuHover = (inBtnA || inBtnB);
 }
 
+// ✅ PHOTO + 3D-image do not redraw every frame, so force redraw when hover changes
+if (menuHover !== prevMenuHover) {
+  if (tvOn && tvUiState === "PHOTO" && photoImage) {
+    drawPhotoToTv(photoImage);
+  } else if (tvOn && tvUiState === "3D MODEL" && modelMediaType === "image" && modelImageEl && modelReady) {
+    drawPhotoToTv(modelImageEl);
+  }
+  // VIDEO + 3D video redraw continuously, so no need here
+}
 
   // Speaker hint (anytime speaker exists)
   if (speakerMeshRef && isInHierarchy(hit, speakerMeshRef)) {
@@ -4866,6 +5228,36 @@ scene.add(pinRight);
 
 
   return { lampKey, lampShadow, rightPush, pinRight, tvFill, remoteBoost, skateAccent, underShelfUp, };
+}
+
+// ============================================================
+// ✅ TV MENU INDEX + iOS GESTURE HELPERS
+// ============================================================
+const TV_TABS = ["PHOTO", "VIDEO", "3D MODEL"];
+let tvMenuIndex = 0; // 0=PHOTO,1=VIDEO,2=3D MODEL
+
+function setTvMenuIndex(i) {
+  const n = TV_TABS.length;
+  tvMenuIndex = ((i % n) + n) % n;
+  // redraw highlight immediately if menu is showing
+  if (tvOn && tvUiState === "MENU") drawTvMenu();
+}
+
+function enterCurrentTvTab() {
+  const next = TV_TABS[tvMenuIndex];
+  tvUiState = next;
+
+  // kick off lazy loads using your existing logic
+  if (tvUiState === "PHOTO") {
+    if (!photoImage && !photoLoading) loadPhotoAt(photoIndex);
+  }
+  // VIDEO + 3D MODEL already handled in your animate redraw logic
+}
+
+function turnOnTvToMenu() {
+  tvOn = true;
+  tvUiState = "MENU";
+  drawTvMenu();
 }
 
 // ============================================================
@@ -5737,8 +6129,7 @@ if (o.isMesh && o.geometry && o.geometry.attributes.uv && !o.geometry.attributes
       console.log("⛓️ Chain mesh found:", o.name, "material:", o.material?.name);
     }
 
-      
-
+  
       // ===== DOOR COLOR / REALISM FIX =====
 if (n.includes("door") && o.material && o.material.color) {
   o.material = o.material.clone();
@@ -5844,6 +6235,22 @@ anchor.updateMatrixWorld(true);
 const size2 = box2.getSize(new THREE.Vector3());
 const maxDim = Math.max(size2.x, size2.y, size2.z);
 roomMaxDim = maxDim;
+
+__roomMaxDimForCamera = roomMaxDim;
+
+if (isIOSDevice()) {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      applyVisibleViewportToRendererAndCamera();
+      setInitialCameraFraming(roomMaxDim);
+      captureBreathBaseline();
+    });
+  });
+} else {
+  applyVisibleViewportToRendererAndCamera();
+  setInitialCameraFraming(roomMaxDim);
+  captureBreathBaseline();
+}
 
     // Setup lights
     nightLights = setupNightLights(maxDim);
@@ -5962,7 +6369,7 @@ let iosCamXOff = 0;
 
 if (isiOS) {
   iosCamXOff = maxDim * -0.01;
-  iosCamYOff = maxDim * +0.003;   // small nudge down
+  iosCamYOff = maxDim * +0.0005;   // small nudge down
   iosCamZOff = maxDim * +0.05;   // small nudge closer
   iosTargetYOff = maxDim * -0.04;
 }
@@ -6517,6 +6924,7 @@ function updateBreath2(dt) {
 }
 
 function applyIOSMicroPan() {
+  if (!fixedCamCaptured) return;
   if (!isIOSDevice()) return;
   if (!roomMaxDim) return;
   if (!fixedCamCaptured) return;
@@ -6637,6 +7045,60 @@ document.head.appendChild(grainStyle);
 let renderW = window.innerWidth;
 let renderH = window.innerHeight;
 
+// ============================================================
+// ✅ CAMERA BOOT ONCE (fixes "wrong view until refresh")
+// Put ABOVE: function handleResize()
+// ============================================================
+let __cameraBooted = false;
+
+// returns stable viewport size (waits until Safari settles)
+async function waitForStableViewport() {
+  if (!window.visualViewport) return;
+
+  let lastW = -1, lastH = -1;
+  let stableCount = 0;
+
+  while (stableCount < 3) {
+    await new Promise((r) => requestAnimationFrame(r));
+
+    const w = Math.round(window.visualViewport.width);
+    const h = Math.round(window.visualViewport.height);
+
+    // consider stable if it stays the same for a few frames
+    if (Math.abs(w - lastW) <= 1 && Math.abs(h - lastH) <= 1) stableCount++;
+    else stableCount = 0;
+
+    lastW = w; lastH = h;
+  }
+
+  // give Safari one more beat (address bar)
+  await new Promise((r) => setTimeout(r, 120));
+}
+
+async function bootCameraOnce(maxDim) {
+  if (__cameraBooted) return;
+  __cameraBooted = true;
+
+  // 1) wait for viewport to settle (iOS first-load issue)
+  await waitForStableViewport();
+
+  // 2) run ONE clean resize pass (sets renderer + camera aspect correctly)
+  handleResize();
+
+  // 3) now frame the camera using correct bounds + correct aspect
+  setInitialCameraFraming(maxDim);
+
+  // 4) capture baselines AFTER framing
+  captureBreathBaseline();
+
+  // 5) if you use "fixedCamCaptured" restore logic, lock it NOW
+  if (typeof fixedCamPos0 !== "undefined") {
+    fixedCamPos0.copy(camera.position);
+    fixedCamQuat0.copy(camera.quaternion);
+    fixedCamFov0 = camera.fov;
+    fixedCamCaptured = true;
+  }
+}
 
 function handleResize() {
   if (!renderer || !renderer.domElement) return;
@@ -6694,6 +7156,7 @@ function scheduleResize() {
     }
   });
 }
+
 
 window.addEventListener("resize", scheduleResize);
 window.addEventListener("orientationchange", scheduleResize);

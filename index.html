@@ -6,9 +6,6 @@
   <title>bedroom</title>
 
   <style>
-    /* ==========================================================
-       FULLSCREEN CANVAS (NO BARS, NO PAGE SHIFT)
-    ========================================================== */
     html, body {
       margin: 0;
       padding: 0;
@@ -18,10 +15,12 @@
       background: #000;
     }
 
+    :root { --vh: 1vh; }
+
     #c {
       display: block;
       width: 100vw;
-      height: 100vh;
+      height: calc(var(--vh) * 100);
     }
 
     /* ✅ LOADING SCREEN */
@@ -44,18 +43,16 @@
       transition: opacity 0.8s ease;
     }
 
-    /* ==========================================================
-       ✅ iOS LANDSCAPE-ONLY OVERLAY (iOS portrait blocker)
-    ========================================================== */
+    /* ✅ iOS LANDSCAPE-ONLY OVERLAY */
     #ios-rotate-lock {
       position: fixed;
       inset: 0;
       background: #000;
       color: #fff;
-      display: none;               /* hidden by default */
+      display: none;
       align-items: center;
       justify-content: center;
-      z-index: 10000;              /* above loader */
+      z-index: 10000;
       font-family: monospace;
       text-align: center;
       padding: 24px;
@@ -89,10 +86,9 @@
   <div id="ios-rotate-lock">
     <div class="box">
       <div class="title">rotate your phone</div>
-      <div class="sub">this experience is landscape only</div>
+      <div class="sub">this is a landscape experience</div>
     </div>
   </div>
-</script>
 
   <canvas id="c"></canvas>
 
@@ -123,13 +119,11 @@
       const lock = document.getElementById("ios-rotate-lock");
       if (!lock) return;
 
-      // Only enforce on iOS
       if (!isIOS()) {
         lock.style.display = "none";
         return;
       }
 
-      // iOS: block portrait, allow landscape
       lock.style.display = isLandscape() ? "none" : "flex";
     }
 
@@ -142,6 +136,30 @@
     window.addEventListener("resize", () => {
       setTimeout(updateIOSRotateLock, 150);
     });
+  </script>
+
+  <!-- ✅ iOS viewport height fix (handles Safari tabs/address bar changing) -->
+  <script>
+    function setVH() {
+      const vv = window.visualViewport;
+      const h = vv ? vv.height : window.innerHeight;
+      document.documentElement.style.setProperty("--vh", `${h * 0.01}px`);
+    }
+
+    // run once
+    setVH();
+
+    // keep updated
+    window.addEventListener("resize", setVH);
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", setVH);
+      window.visualViewport.addEventListener("scroll", setVH);
+    }
+
+    // Safari sometimes "settles" after first paint
+    setTimeout(setVH, 150);
+    setTimeout(setVH, 600);
   </script>
 
   <script type="module" src="./main.js?v=DEV123"></script>
