@@ -3922,6 +3922,20 @@ function currentAudio() {
   return audioEls[trackIndex];
 }
 
+// ✅ iOS: pause music if Safari goes to background / user leaves the page
+function stopMusicBecauseUserLeft() {
+  // if you want it to STOP and reset to start:
+  for (const a of audioEls) {
+    try {
+      a.pause();
+      a.currentTime = 0;
+    } catch {}
+  }
+
+  isPlaying = false;
+  updateSpeakerHintText?.();
+}
+
 function pauseAll() {
   for (const a of audioEls) {
     a.pause();
@@ -4880,6 +4894,26 @@ renderer.domElement.addEventListener("pointerleave", onPointerCancel);
 renderer.domElement.addEventListener("pointercancel", onPointerCancel);
 
 startIosRemotePulse();
+
+// ============================================================
+// ✅ iOS: STOP MUSIC when user leaves Safari / tab goes inactive
+// ============================================================
+if (isIOSDevice()) {
+  // 1) Tab/app goes background (most reliable)
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) stopMusicBecauseUserLeft();
+  });
+
+  // 2) Safari navigates away / app switcher / close tab
+  window.addEventListener("pagehide", () => {
+    stopMusicBecauseUserLeft();
+  });
+
+  // 3) Extra safety: when window loses focus
+  window.addEventListener("blur", () => {
+    stopMusicBecauseUserLeft();
+  });
+}
 
 // ============================================================
 // ✅ iOS MICRO-PAN (1-finger drag) — VERY SUBTLE
