@@ -1681,6 +1681,226 @@ function updatePowerHintText() {
 }
 
 // ============================================================
+// LAMP HOVER HINT (Press to turn on/off)
+// ============================================================
+const lampHint = document.createElement("div");
+lampHint.innerText = ""; // ✅ don’t hardcode default text
+
+lampHint.style.position = "fixed";
+lampHint.style.left = "50%";
+lampHint.style.bottom = "80px";
+lampHint.style.transform = "translateX(-50%)";
+
+lampHint.style.padding = "8px 16px";
+lampHint.style.borderRadius = "20px";
+
+lampHint.style.background = "rgba(0,0,0,0.6)";
+lampHint.style.color = "#fff";
+lampHint.style.fontSize = "14px";
+lampHint.style.fontFamily = "Arial, sans-serif";
+
+lampHint.style.pointerEvents = "none";
+lampHint.style.opacity = "0";
+lampHint.style.transition = "opacity 0.25s ease";
+
+lampHint.style.zIndex = "9998";
+
+document.body.appendChild(lampHint);
+
+let lampHintVisible = false;
+
+function showLampHint(show) {
+  if (show === lampHintVisible) return;
+  lampHintVisible = show;
+  lampHint.style.opacity = show ? "1" : "0";
+}
+
+// ✅ smart text based on lamp state
+// NOTE: pick ONE source of truth for "on/off":
+// If your lamp is considered "ON" when lampMood === 1, keep this.
+// If it's the opposite, just flip the condition.
+function updateLampHintText() {
+  const lampOn = (lampMood === 0); // <-- if backwards, change to (lampMood === 0)
+  lampHint.innerText = lampOn ? "press to turn off" : "press to turn on";
+}
+
+// ============================================================
+// ALL DVD HOVER HINT (Press to watch gummo)
+// ============================================================
+const allDvdHint = document.createElement("div");
+allDvdHint.innerText = "press to watch gummo";
+
+allDvdHint.style.position = "fixed";
+allDvdHint.style.left = "50%";
+allDvdHint.style.bottom = "80px";
+allDvdHint.style.transform = "translateX(-50%)";
+
+allDvdHint.style.padding = "8px 16px";
+allDvdHint.style.borderRadius = "20px";
+
+allDvdHint.style.background = "rgba(0,0,0,0.6)";
+allDvdHint.style.color = "#fff";
+allDvdHint.style.fontSize = "14px";
+allDvdHint.style.fontFamily = "Arial, sans-serif";
+
+allDvdHint.style.pointerEvents = "none";
+allDvdHint.style.opacity = "0";
+allDvdHint.style.transition = "opacity 0.25s ease";
+
+allDvdHint.style.zIndex = "9998";
+
+document.body.appendChild(allDvdHint);
+
+let allDvdHintVisible = false;
+
+function showAllDvdHint(show) {
+  if (show === allDvdHintVisible) return;
+  allDvdHintVisible = show;
+  allDvdHint.style.opacity = show ? "1" : "0";
+}
+
+// ============================================================
+// DVD_on_Player1 HOVER HINT (Press to watch decline of western civilization)
+// ============================================================
+const dvdPlayer1Hint = document.createElement("div");
+dvdPlayer1Hint.innerText = "press to watch decline of western civilization";
+
+dvdPlayer1Hint.style.position = "fixed";
+dvdPlayer1Hint.style.left = "50%";
+dvdPlayer1Hint.style.bottom = "80px";
+dvdPlayer1Hint.style.transform = "translateX(-50%)";
+
+dvdPlayer1Hint.style.padding = "8px 16px";
+dvdPlayer1Hint.style.borderRadius = "20px";
+
+dvdPlayer1Hint.style.background = "rgba(0,0,0,0.6)";
+dvdPlayer1Hint.style.color = "#fff";
+dvdPlayer1Hint.style.fontSize = "14px";
+dvdPlayer1Hint.style.fontFamily = "Arial, sans-serif";
+
+dvdPlayer1Hint.style.pointerEvents = "none";
+dvdPlayer1Hint.style.opacity = "0";
+dvdPlayer1Hint.style.transition = "opacity 0.25s ease";
+
+dvdPlayer1Hint.style.zIndex = "9998";
+
+document.body.appendChild(dvdPlayer1Hint);
+
+let dvdPlayer1HintVisible = false;
+
+function showDvdPlayer1Hint(show) {
+  if (show === dvdPlayer1HintVisible) return;
+  dvdPlayer1HintVisible = show;
+  dvdPlayer1Hint.style.opacity = show ? "1" : "0";
+}
+
+// ============================================================
+// BOOK4 HOVER HINT (Press to watch tweaked)
+// ============================================================
+const book4Hint = document.createElement("div");
+book4Hint.innerText = "press to read tweaked";
+
+book4Hint.style.position = "fixed";
+book4Hint.style.left = "50%";
+book4Hint.style.bottom = "80px";
+book4Hint.style.transform = "translateX(-50%)";
+
+book4Hint.style.padding = "8px 16px";
+book4Hint.style.borderRadius = "20px";
+
+book4Hint.style.background = "rgba(0,0,0,0.6)";
+book4Hint.style.color = "#fff";
+book4Hint.style.fontSize = "14px";
+book4Hint.style.fontFamily = "Arial, sans-serif";
+
+book4Hint.style.pointerEvents = "none";
+book4Hint.style.opacity = "0";
+book4Hint.style.transition = "opacity 0.25s ease";
+
+book4Hint.style.zIndex = "9998";
+
+document.body.appendChild(book4Hint);
+
+let book4HintVisible = false;
+
+function showBook4Hint(show) {
+  if (show === book4HintVisible) return;
+  book4HintVisible = show;
+  book4Hint.style.opacity = show ? "1" : "0";
+}
+
+// ============================================================
+// DOG_TAG1 HOVER HINT (Press to go to playlist)
+// ============================================================
+const dogTagHint = document.createElement("div");
+dogTagHint.innerText = "press to go to playlist";
+
+dogTagHint.style.position = "fixed";
+dogTagHint.style.left = "50%";
+dogTagHint.style.bottom = "80px";
+dogTagHint.style.transform = "translateX(-50%)";
+
+dogTagHint.style.padding = "8px 16px";
+dogTagHint.style.borderRadius = "20px";
+
+dogTagHint.style.background = "rgba(0,0,0,0.6)";
+dogTagHint.style.color = "#fff";
+dogTagHint.style.fontSize = "14px";
+dogTagHint.style.fontFamily = "Arial, sans-serif";
+
+dogTagHint.style.pointerEvents = "none";
+dogTagHint.style.opacity = "0";
+dogTagHint.style.transition = "opacity 0.25s ease";
+
+dogTagHint.style.zIndex = "9998";
+
+document.body.appendChild(dogTagHint);
+
+let dogTagHintVisible = false;
+
+function showDogTagHint(show) {
+  if (show === dogTagHintVisible) return;
+  dogTagHintVisible = show;
+  dogTagHint.style.opacity = show ? "1" : "0";
+}
+
+// ============================================================
+// BOARD2 HOVER HINT (Press to watch my favorite skate video)
+// ============================================================
+const board2Hint = document.createElement("div");
+board2Hint.innerHTML = "press to watch my<br>favorite skate video";
+
+board2Hint.style.position = "fixed";
+board2Hint.style.left = "50%";
+board2Hint.style.bottom = "80px";
+board2Hint.style.transform = "translateX(-50%)";
+
+board2Hint.style.padding = "8px 16px";
+board2Hint.style.borderRadius = "20px";
+
+board2Hint.style.background = "rgba(0,0,0,0.6)";
+board2Hint.style.color = "#fff";
+board2Hint.style.fontSize = "14px";
+board2Hint.style.fontFamily = "Arial, sans-serif";
+board2Hint.style.textAlign = "center";
+
+board2Hint.style.pointerEvents = "none";
+board2Hint.style.opacity = "0";
+board2Hint.style.transition = "opacity 0.25s ease";
+
+board2Hint.style.zIndex = "9998";
+
+document.body.appendChild(board2Hint);
+
+let board2HintVisible = false;
+
+function showBoard2Hint(show) {
+  if (show === board2HintVisible) return;
+  board2HintVisible = show;
+  board2Hint.style.opacity = show ? "1" : "0";
+}
+
+// ============================================================
 // REMOTE BUTTON HOVER HINTS (OK / UP / DOWN / LEFT / RIGHT)
 // ============================================================
 function makeMiniHint(text) {
@@ -1806,12 +2026,24 @@ const hintSuppressed = {
   down: false,
   left: false,
   right: false,
+  lamp: false,
+  alldvd: false,
+  dvdplayer1: false,
+  book4: false,
+  dogtag1: false,
+  board2: false,
 };
 
 function hideAllHintsImmediate() {
   showTvHint(false);
   showSpeakerHint(false);
   showPowerHint(false);
+  showLampHint(false);
+  showAllDvdHint(false);
+  showDvdPlayer1Hint(false);
+  showBook4Hint(false);
+  showDogTagHint(false);
+  showBoard2Hint(false);
   hideRemoteHints();
 }
 
@@ -1837,6 +2069,37 @@ function showHintForKey(key) {
     showPowerHint(true);
     return;
   }
+
+    if (key === "lamp") {
+    updateLampHintText();
+    showLampHint(true);
+    return;
+  }
+
+    if (key === "alldvd") {
+    showAllDvdHint(true);
+    return;
+  }
+
+    if (key === "dvdplayer1") {
+    showDvdPlayer1Hint(true);
+    return;
+  }
+
+  if (key === "book4") {
+  showBook4Hint(true);
+  return;
+}
+
+if (key === "dogtag1") {
+  showDogTagHint(true);
+  return;
+}
+
+if (key === "board2") {
+  showBoard2Hint(true);
+  return;
+}
 
   if (key === "tv") {
 
@@ -4129,6 +4392,19 @@ function hitIsBoard2(obj) {
   return false;
 }
 
+function hitIsPicture1(obj) {
+  let o = obj;
+  while (o) {
+    const n = (o.name || "").toLowerCase();
+    const mn = (o.material?.name || "").toLowerCase();
+
+    if (n.includes("picture1") || mn.includes("picture1")) return true;
+
+    o = o.parent;
+  }
+  return false;
+}
+
 function getTvCanvasPxPyFromUv(uv) {
   if (!uv) return null;
 
@@ -4594,6 +4870,7 @@ if (hitIsLamp(hit)) {
   lampMood = (lampMood + 1) % 2; // 0<->1
   applyLampMood(lampMood);
   setNightVision(lampMood === 1);
+  updateLampHintText();
   return;
 }
 
@@ -4634,6 +4911,13 @@ if (hitIsBoard2(hit)) {
   const url = "https://www.youtube.com/watch?v=D8hMVPSTysU";
   console.log("📋 Board2 hit — queued for pointerup:", url);
   pendingExternalUrl = url;
+  return;
+}
+
+// ✅ Picture1 click -> cycle textures
+if (hitIsPicture1(hit)) {
+  console.log("🖼 Picture1 hit -> next texture");
+  nextPicture1Texture(+1);
   return;
 }
 
@@ -5163,6 +5447,19 @@ const hoveringTvScreen = !!(tvScreenMeshRef && isInHierarchy(hit, tvScreenMeshRe
   let hoveringDown = false;
   let hoveringLeft = false;
   let hoveringRight = false;
+  let hoveringLamp = false;
+  let hoveringAllDvd = false;
+  let hoveringDvdPlayer1 = false;
+  let hoveringBook4 = false;
+  let hoveringDogTag1 = false;
+  let hoveringBoard2 = false;
+
+  if (hitIsLamp(hit)) hoveringLamp = true;
+  if (hitIsAllDVD(hit)) hoveringAllDvd = true;
+  if (hitIsDVDOnPlayer1(hit)) hoveringDvdPlayer1 = true;
+  if (hitIsBook4(hit)) hoveringBook4 = true;
+  if (hitIsDogTag(hit)) hoveringDogTag1 = true;
+  if (hitIsBoard2(hit)) hoveringBoard2 = true;
 
   // ✅ CRITICAL: TV hover must not allow remote glow at all
 if (hoveringTvScreen) {
@@ -5260,6 +5557,12 @@ if (menuHover !== prevMenuHover) {
 
   if (hoveringSpeaker) nextKey = "speaker";
   else if (hoveringPower) nextKey = "power";
+  else if (hoveringLamp) nextKey = "lamp";
+  else if (hoveringAllDvd) nextKey = "alldvd";
+  else if (hoveringDvdPlayer1) nextKey = "dvdplayer1";
+  else if (hoveringBook4) nextKey = "book4";
+  else if (hoveringDogTag1) nextKey = "dogtag1";
+  else if (hoveringBoard2) nextKey = "board2";
   else if (hoveringOk) nextKey = "ok";
   else if (hoveringUp) nextKey = "up";
   else if (hoveringDown) nextKey = "down";
@@ -6109,7 +6412,7 @@ Top_of_Treck1: makePBR({
 ),
 
 Picture1: makePBR({
-    albedo: "./assets/Textures/Picture/Picture Albeto.jpg",
+    albedo: "./assets/Textures/Picture/01_Picture.jpg",
     },
     { roughness: 0.85, metalness: 0.0}
 ),
@@ -6207,6 +6510,82 @@ BluetoothSpeaker: makePBR(
   ),
   
 };
+
+// ============================================================
+// ✅ Picture1 interchangeable textures (01–06)
+// ============================================================
+const PICTURE1_TEXTURES = [
+  "./assets/Textures/Picture/01_Picture.jpg",
+  "./assets/Textures/Picture/02_Picture.jpg",
+  "./assets/Textures/Picture/03_Picture1.jpg",
+  "./assets/Textures/Picture/04_Picture.jpg",
+  "./assets/Textures/Picture/05_Picture.jpg",
+  "./assets/Textures/Picture/06_Picture1.jpg",
+  "./assets/Textures/Picture/07_Picture.jpg",
+];
+
+let picture1TexIndex = 0;
+let picture1MeshRef = null; // will be captured from Main GLB
+
+function setPicture1Texture(index) {
+  const n = PICTURE1_TEXTURES.length;
+  picture1TexIndex = (index + n) % n;
+
+  const path = PICTURE1_TEXTURES[picture1TexIndex];
+  console.log("🖼 Picture1 texture ->", picture1TexIndex, path);
+
+ const tex = loadSRGB(path);
+
+// ✅ allow UV scaling
+tex.wrapS = THREE.ClampToEdgeWrapping;
+tex.wrapT = THREE.ClampToEdgeWrapping;
+
+// --- Picture1 UV framing (safe proportional scale) ---
+const s = 1.0; // 10% smaller, proportional
+
+tex.wrapS = THREE.ClampToEdgeWrapping;
+tex.wrapT = THREE.ClampToEdgeWrapping;
+
+tex.repeat.set(s, s);
+
+// start centered
+let ox = (1 - s) * 0.5;
+let oy = (1 - s) * 0.5;
+
+// OPTIONAL: nudge (keep these SMALL, because range is only 0..(1-s))
+const nudgeX = 0.0;
+const nudgeY = -0.4;
+
+ox += nudgeX;
+oy += nudgeY;
+
+// clamp offsets to safe range so it never smears/tiles
+const maxO = 1 - s;
+ox = Math.max(0, Math.min(maxO, ox));
+oy = Math.max(0, Math.min(maxO, oy));
+
+tex.offset.set(ox, oy);
+
+tex.needsUpdate = true;
+
+tex.needsUpdate = true;
+
+  // Update the shared material
+  if (materials.Picture1) {
+    materials.Picture1.map = tex;
+    materials.Picture1.needsUpdate = true;
+  }
+
+  // ALSO update the actual mesh material (in case it got cloned somewhere)
+  if (picture1MeshRef && picture1MeshRef.material) {
+    picture1MeshRef.material.map = tex;
+    picture1MeshRef.material.needsUpdate = true;
+  }
+}
+
+function nextPicture1Texture(delta) {
+  setPicture1Texture(picture1TexIndex + delta);
+}
 
 if (materials.Door2 && materials.Door2.color) {
   materials.Door2.color.multiplyScalar(1.2);
@@ -6306,6 +6685,22 @@ if (o.isMesh && o.geometry && o.geometry.attributes.uv && !o.geometry.attributes
 }
 
       const n = (o.name || "").toLowerCase();
+
+      // ✅ Capture Picture1 mesh by name OR material name
+      const mnLower = (o.material?.name || "").toLowerCase();
+      if (!picture1MeshRef && (n.includes("picture1") || mnLower.includes("picture1"))) {
+        picture1MeshRef = o;
+        console.log("🖼 Picture1 mesh found:", o.name, "material:", o.material?.name);
+
+        // Force it to use your Picture1 material so swapping always works
+        if (materials.Picture1) {
+          o.material = materials.Picture1;
+          o.material.needsUpdate = true;
+        }
+
+        // Ensure it starts at texture 01 (index 0)
+        setPicture1Texture(0);
+      }
 
           // ✅ CHAIN (clickable)
     const matN = (o.material?.name || "").toLowerCase();
