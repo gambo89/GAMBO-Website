@@ -1607,7 +1607,7 @@ let overlayOpen = false;
 
 const tvHint = document.createElement("div");
 
-tvHint.innerText = "click to view fullscreen";
+tvHint.innerText = "double click to view fullscreen";
 
 tvHint.style.position = "fixed";
 tvHint.style.left = "50%";
@@ -2164,16 +2164,21 @@ function applyIOSViewportFix() {
   }
 }
 
-
 function sizeOverlayToVisible(overlayEl) {
-  const { w, h } = getVisualSize();
+  const vv = window.visualViewport;
+  const w = Math.round(vv?.width  ?? window.innerWidth);
+  const h = Math.round(vv?.height ?? window.innerHeight);
 
-  overlayEl.style.width  = w + "px";
-  overlayEl.style.height = h + "px";
-  overlayEl.style.left   = "0";
-  overlayEl.style.top    = "0";
+  // ✅ critical on iOS landscape: the visible viewport can be offset
+  const left = Math.round(vv?.offsetLeft ?? 0);
+  const top  = Math.round(vv?.offsetTop  ?? 0);
+
+  overlayEl.style.position = "fixed";
+  overlayEl.style.width  = `${w}px`;
+  overlayEl.style.height = `${h}px`;
+  overlayEl.style.left   = `${left}px`;
+  overlayEl.style.top    = `${top}px`;
 }
-
 
 const photoOverlay = document.createElement("div");
 photoOverlay.style.position = "fixed";
@@ -3062,7 +3067,7 @@ function drawTvMenu() {
   for (let i = 0; i < items.length; i++) {
     tvCtx.fillText(items[i], cx, startY + i * gapY);
   }
-
+  
   tvTex.needsUpdate = true;
 }
 
@@ -3128,6 +3133,7 @@ function goBackToTvMenu() {
 
   tvUiState = "MENU";
   blinkT0 = performance.now();
+  tvMenuHoverFlipV = null; // ✅ re-detect mapping next time we hover menu
   drawTvMenu();
 }
 
@@ -3466,11 +3472,29 @@ function drawVideoFrameToTv() {
   // draw the current frame
   tvCtx.drawImage(videoEl, dx, dy, dw, dh);
 
-  if (tvOn && tvUiState === "VIDEO") {
+if (tvOn && tvUiState === "VIDEO") {
   const BTN = getTvMenuBtn();
   const bx = w - BTN.pad - BTN.w;
   const by = BTN.pad;
 
+  // ✅ 1) PAUSED overlay FIRST (so MENU can sit on top)
+  if (videoEl.paused) {
+    tvCtx.save();
+    tvCtx.fillStyle = "rgba(0,0,0,0.35)";
+    tvCtx.fillRect(0, 0, w, h);
+
+    tvCtx.fillStyle = "#fff";
+    tvCtx.font = "bold 64px Arial";
+    tvCtx.textAlign = "center";
+    tvCtx.textBaseline = "middle";
+    tvCtx.fillText("PAUSED", w * 0.5, h * 0.5);
+
+    tvCtx.font = "32px Arial";
+    tvCtx.fillText("OK: Play/Pause    ◀/▶: Prev/Next", w * 0.5, h * 0.5 + 80);
+    tvCtx.restore();
+  }
+
+  // ✅ 2) MENU button SECOND (drawn on top of overlay)
   tvCtx.save();
 
   if (menuHover) {
@@ -3487,6 +3511,7 @@ function drawVideoFrameToTv() {
   tvCtx.fill();
   tvCtx.restore();
 
+  // border
   tvCtx.save();
   tvCtx.globalAlpha = 0.35;
   tvCtx.strokeStyle = "#fff";
@@ -3495,6 +3520,7 @@ function drawVideoFrameToTv() {
   tvCtx.stroke();
   tvCtx.restore();
 
+  // text
   tvCtx.save();
   tvCtx.fillStyle = "#fff";
   tvCtx.globalAlpha = 0.92;
@@ -3504,7 +3530,6 @@ function drawVideoFrameToTv() {
   tvCtx.fillText("MENU", bx + BTN.w * 0.5, by + BTN.h * 0.52);
   tvCtx.restore();
 }
-
 
   tvTex.needsUpdate = true;
 }
@@ -4109,10 +4134,6 @@ function getTvCanvasPxPyFromUv(uv) {
   u = ((u % 1) + 1) % 1;
   v = ((v % 1) + 1) % 1;
 
-  // ✅ IMPORTANT:
-  // Your canvas draw coords use y=0 at TOP.
-  // Your current behavior shows taps landing bottom-right when you touch top-right.
-  // That means we must FLIP v here so top on screen maps to small py.
   v = 1 - v;
 
   return { w, h, px: u * w, py: v * h };
@@ -4166,9 +4187,8 @@ if (inMenuBtnA || inMenuBtnB) {
   const isDoubleTap = (now - lastTvTapTime) < TV_DOUBLE_TAP_MS;
   lastTvTapTime = now;
 
-  // Split screen into tap zones
-  const x01 = px / w; // 0..1
-  const y01 = py / h; // 0..1
+  const x01 = px / w;  // 0..1
+  const y01 = pyA / h; // 0..1  ✅ use primary mapping, not raw py
 
 if (tvUiState === "MENU") {
   // ✅ iOS uses EDIT 2 swipe/tap on pointerup
@@ -4189,23 +4209,28 @@ if (tvUiState === "MENU") {
   return true;
 }
 
-
-  // ------------------------------------------------------------
-  // ✅ PHOTO: left/right = prev/next, center = fullscreen
-  // ------------------------------------------------------------
-  if (tvUiState === "PHOTO") {
-    if (x01 < 0.33) {
-      nextPhoto(-1);
-      return true;
-    }
-    if (x01 > 0.66) {
-      nextPhoto(+1);
-      return true;
-    }
-    // center
+// ------------------------------------------------------------
+// ✅ PHOTO: left/right = prev/next
+// Double tap = fullscreen overlay (match VIDEO + 3D MODEL)
+// ------------------------------------------------------------
+if (tvUiState === "PHOTO") {
+  if (isDoubleTap) {
     openPhotoOverlay(currentPhotoUrl);
     return true;
   }
+
+  if (x01 < 0.33) {
+    nextPhoto(-1);
+    return true;
+  }
+  if (x01 > 0.66) {
+    nextPhoto(+1);
+    return true;
+  }
+
+  // center single tap: do nothing (or keep for future UI)
+  return true;
+}
 
   // ------------------------------------------------------------
   // ✅ VIDEO: left/right = prev/next, center = play/pause
@@ -4298,6 +4323,13 @@ function setTvPower(nextOn) {
 
 tvOn = nextOn;
 
+// ✅ reset iOS TV gesture state when powering off (prevents stale pointerup behavior)
+if (!tvOn) {
+  tvTouchActive = false;
+  tvTouchStartedWhileOff = false;
+  tvTouchPointerId = null;
+}
+
 if (!tvOn) {
   stopVideoCompletely();
   stopModelCompletely();
@@ -4316,6 +4348,7 @@ if (!tvOn) {
   blinkT0 = performance.now();
   tvUiState = "MENU";
   menuIndex = 0;
+  tvMenuHoverFlipV = null; // ✅ re-detect mapping for menu hover
 
   // ✅ start boot animation
   tvBootT0 = performance.now();
@@ -4423,6 +4456,7 @@ let lastTvTapTime = 0;
 const TV_DOUBLE_TAP_MS = 320;
 let pendingExternalUrl = null;
 let tvIgnoreNextPointerUp = false;
+let tvMenuHoverFlipV = null; // null until we detect correct orientation
 
 // ✅ DEBUG: draw a dot where the TV screen was clicked (UV->pixel)
 let tvTapDebug = { on: false, x: 0, y: 0, t: 0 };
@@ -4468,45 +4502,78 @@ if (!hits.length) return;
 
 if (overlayOpen || videoOverlayOpen || modelOverlayOpen) return;
 
- const hit = hits[0].object;
-const hitInfo = hits[0];
+// ✅ Prefer TV screen hit even if it's NOT hits[0] (remote may be closer)
+const tvHitInfo =
+  (tvScreenMeshRef && hits.length)
+    ? hits.find(h => isInHierarchy(h.object, tvScreenMeshRef))
+    : null;
 
-if (isIOSDevice() && tvScreenMeshRef && isInHierarchy(hit, tvScreenMeshRef)) {
-  tvTouchActive = true;
-  tvTouchStartedWhileOff = !tvOn;     // ✅ mark if this gesture began with TV off
-  tvTouchPointerId = e.pointerId;
+const hitInfo = tvHitInfo ?? hits[0];
+const hit = hitInfo.object;
 
-  tvTouchStartX = e.clientX;
-  tvTouchStartY = e.clientY;
-  tvTouchStartT = performance.now();
+console.log("POINTERDOWN HIT:", hit.name);
 
-  // ✅ keep receiving pointerup even if finger drifts
-  try { renderer.domElement.setPointerCapture(e.pointerId); } catch {}
+// ✅ iOS: only pulse the remote hint when you actually touched the remote,
+// not when you touched the TV screen.
+let hitIsTv = false;
+if (tvScreenMeshRef && isInHierarchy(hit, tvScreenMeshRef)) hitIsTv = true;
 
-  const uv = hitInfo.uv;
+// (optional but recommended) also don't pulse if you hit the speaker (or other interactives)
+let hitIsRemoteBtn = false;
+if (okButtonMeshRef && isInHierarchy(hit, okButtonMeshRef)) hitIsRemoteBtn = true;
+if (upArrowMeshRef && isInHierarchy(hit, upArrowMeshRef)) hitIsRemoteBtn = true;
+if (downArrowMeshRef && isInHierarchy(hit, downArrowMeshRef)) hitIsRemoteBtn = true;
+if (leftArrowMeshRef && isInHierarchy(hit, leftArrowMeshRef)) hitIsRemoteBtn = true;
+if (rightArrowMeshRef && isInHierarchy(hit, rightArrowMeshRef)) hitIsRemoteBtn = true;
+if (powerButtonMeshRef && isInHierarchy(hit, powerButtonMeshRef)) hitIsRemoteBtn = true;
 
-  // ✅ If TV is OFF, this gesture ONLY powers on (no menu confirm)
-  if (!tvOn) {
-    if (uv) handleIOSTvTap(uv);
-    else setTvPower(true);
-    return;
-  }
-
-  // ✅ If we’re in MENU, we let onPointerUp decide swipe vs tap
-  if (tvUiState === "MENU") return;
-
-  // ✅ Otherwise (PHOTO/VIDEO/3D MODEL), do NOT return — let unified TV handler run below
+if (isIOSDevice() && hitIsRemoteBtn) {
+  nudgeIosRemotePulse();
 }
 
-// ✅ Unified TV handler (paste this exactly)
+// ============================================================
+// ✅ TV SCREEN HIT: handle TV FIRST and BLOCK remote glow/press
+// (MUST be before any remote press/glow logic)
+// ============================================================
 if (tvScreenMeshRef && isInHierarchy(hit, tvScreenMeshRef)) {
-  const uv = hitInfo?.uv;
-  if (uv) {
-    if (handleIOSTvTap(uv)) return;
+  // kill any “stuck” glow/press instantly
+   // ✅ Only do the hard "clear everything" on TOUCH.
+  // Desktop hover hints should stay responsive.
+  if (e.pointerType === "touch") {
+    clearAllButtonGlows();
+    clearAllButtonPresses();
+    setHoverKey(null);
   }
-  return;
-}
 
+  // ✅ if you have a "remote pulse" timer/state, cancel it here too
+// (only add this if you actually have these vars/functions)
+if (typeof stopIosRemotePulse === "function") stopIosRemotePulse();
+
+  // iOS swipe/tap tracking (only if you still want it)
+  if (isIOSDevice()) {
+    tvTouchActive = true;
+    tvTouchStartedWhileOff = !tvOn;
+    tvTouchPointerId = e.pointerId;
+
+    tvTouchStartX = e.clientX;
+    tvTouchStartY = e.clientY;
+    tvTouchStartT = performance.now();
+
+    try { renderer.domElement.setPointerCapture(e.pointerId); } catch {}
+  }
+
+  const uv = hitInfo?.uv;
+
+  // ✅ TV interaction ONLY (no remote emission / press code allowed to run)
+  if (uv) {
+    handleIOSTvTap(uv);
+  } else {
+    // fallback if uv missing
+    if (!tvOn) setTvPower(true);
+  }
+
+  return; // 🔒 CRITICAL: nothing below runs
+}
 
   // ✅ only toggle lamp + night vision when lamp is clicked
 if (hitIsLamp(hit)) {
@@ -4848,11 +4915,18 @@ renderer.domElement.addEventListener("pointerdown", (e) => {
   if (e.pointerType !== "touch") return;
   if (overlayOpen || videoOverlayOpen || modelOverlayOpen) return;
 
-  // ✅ don’t start micro-pan if the touch began on the TV screen
   if (tvScreenMeshRef) {
     if (!setPointerFromEvent(e)) return;
     raycaster.setFromCamera(pointer, camera);
-    const hits = raycaster.intersectObject(interactivesRootRef || anchor, true);
+
+    let hits = [];
+    if (interactivesRootRef) {
+      hits = raycaster.intersectObject(interactivesRootRef, true);
+    }
+    if (!hits.length) {
+      hits = raycaster.intersectObject(anchor, true);
+    }
+
     if (hits.length && isInHierarchy(hits[0].object, tvScreenMeshRef)) return;
   }
 
@@ -4922,7 +4996,7 @@ renderer.domElement.addEventListener("pointercancel", (e) => {
 }, { passive: true });
 
 
-window.addEventListener("pointerup", () => {
+renderer.domElement.addEventListener("pointerup", () => {
   // ✅ If something was queued on pointerdown, open it now
   if (pendingExternalUrl) {
     const url = pendingExternalUrl;
@@ -4936,7 +5010,7 @@ window.addEventListener("pointerup", () => {
   }
 
   clearAllButtonPresses();
-});
+}, { passive: true });
 
 window.addEventListener("pointercancel", () => {
   clearAllButtonPresses();
@@ -4965,23 +5039,87 @@ renderer.domElement.addEventListener("pointermove", (e) => {
 
   raycaster.setFromCamera(pointer, camera);
 
-
-    if (!interactivesRootRef) {
+  let hits = [];
+if (interactivesRootRef) {
+  hits = raycaster.intersectObject(interactivesRootRef, true);
+}
+if (!hits.length) {
+  hits = raycaster.intersectObject(anchor, true);
+}
+if (!hits.length) {
   setHoverKey(null);
-  clearAllButtonGlows(); // ✅ IMPORTANT
+  clearAllButtonGlows();
+  clearAllButtonPresses();
   return;
 }
 
-  const hits = raycaster.intersectObject(interactivesRootRef, true);
+// ✅ Prefer TV hit for hover too (prevents remote glow while over TV)
+const tvHoverHit =
+  (tvScreenMeshRef && hits.length)
+    ? hits.find(h => isInHierarchy(h.object, tvScreenMeshRef))
+    : null;
 
-   if (!hits.length) {
-  setHoverKey(null);
-  clearAllButtonGlows(); // ✅ IMPORTANT
-  return;
+const hit = (tvHoverHit ?? hits[0]).object;
+
+// ============================================================
+// ✅ DESKTOP: hover over MENU rows to change selection (flawless)
+// Only runs for mouse, only while tvUiState === "MENU"
+// Uses the TV hit UV (NOT hits[0]) and locks V flip once detected.
+// ============================================================
+if (
+  tvOn &&
+  tvUiState === "MENU" &&
+  e.pointerType === "mouse" &&
+  tvScreenMeshRef &&
+  tvHoverHit &&                      // ✅ must be hovering the TV mesh
+  tvHoverHit.uv                      // ✅ must have uv
+) {
+  const uv = tvHoverHit.uv;          // ✅ IMPORTANT: use TV hit uv, not hits[0].uv
+
+  const w = tvCanvas.width;
+  const h = tvCanvas.height;
+
+  // match mapping rules (repeat/offset + normalize)
+  let u = uv.x * (tvTex.repeat?.x ?? 1) + (tvTex.offset?.x ?? 0);
+  let v = uv.y * (tvTex.repeat?.y ?? 1) + (tvTex.offset?.y ?? 0);
+
+  u = ((u % 1) + 1) % 1;
+  v = ((v % 1) + 1) % 1;
+
+  // two possible vertical interpretations
+  const pyA = v * h;
+  const pyB = (1 - v) * h;
+
+  // these must match drawTvMenu()
+  const startY = h * 0.35;
+  const gapY = 130;
+  const n = MENU_ITEMS.length;
+
+  const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+
+  // candidate index for both py versions
+  const idxA = clamp(Math.round((pyA - startY) / gapY), 0, n - 1);
+  const idxB = clamp(Math.round((pyB - startY) / gapY), 0, n - 1);
+
+  // distance to nearest row center (so we pick correct orientation)
+  const centerA = startY + idxA * gapY;
+  const centerB = startY + idxB * gapY;
+
+  const distA = Math.abs(pyA - centerA);
+  const distB = Math.abs(pyB - centerB);
+
+  const py = tvMenuHoverFlipV ? pyB : pyA;
+  const idx = clamp(Math.round((py - startY) / gapY), 0, n - 1);
+
+  if (idx !== menuIndex) {
+    menuIndex = idx;
+    blinkT0 = performance.now();
+    drawTvMenu();
+  }
 }
 
+const hoveringTvScreen = !!(tvScreenMeshRef && isInHierarchy(hit, tvScreenMeshRef));
 
-  const hit = hits[0].object;
 
   let hoveringTv = false;
   let hoveringSpeaker = false;
@@ -4992,6 +5130,19 @@ renderer.domElement.addEventListener("pointermove", (e) => {
   let hoveringLeft = false;
   let hoveringRight = false;
 
+  // ✅ CRITICAL: TV hover must not allow remote glow at all
+if (hoveringTvScreen) {
+  hoveringPower = false;
+  hoveringOk = false;
+  hoveringUp = false;
+  hoveringDown = false;
+  hoveringLeft = false;
+  hoveringRight = false;
+
+  // optional: hard kill glows instantly
+  clearAllButtonGlows();
+  clearAllButtonPresses();
+}
 
 if (tvOn && (tvUiState === "PHOTO" || tvUiState === "VIDEO" || tvUiState === "3D MODEL") && tvScreenMeshRef && isInHierarchy(hit, tvScreenMeshRef)) {
   hoveringTv = true;
@@ -5007,10 +5158,10 @@ if (
   tvOn &&
   (tvUiState === "PHOTO" || tvUiState === "VIDEO" || tvUiState === "3D MODEL") &&
   tvScreenMeshRef &&
-  isInHierarchy(hit, tvScreenMeshRef) &&
-  hits[0].uv
+isInHierarchy(hit, tvScreenMeshRef) &&
+(tvHoverHit ?? hits[0]).uv
 ) {
-  const uv = hits[0].uv;
+  const uv = (tvHoverHit ?? hits[0]).uv;
 
   const w = tvCanvas.width;
   const h = tvCanvas.height;
@@ -6638,15 +6789,15 @@ if (isRightArrow) {
     m.emissiveMap = tvTex;  // <-- makes it glow like a real screen
 
     // ✅ FIX: widen the texture to correct TV screen UV aspect
-tvTex.wrapS = THREE.ClampToEdgeWrapping;
-tvTex.wrapT = THREE.ClampToEdgeWrapping;
+    tvTex.wrapS = THREE.ClampToEdgeWrapping;
+    tvTex.wrapT = THREE.ClampToEdgeWrapping;
 
-// Start values (tweak once if needed)
-tvTex.repeat.set(1.0, 1.00);
-tvTex.offset.set(0.0, 0.00);
+    // Start values (tweak once if needed)
+    tvTex.repeat.set(1.0, 1.00);
+    tvTex.offset.set(0.0, 0.00);
 
 
-tvTex.needsUpdate = true;
+    tvTex.needsUpdate = true;
 
 
 
