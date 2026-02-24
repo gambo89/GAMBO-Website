@@ -3857,7 +3857,7 @@ const MODEL_PATHS = [
   "./assets/3D Model/05-Morningstar.mp4",
   "./assets/3D Model/06-Bat.mp4",
   "./assets/3D Model/07-Chainsaw.mp4",
-  "./assets/3D Model/08-Granade.mp4",
+  "./assets/3D Model/08-Granade1.mp4",
   
 ];
 
@@ -4916,6 +4916,10 @@ if (hitIsLamp(hit)) {
   applyLampMood(lampMood);
   setNightVision(lampMood === 1);
   updateLampHintText();
+
+      // ✅ show Grim only in lampMood 1, hide in lampMood 0
+  setGrimVisible(lampMood === 1);
+
   return;
 }
 
@@ -6556,7 +6560,57 @@ BluetoothSpeaker: makePBR(
     },
     { roughness: 0.0, metalness: 0.0 }
   ),
+
+     Food_Bowl: makePBR(
+{
+      albedo: "./assets/Textures/Food/Food albedo.jpg",
+    },
+    { roughness: 0.2, metalness: 0.0 }
+  ),
   
+     Foot: makePBR(
+{
+      albedo: "./assets/Textures/Foot/Foot albedo.jpg",
+    },
+    { roughness: 0.9, metalness: 0.0 }
+  ),
+
+       Toe_Nail: makePBR(
+{
+      albedo: "./assets/Textures/Foot/Toe albedo.jpg",
+    },
+    { roughness: 0.3, metalness: 0.0 }
+  ),
+  
+       Garbage_Bag: makePBR(
+{
+      albedo: "./assets/Textures/Garbage/Garbage albedo.jpg",
+    },
+    { roughness: 0.0, metalness: 0.0 }
+  ),
+  
+       Grim_reaper: makePBR(
+{
+      albedo: "./assets/Textures/Angel/Angel albedo",
+      normal: "./assets/Textures/Angel/Angel Normal.jpg",
+    },
+    { roughness: 0.5, metalness: 0.0 }
+  ),
+  
+       Rag1: makePBR(
+{
+      albedo: "./assets/Textures/Rag/Dirty Rag Albedo.jpg",
+    },
+    { roughness: 0.0, metalness: 0.0 }
+  ),
+
+       Underwear2: makePBR(
+{
+      albedo: "./assets/Textures/Underwear/Underwear2.jpg",
+    },
+    { roughness: 0.2, metalness: 0.0 }
+  ),
+
 };
 
 // ============================================================
@@ -6578,6 +6632,20 @@ const PICTURE1_TEXTURES = [
 
 let picture1TexIndex = 0;
 let picture1MeshRef = null; // will be captured from Main GLB
+let grimReaperRef = null;
+
+function setGrimVisible(on) {
+  if (!grimReaperRef) return;
+
+  // if it's a group, hide/show everything inside
+  if (grimReaperRef.traverse) {
+    grimReaperRef.traverse((x) => {
+      if (x && typeof x.visible === "boolean") x.visible = on;
+    });
+  } else {
+    grimReaperRef.visible = on;
+  }
+}
 
 function setPicture1Texture(index) {
   const n = PICTURE1_TEXTURES.length;
@@ -6655,12 +6723,16 @@ for (let i = 1; i <= 13; i++) {
   }
 }
 
+if (materials.Foot && materials.Foot.color) {
+  materials.Foot.color.multiplyScalar(0.65); // 0.7 darker, 0.9 subtle
+}
+
 // Darken cabinet / shelves
 if (materials.cabnet) {
   darkenMaterial(materials.cabnet, {
     env: 0.0,
     rough: 1.0,
-    colorMul: 0.5,
+    colorMul: 0.25,
   });
 }
 
@@ -6737,6 +6809,68 @@ if (o.isMesh && o.geometry && o.geometry.attributes.uv && !o.geometry.attributes
 }
 
       const n = (o.name || "").toLowerCase();
+
+      // ============================================================
+// ✅ FOOT — reduce brightness without killing color
+// ============================================================
+if (n.includes("foot") && o.material) {
+
+  o.material = o.material.clone(); // isolate
+
+  // reduce reflections (this is the main fix)
+  if ("envMapIntensity" in o.material) {
+    o.material.envMapIntensity = 0.01;  // was 0.02 globally
+  }
+
+  // make it less shiny
+  o.material.roughness = Math.max(o.material.roughness ?? 0.8, 0.95);
+
+  // slightly reduce highlight strength
+  if ("metalness" in o.material) {
+    o.material.metalness = 0.0;
+  }
+
+  o.material.needsUpdate = true;
+}
+
+// ============================================================
+// ✅ FOOD — reduce “too bright” (spec + reflections)
+// ============================================================
+if (
+  (n.includes("food") || n.includes("popcorn") || n.includes("bowl")) &&
+  o.material
+) {
+  o.material = o.material.clone(); // isolate
+
+  // reduce reflections
+  if ("envMapIntensity" in o.material) {
+    o.material.envMapIntensity = 0.005;
+  }
+
+  // make it less shiny
+  o.material.roughness = Math.max(o.material.roughness ?? 0.7, 0.95);
+
+  // food should not be metallic
+  if ("metalness" in o.material) {
+    o.material.metalness = 0.0;
+  }
+
+  o.material.needsUpdate = true;
+}
+
+      // ============================================================
+// ✅ CAPTURE + FORCE-HIDE Grim_reaper (Main GLB)
+// ============================================================
+const grimMatNameLower = (o.material?.name || "").toLowerCase();
+
+if (!grimReaperRef && (n.includes("grim_reaper") || grimMatNameLower.includes("grim_reaper"))) {
+  grimReaperRef = o;
+
+  // lampMood 0 is your default "normal" state, so start hidden:
+  setGrimVisible(false);
+
+  console.log("☠️ Grim_reaper captured:", o.name, "| material:", o.material?.name);
+}
 
       // ✅ Capture Picture1 mesh by name OR material name
       const mnLower = (o.material?.name || "").toLowerCase();
@@ -6931,6 +7065,7 @@ lampMeshRef = (() => {
   let found = null;
   model.traverse((o) => {
     if (found) return;
+
     const n = (o.name || "").toLowerCase();
 
     // ✅ matches your material key "Lamp1" naming style
@@ -6938,8 +7073,6 @@ lampMeshRef = (() => {
   });
   return found;
 })();
-
-
     if (lampMeshRef && lampMeshRef.material) {
   const m = lampMeshRef.material;
 
@@ -7070,7 +7203,10 @@ setTimeout(() => {
   }
 );
 
+
 const interactiveLoader = new GLTFLoader();
+
+const newMaterialsLoader = new GLTFLoader();
 
 const __endUI = __beginAsset("Interactives GLB");
 
@@ -7356,7 +7492,6 @@ if (tvScreenMatRef) {
   tvScreenMatRef.needsUpdate = true;
 }
 
-
 },
 undefined,
 (err) => {
@@ -7365,6 +7500,88 @@ undefined,
 }
 );
 
+// ============================================================
+// ✅ NEW: LOAD "New Materials.glb" (added to scene so textures work)
+// Paste directly AFTER the Interactive Materials load block ends.
+// ============================================================
+const __endNewMaterials = __beginAsset("New Materials GLB");
+
+newMaterialsLoader.load(
+  "./assets/models/New Materials3.glb",
+  (gltf) => {
+    __endNewMaterials();
+
+    const extra = gltf.scene;
+
+    // ✅ Add to scene (same parent as your other models)
+    anchor.add(extra);
+
+    // ✅ Make meshes behave like your other scene meshes
+    extra.traverse((o) => {
+      if (!o.isMesh) return;
+
+      // ✅ CAPTURE Grim_reaper from New Materials GLB too
+const nn = (o.name || "").toLowerCase();
+const mm = (o.material?.name || "").toLowerCase();
+
+if (!grimReaperRef && (nn.includes("grim_reaper") || mm.includes("grim_reaper"))) {
+  grimReaperRef = o;
+  setGrimVisible(false); // start hidden
+  console.log("☠️ Grim_reaper captured (New Materials):", o.name, "| material:", o.material?.name);
+}
+
+      // raycast layer
+      o.layers.enable(LAYER_WORLD);
+
+      // ensure uv2 exists for AO maps
+      if (o.geometry && o.geometry.attributes.uv && !o.geometry.attributes.uv2) {
+        o.geometry.setAttribute("uv2", o.geometry.attributes.uv);
+      }
+
+      // ✅ MATERIAL ASSIGN (same matching style you use in Main GLB)
+      const originalMatName = o.material?.name;
+      const keysToTry = [
+        o.name,
+        o.parent?.name,
+        originalMatName,
+        o.parent?.parent?.name,
+      ].filter(Boolean);
+
+      let mat = null;
+      for (const k of keysToTry) {
+        if (materials[k]) { mat = materials[k]; break; }
+      }
+
+      // only override if you have a defined material for it
+      if (mat) o.material = mat;
+
+      // consistent shadow settings
+      o.castShadow = true;
+      o.receiveShadow = true;
+
+      // global IBL control (matches your style)
+      if (o.material && "envMapIntensity" in o.material) {
+        o.material.envMapIntensity = 0.02;
+      }
+
+      o.material?.needsUpdate && (o.material.needsUpdate = true);
+    });
+
+    extra.updateMatrixWorld(true);
+    
+    extra.traverse((o) => {
+      if (!o.isMesh) return;
+    console.log("🧩 NEW GLB -> mesh:", o.name, "| material:", o.material?.name);
+});
+
+    console.log("✅ New Materials GLB loaded:", extra);
+  },
+  undefined,
+  (err) => {
+    console.error("New Materials GLB failed to load ❌", err);
+    __endNewMaterials(); // ✅ don't hang loader
+  }
+);
 
 // ============================================================
 // ✅ BREATHING (subtle always + deeper breath every ~10s)
