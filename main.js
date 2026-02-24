@@ -1901,6 +1901,41 @@ function showBoard2Hint(show) {
 }
 
 // ============================================================
+// PICTURE1 HOVER HINT (Press to change picture)
+// ============================================================
+const picture1Hint = document.createElement("div");
+picture1Hint.innerText = "press to change picture";
+
+picture1Hint.style.position = "fixed";
+picture1Hint.style.left = "50%";
+picture1Hint.style.bottom = "80px";
+picture1Hint.style.transform = "translateX(-50%)";
+
+picture1Hint.style.padding = "8px 16px";
+picture1Hint.style.borderRadius = "20px";
+
+picture1Hint.style.background = "rgba(0,0,0,0.6)";
+picture1Hint.style.color = "#fff";
+picture1Hint.style.fontSize = "14px";
+picture1Hint.style.fontFamily = "Arial, sans-serif";
+
+picture1Hint.style.pointerEvents = "none";
+picture1Hint.style.opacity = "0";
+picture1Hint.style.transition = "opacity 0.25s ease";
+
+picture1Hint.style.zIndex = "9998";
+
+document.body.appendChild(picture1Hint);
+
+let picture1HintVisible = false;
+
+function showPicture1Hint(show) {
+  if (show === picture1HintVisible) return;
+  picture1HintVisible = show;
+  picture1Hint.style.opacity = show ? "1" : "0";
+}
+
+// ============================================================
 // REMOTE BUTTON HOVER HINTS (OK / UP / DOWN / LEFT / RIGHT)
 // ============================================================
 function makeMiniHint(text) {
@@ -2032,6 +2067,7 @@ const hintSuppressed = {
   book4: false,
   dogtag1: false,
   board2: false,
+  picture1: false,
 };
 
 function hideAllHintsImmediate() {
@@ -2044,6 +2080,7 @@ function hideAllHintsImmediate() {
   showBook4Hint(false);
   showDogTagHint(false);
   showBoard2Hint(false);
+  showPicture1Hint(false);
   hideRemoteHints();
 }
 
@@ -2101,6 +2138,11 @@ if (key === "board2") {
   return;
 }
 
+if (key === "picture1") {
+  showPicture1Hint(true);
+  return;
+}
+
   if (key === "tv") {
 
   // ✅ iOS-specific TV hint text
@@ -2114,7 +2156,6 @@ if (key === "board2") {
   showTvHint(true);
   return;
 }
-
 
   // Remote mini hints
   if (key === "ok") okHint.show(true);
@@ -3813,7 +3854,11 @@ const MODEL_PATHS = [
   "./assets/3D Model/02-Skateboard.mp4",
   "./assets/3D Model/03-Skateboard-2.mp4",
   "./assets/3D Model/04-UAP.mp4",
-  "./assets/3D Model/05-website.jpg",
+  "./assets/3D Model/05-Morningstar.mp4",
+  "./assets/3D Model/06-Bat.mp4",
+  "./assets/3D Model/07-Chainsaw.mp4",
+  "./assets/3D Model/08-Granade.mp4",
+  
 ];
 
 let modelIndex = 0;
@@ -5453,6 +5498,7 @@ const hoveringTvScreen = !!(tvScreenMeshRef && isInHierarchy(hit, tvScreenMeshRe
   let hoveringBook4 = false;
   let hoveringDogTag1 = false;
   let hoveringBoard2 = false;
+  let hoveringPicture1 = false;
 
   if (hitIsLamp(hit)) hoveringLamp = true;
   if (hitIsAllDVD(hit)) hoveringAllDvd = true;
@@ -5460,6 +5506,7 @@ const hoveringTvScreen = !!(tvScreenMeshRef && isInHierarchy(hit, tvScreenMeshRe
   if (hitIsBook4(hit)) hoveringBook4 = true;
   if (hitIsDogTag(hit)) hoveringDogTag1 = true;
   if (hitIsBoard2(hit)) hoveringBoard2 = true;
+  if (hitIsPicture1(hit)) hoveringPicture1 = true;
 
   // ✅ CRITICAL: TV hover must not allow remote glow at all
 if (hoveringTvScreen) {
@@ -5563,6 +5610,7 @@ if (menuHover !== prevMenuHover) {
   else if (hoveringBook4) nextKey = "book4";
   else if (hoveringDogTag1) nextKey = "dogtag1";
   else if (hoveringBoard2) nextKey = "board2";
+  else if (hoveringPicture1) nextKey = "picture1";
   else if (hoveringOk) nextKey = "ok";
   else if (hoveringUp) nextKey = "up";
   else if (hoveringDown) nextKey = "down";
@@ -6515,13 +6563,17 @@ BluetoothSpeaker: makePBR(
 // ✅ Picture1 interchangeable textures (01–06)
 // ============================================================
 const PICTURE1_TEXTURES = [
-  "./assets/Textures/Picture/01_Picture.jpg",
-  "./assets/Textures/Picture/02_Picture.jpg",
-  "./assets/Textures/Picture/03_Picture1.jpg",
-  "./assets/Textures/Picture/04_Picture.jpg",
-  "./assets/Textures/Picture/05_Picture.jpg",
-  "./assets/Textures/Picture/06_Picture1.jpg",
-  "./assets/Textures/Picture/07_Picture.jpg",
+  "./assets/Textures/Picture/01_Picture1.jpg",
+  "./assets/Textures/Picture/02_Picture2.jpg",
+  "./assets/Textures/Picture/03_Picture3.jpg",
+  "./assets/Textures/Picture/04_Picture4.jpg",
+  "./assets/Textures/Picture/05_Picture5.jpg",
+  "./assets/Textures/Picture/06_Picture6.jpg",
+  "./assets/Textures/Picture/07_Picture7.jpg",
+  "./assets/Textures/Picture/08_Picture8.jpg",
+  "./assets/Textures/Picture/09_Picture9.jpg",
+  "./assets/Textures/Picture/10_Picture10.jpg",
+  
 ];
 
 let picture1TexIndex = 0;
