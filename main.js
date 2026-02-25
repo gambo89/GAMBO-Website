@@ -80,13 +80,16 @@ const renderer = new THREE.WebGLRenderer({
   powerPreference: "low-power",
 });
 
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.92; // subtle cinematic darkening (try 0.88–0.98)
+
 // ============================================================
 // ✅ Color pipeline consistency (desktop + iOS)
 // Put directly after renderer creation
 // ============================================================
 renderer.outputColorSpace = THREE.SRGBColorSpace;     // modern three
 renderer.toneMapping = THREE.ACESFilmicToneMapping;  // if desktop uses this
-renderer.toneMappingExposure = renderer.toneMappingExposure ?? 1.0;
+renderer.toneMappingExposure = renderer.toneMappingExposure ?? 0.8;
 
 // renderer settings...
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -126,6 +129,9 @@ if (isIOS) {
 // SCENE + CAMERA
 // ============================================================
 const scene = new THREE.Scene();
+// ✅ Cinematic: subtle cool shadows + warm highlights separation
+const moodHemi = new THREE.HemisphereLight(0x9bb7ff, 0x0f0f14, 0.08);
+scene.add(moodHemi);
 scene.background = new THREE.Color(0x000000);
 
 // ============================================================
@@ -651,7 +657,7 @@ function setNightVision(on) {
 
   // capture baseline exposure once
   if (__baseExposure == null) {
-    __baseExposure = renderer.toneMappingExposure ?? 1.0;
+    __baseExposure = renderer.toneMappingExposure ?? 0.92;
   }
 
   const isiOS = isIOSDevice();
@@ -4437,19 +4443,6 @@ function hitIsBoard2(obj) {
   return false;
 }
 
-function hitIsPicture1(obj) {
-  let o = obj;
-  while (o) {
-    const n = (o.name || "").toLowerCase();
-    const mn = (o.material?.name || "").toLowerCase();
-
-    if (n.includes("picture1") || mn.includes("picture1")) return true;
-
-    o = o.parent;
-  }
-  return false;
-}
-
 function getTvCanvasPxPyFromUv(uv) {
   if (!uv) return null;
 
@@ -4692,8 +4685,12 @@ if (!tvOn) {
   drawTvMenu();
 }
 
-
   tvAnim = { from, to, t0: performance.now() / 1000 };
+
+// ✅ Desktop: keep pulses perfectly in sync with TV on/off
+if (!isIOSDevice()) {
+  syncDesktopPulseWithTvState();
+}
 
 }
 
@@ -4793,6 +4790,135 @@ let pendingExternalUrl = null;
 let tvIgnoreNextPointerUp = false;
 let tvMenuHoverFlipV = null; // null until we detect correct orientation
 
+// ============================================================
+// ✅ DESKTOP REMOTE PULSE (match iOS behavior exactly)
+// TV OFF  -> Power pulses every ~3.6s with smooth fade
+// TV ON   -> OK/UP/DOWN/LEFT/RIGHT pulse TOGETHER every 8s
+//           and STOP permanently once user presses any of those buttons
+// ============================================================
+
+let desktopPowerPulseTimer = null;
+let desktopRemotePulseTimer = null;
+
+let desktopRemotePulseArmed = true; // ✅ true until user presses any remote btn while TV ON
+
+function _setRemoteGlow(mesh, on, color) {
+  if (!mesh) return;
+  if (typeof setGlowTarget !== "function") return;
+  if (typeof color === "undefined") return;
+  setGlowTarget(mesh, on, color); // your updateGlow() should do the smoothing fade
+}
+
+// ---- POWER PULSE (TV OFF) ----
+function stopDesktopPowerPulse() {
+  if (desktopPowerPulseTimer) {
+    clearTimeout(desktopPowerPulseTimer);
+    desktopPowerPulseTimer = null;
+  }
+  _setRemoteGlow(powerButtonMeshRef, false, POWER_GLOW_COLOR);
+}
+
+function startDesktopPowerPulse() {
+  if (isIOSDevice()) return;
+  if (!powerButtonMeshRef) return;
+
+  stopDesktopPowerPulse();
+
+  const everyMs = 3600;  // ~3–4s
+  const onMs    = 950;   // ✅ LONGER = visible fade in/out (smooth)
+
+  const tick = () => {
+    // only pulse if TV is OFF
+    if (tvOn) return;
+
+    _setRemoteGlow(powerButtonMeshRef, true, POWER_GLOW_COLOR);
+    setTimeout(() => _setRemoteGlow(powerButtonMeshRef, false, POWER_GLOW_COLOR), onMs);
+
+    desktopPowerPulseTimer = setTimeout(tick, everyMs);
+  };
+
+  tick();
+}
+
+// ---- REMOTE GROUP PULSE (TV ON) ----
+function stopDesktopRemoteOnPulse() {
+  if (desktopRemotePulseTimer) {
+    clearTimeout(desktopRemotePulseTimer);
+    desktopRemotePulseTimer = null;
+  }
+
+  _setRemoteGlow(okButtonMeshRef, false, REMOTE_GLOW_COLOR);
+  _setRemoteGlow(upArrowMeshRef, false, REMOTE_GLOW_COLOR);
+  _setRemoteGlow(downArrowMeshRef, false, REMOTE_GLOW_COLOR);
+  _setRemoteGlow(leftArrowMeshRef, false, REMOTE_GLOW_COLOR);
+  _setRemoteGlow(rightArrowMeshRef, false, REMOTE_GLOW_COLOR);
+}
+
+function startDesktopRemoteOnPulse() {
+  if (isIOSDevice()) return;
+
+  // need the remote meshes ready
+  if (!okButtonMeshRef && !upArrowMeshRef && !downArrowMeshRef && !leftArrowMeshRef && !rightArrowMeshRef) {
+    return;
+  }
+
+  stopDesktopRemoteOnPulse();
+
+  // ✅ When TV turns ON, do NOT flash immediately.
+  // Wait 8s before first pulse (prevents "OK lights when power is pressed")
+  const everyMs = 5000;
+  const onMs    = 900;  // ✅ longer glow window = nicer fades
+
+  const pulseAll = () => {
+    if (!tvOn) return;                // only while TV ON
+    if (!desktopRemotePulseArmed) return; // stop permanently once used
+
+    _setRemoteGlow(okButtonMeshRef, true, REMOTE_GLOW_COLOR);
+    _setRemoteGlow(upArrowMeshRef, true, REMOTE_GLOW_COLOR);
+    _setRemoteGlow(downArrowMeshRef, true, REMOTE_GLOW_COLOR);
+    _setRemoteGlow(leftArrowMeshRef, true, REMOTE_GLOW_COLOR);
+    _setRemoteGlow(rightArrowMeshRef, true, REMOTE_GLOW_COLOR);
+
+    setTimeout(() => {
+      _setRemoteGlow(okButtonMeshRef, false, REMOTE_GLOW_COLOR);
+      _setRemoteGlow(upArrowMeshRef, false, REMOTE_GLOW_COLOR);
+      _setRemoteGlow(downArrowMeshRef, false, REMOTE_GLOW_COLOR);
+      _setRemoteGlow(leftArrowMeshRef, false, REMOTE_GLOW_COLOR);
+      _setRemoteGlow(rightArrowMeshRef, false, REMOTE_GLOW_COLOR);
+    }, onMs);
+
+    desktopRemotePulseTimer = setTimeout(pulseAll, everyMs);
+  };
+
+  // ✅ initial delay
+  desktopRemotePulseTimer = setTimeout(pulseAll, everyMs);
+}
+
+// Call this when user presses OK/Up/Down/Left/Right (while TV ON)
+function markDesktopRemoteUsed() {
+  if (isIOSDevice()) return;
+  if (!tvOn) return;
+
+  desktopRemotePulseArmed = false;
+  stopDesktopRemoteOnPulse();
+}
+
+// Central sync helper (call when TV power toggles or after interactives load)
+function syncDesktopPulseWithTvState() {
+  if (isIOSDevice()) return;
+
+  if (!tvOn) {
+    // TV OFF: power pulses forever, and reset remote pulse for next time
+    desktopRemotePulseArmed = true;
+    stopDesktopRemoteOnPulse();
+    startDesktopPowerPulse();
+  } else {
+    // TV ON: stop power pulsing, start group pulsing (unless already "used")
+    stopDesktopPowerPulse();
+    startDesktopRemoteOnPulse();
+  }
+}
+
 // ✅ DEBUG: draw a dot where the TV screen was clicked (UV->pixel)
 let tvTapDebug = { on: false, x: 0, y: 0, t: 0 };
 
@@ -4820,6 +4946,23 @@ function setPointerFromEvent(e) {
   return true;
 }
 
+function hitIsPicture1(obj) {
+  let o = obj;
+  while (o) {
+    const n  = (o.name || "").toLowerCase();
+    const mn = (o.material?.name || "").toLowerCase();
+    const pn = (o.parent?.name || "").toLowerCase();
+
+    // ✅ ONLY match Picture1 specifically (not generic "picture")
+    if (n.includes("picture1") || mn.includes("picture1") || pn.includes("picture1")) {
+      return true;
+    }
+
+    o = o.parent;
+  }
+  return false;
+}
+
 async function onPointerDown(e) {
   if (isIOSPortraitBlocked()) return;
   if (isIOSDevice()) nudgeIosRemotePulse();
@@ -4827,17 +4970,27 @@ async function onPointerDown(e) {
   raycaster.setFromCamera(pointer, camera);
 
 let hits = [];
+
 if (interactivesRootRef) {
-  hits = raycaster.intersectObject(interactivesRootRef, true);
+  hits = hits.concat(raycaster.intersectObject(interactivesRootRef, true));
 }
-if (!hits.length) {
-  hits = raycaster.intersectObject(anchor, true);
-}
+
+hits = hits.concat(raycaster.intersectObject(anchor, true));
+
+// ✅ choose the closest hit overall
+hits.sort((a, b) => a.distance - b.distance);
+
 if (!hits.length) return;
+
+console.log("HITS:", hits.slice(0, 6).map(h => ({
+  name: h.object.name,
+  mat: h.object.material?.name,
+  dist: h.distance.toFixed(3)
+})));
 
 if (overlayOpen || videoOverlayOpen || modelOverlayOpen) return;
 
-// ✅ Prefer TV screen hit even if it's NOT hits[0] (remote may be closer)
+// ✅ Pick the actual hit object once
 const tvHitInfo =
   (tvScreenMeshRef && hits.length)
     ? hits.find(h => isInHierarchy(h.object, tvScreenMeshRef))
@@ -4845,6 +4998,14 @@ const tvHitInfo =
 
 const hitInfo = tvHitInfo ?? hits[0];
 const hit = hitInfo.object;
+
+// ✅ Picture1 click/tap (check ALL hits, not just closest)
+const picHit = hits.find(h => hitIsPicture1(h.object));
+if (picHit) {
+  console.log("🖼 Picture1 hit:", picHit.object.name);
+  setPicture1Texture(picture1TexIndex + 1);
+  return;
+}
 
 console.log("POINTERDOWN HIT:", hit.name);
 
@@ -4963,11 +5124,22 @@ if (hitIsBoard2(hit)) {
   return;
 }
 
-// ✅ Picture1 click -> cycle textures
-if (hitIsPicture1(hit)) {
-  console.log("🖼 Picture1 hit -> next texture");
-  nextPicture1Texture(+1);
-  return;
+function hitIsPicture1(obj) {
+  let o = obj;
+  while (o) {
+    const n = (o.name || "").toLowerCase();
+    const mn = (o.material?.name || "").toLowerCase();
+    const pn = (o.parent?.name || "").toLowerCase();
+
+    // ✅ match picture plane OR frame OR parent group
+    if (
+      n.includes("picture1") || mn.includes("picture1") || pn.includes("picture1") ||
+      n.includes("picture") || mn.includes("picture")  || pn.includes("picture")
+    ) return true;
+
+    o = o.parent;
+  }
+  return false;
 }
 
   log("🖱️ HIT:", hit.name, "layer:", hit.layers.mask, "parent:", hit.parent?.name);
@@ -4982,30 +5154,35 @@ if (powerButtonMeshRef && isInHierarchy(hit, powerButtonMeshRef)) {
 
 if (okButtonMeshRef && isInHierarchy(hit, okButtonMeshRef)) {
   if (isIOSDevice() && e.pointerType === "touch") iosSoloGlow(okButtonMeshRef);
+    markDesktopRemoteUsed();
   setPressAxisFromHit(okButtonMeshRef, hitInfo);
   setPressTarget(okButtonMeshRef, true);
 }
 
 if (upArrowMeshRef && isInHierarchy(hit, upArrowMeshRef)) {
   if (isIOSDevice() && e.pointerType === "touch") iosSoloGlow(upArrowMeshRef);
+    markDesktopRemoteUsed();
   setPressAxisFromHit(upArrowMeshRef, hitInfo);
   setPressTarget(upArrowMeshRef, true);
 }
 
 if (downArrowMeshRef && isInHierarchy(hit, downArrowMeshRef)) {
   if (isIOSDevice() && e.pointerType === "touch") iosSoloGlow(downArrowMeshRef);
+    markDesktopRemoteUsed();
   setPressAxisFromHit(downArrowMeshRef, hitInfo);
   setPressTarget(downArrowMeshRef, true);
 }
 
 if (leftArrowMeshRef && isInHierarchy(hit, leftArrowMeshRef)) {
   if (isIOSDevice() && e.pointerType === "touch") iosSoloGlow(leftArrowMeshRef);
+    markDesktopRemoteUsed();
   setPressAxisFromHit(leftArrowMeshRef, hitInfo);
   setPressTarget(leftArrowMeshRef, true);
 }
 
 if (rightArrowMeshRef && isInHierarchy(hit, rightArrowMeshRef)) {
   if (isIOSDevice() && e.pointerType === "touch") iosSoloGlow(rightArrowMeshRef);
+    markDesktopRemoteUsed();
   setPressAxisFromHit(rightArrowMeshRef, hitInfo);
   setPressTarget(rightArrowMeshRef, true);
 }
@@ -5420,6 +5597,10 @@ if (!hits.length) {
   return;
 }
 
+// ✅ Picture1 hover must check ALL hits (frame/glass may be closer)
+const picHoverHit = hits.find(h => hitIsPicture1(h.object));
+const hoveringPicture1AllHits = !!picHoverHit;
+
 // ✅ Prefer TV hit for hover too (prevents remote glow while over TV)
 const tvHoverHit =
   (tvScreenMeshRef && hits.length)
@@ -5510,7 +5691,7 @@ const hoveringTvScreen = !!(tvScreenMeshRef && isInHierarchy(hit, tvScreenMeshRe
   if (hitIsBook4(hit)) hoveringBook4 = true;
   if (hitIsDogTag(hit)) hoveringDogTag1 = true;
   if (hitIsBoard2(hit)) hoveringBoard2 = true;
-  if (hitIsPicture1(hit)) hoveringPicture1 = true;
+  if (hoveringPicture1AllHits) hoveringPicture1 = true;
 
   // ✅ CRITICAL: TV hover must not allow remote glow at all
 if (hoveringTvScreen) {
@@ -5766,8 +5947,25 @@ scene.add(pinRight);
   scene.add(underShelfUp);
   scene.add(underShelfUp.target);
 
+  // ============================================================
+// ✅ SHELF CAVITY FILL (adds depth separation)
+// ============================================================
+const shelfFill = new THREE.RectAreaLight(
+  0xd9ecff,     // cool bounce
+  0.35,         // intensity (small!)
+  maxDim * 0.55,
+  maxDim * 0.22
+);
 
-  return { lampKey, lampShadow, rightPush, pinRight, tvFill, remoteBoost, skateAccent, underShelfUp, };
+// place it inside/near the shelf cavity, aimed outward
+shelfFill.position.set(maxDim * -0.06, maxDim * 0.10, maxDim * 0.10);
+shelfFill.lookAt(maxDim * -0.02, maxDim * 0.06, maxDim * -0.10);
+
+// ✅ only affect your accent layer so it doesn't wash walls
+shelfFill.layers.set(LAYER_ACCENT);
+scene.add(shelfFill);
+
+  return { lampKey, lampShadow, rightPush, pinRight, tvFill, remoteBoost, skateAccent, underShelfUp, shelfFill };
 }
 
 // ============================================================
@@ -6463,16 +6661,26 @@ Top_of_Treck1: makePBR({
     { roughness: 1.0, metalness: 0.5}
 ),
 
-Picture1: makePBR({
-    albedo: "./assets/Textures/Picture/01_Picture.jpg",
-    },
-    { roughness: 0.85, metalness: 0.0}
-),
+Picture1: (() => {
+  const m = makePBR(
+    { albedo: "./assets/Textures/Picture/01_Picture1.jpg" },
+    { roughness: 0.95, metalness: 0.0 }
+  );
+
+  // ✅ stop reflections from washing it out / killing contrast
+  m.envMapIntensity = 0.0;
+
+  // ✅ bring “life” back without making it neon
+  m.emissive = new THREE.Color(0xffffff);
+  m.emissiveIntensity = 0.07; // 🔥 tweak 0.15–0.35
+
+  return m;
+})(),
 
 Picture_Frame: makePBR({
     albedo: "./assets/Textures/Picture/Picture Frame Albeto.jpg",
     },
-    { roughness: 0.85, metalness: 0.0}
+    { roughness: 0.0, metalness: 0.0}
 ),
 
 Lamp1: (() => {
@@ -6614,6 +6822,48 @@ BluetoothSpeaker: makePBR(
 };
 
 // ============================================================
+// ✅ WALL DETAIL BOOST (micro-contrast without "brightening")
+// Paste directly under: const materials = { ... };
+// ============================================================
+if (materials.front_wall1) {
+  // small lift so cracks/details show
+  materials.front_wall1.color.multiplyScalar(1.12);
+  // slightly less chalk-flat
+  materials.front_wall1.roughness = Math.min(materials.front_wall1.roughness ?? 1.0, 0.92);
+  if ("envMapIntensity" in materials.front_wall1) materials.front_wall1.envMapIntensity = 0.03;
+  materials.front_wall1.needsUpdate = true;
+}
+
+if (materials.Left_wall1) {
+  materials.Left_wall1.color.multiplyScalar(1.10);
+  materials.Left_wall1.roughness = Math.min(materials.Left_wall1.roughness ?? 1.0, 0.90);
+  if ("envMapIntensity" in materials.Left_wall1) materials.Left_wall1.envMapIntensity = 0.035;
+  materials.Left_wall1.needsUpdate = true;
+}
+
+// ============================================================
+// ✅ Picture1 material tuning (prevents over-bright photos)
+// Paste DIRECTLY after: const materials = { ... };
+// ============================================================
+if (materials.Picture1) {
+  // isolate so nothing else sharing this material gets affected
+  materials.Picture1 = materials.Picture1.clone();
+
+  // kill reflections / IBL on the photo
+  if ("envMapIntensity" in materials.Picture1) materials.Picture1.envMapIntensity = 0.0;
+
+  // make it "paper-like"
+  materials.Picture1.metalness = 0.0;
+  materials.Picture1.roughness = 0.9;
+
+  // reduce brightness without changing your textures
+  materials.Picture1.color.setHex(0xffffff);
+  materials.Picture1.color.multiplyScalar(0.75); // ✅ try 0.70–0.90
+
+  materials.Picture1.needsUpdate = true;
+}
+
+// ============================================================
 // ✅ Picture1 interchangeable textures (01–06)
 // ============================================================
 const PICTURE1_TEXTURES = [
@@ -6654,61 +6904,61 @@ function setPicture1Texture(index) {
   const path = PICTURE1_TEXTURES[picture1TexIndex];
   console.log("🖼 Picture1 texture ->", picture1TexIndex, path);
 
- const tex = loadSRGB(path);
+  const tex = loadSRGB(path);
 
-// ✅ allow UV scaling
-tex.wrapS = THREE.ClampToEdgeWrapping;
-tex.wrapT = THREE.ClampToEdgeWrapping;
+  // ✅ GLTF-safe defaults (you already set flipY=false in loadTexture)
+  tex.wrapS = THREE.ClampToEdgeWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
 
-// --- Picture1 UV framing (safe proportional scale) ---
-const s = 1.0; // 10% smaller, proportional
+  // ✅ CROPPING / FRAMING:
+  // s < 1 zooms IN (crops edges). s > 1 zooms OUT (can reveal borders).
+  const s = 0.92; // ✅ change this (0.88–0.96 usually good)
+  tex.repeat.set(s, s);
 
-tex.wrapS = THREE.ClampToEdgeWrapping;
-tex.wrapT = THREE.ClampToEdgeWrapping;
+  // Center it by default
+  let ox = (1 - s) * 0.5;
+  let oy = (1 - s) * 0.5;
 
-tex.repeat.set(s, s);
+  // ✅ NUDGES MUST BE SMALL because range is only 0..(1-s)
+  // Example: if s=0.92 then (1-s)=0.08, so safe nudges are like ±0.00..0.04
+  const nudgeX = 0.00;
+  const nudgeY = 0.01; // ✅ tiny down/up nudge (try 0.00–0.03)
 
-// start centered
-let ox = (1 - s) * 0.5;
-let oy = (1 - s) * 0.5;
+  ox += nudgeX;
+  oy += nudgeY;
 
-// OPTIONAL: nudge (keep these SMALL, because range is only 0..(1-s))
-const nudgeX = 0.0;
-const nudgeY = -0.4;
+  // Clamp offsets so it never smears/tiles
+  const maxO = 1 - s;
+  ox = Math.max(0, Math.min(maxO, ox));
+  oy = Math.max(0, Math.min(maxO, oy));
 
-ox += nudgeX;
-oy += nudgeY;
+  tex.offset.set(ox, oy);
+  tex.needsUpdate = true;
 
-// clamp offsets to safe range so it never smears/tiles
-const maxO = 1 - s;
-ox = Math.max(0, Math.min(maxO, ox));
-oy = Math.max(0, Math.min(maxO, oy));
+if (materials.Picture1) {
+  materials.Picture1.map = tex;
 
-tex.offset.set(ox, oy);
+  // ✅ CRITICAL: use the SAME texture to gently self-light the photo
+  materials.Picture1.emissiveMap = tex;
 
-tex.needsUpdate = true;
+  materials.Picture1.needsUpdate = true;
+}
 
-tex.needsUpdate = true;
-
-  // Update the shared material
-  if (materials.Picture1) {
-    materials.Picture1.map = tex;
-    materials.Picture1.needsUpdate = true;
-  }
-
-  // ALSO update the actual mesh material (in case it got cloned somewhere)
+  // ✅ ALSO update actual mesh material (handles array or single)
   if (picture1MeshRef && picture1MeshRef.material) {
-    picture1MeshRef.material.map = tex;
-    picture1MeshRef.material.needsUpdate = true;
+    const mat = picture1MeshRef.material;
+
+    if (Array.isArray(mat)) {
+      for (const m of mat) {
+        if (!m) continue;
+        m.map = tex;
+        m.needsUpdate = true;
+      }
+    } else {
+      mat.map = tex;
+      mat.needsUpdate = true;
+    }
   }
-}
-
-function nextPicture1Texture(delta) {
-  setPicture1Texture(picture1TexIndex + delta);
-}
-
-if (materials.Door2 && materials.Door2.color) {
-  materials.Door2.color.multiplyScalar(1.2);
 }
 
 // Darken cigarette materials (Cig1–Cig13)
@@ -6731,7 +6981,7 @@ if (materials.Foot && materials.Foot.color) {
 if (materials.cabnet) {
   darkenMaterial(materials.cabnet, {
     env: 0.0,
-    rough: 1.0,
+    rough: 0.75,
     colorMul: 0.25,
   });
 }
@@ -6848,7 +7098,7 @@ if (
   }
 
   // make it less shiny
-  o.material.roughness = Math.max(o.material.roughness ?? 0.7, 0.95);
+  o.material.roughness = Math.max(o.material.roughness ?? 1.0, 0.90);
 
   // food should not be metallic
   if ("metalness" in o.material) {
@@ -6883,9 +7133,6 @@ if (!grimReaperRef && (n.includes("grim_reaper") || grimMatNameLower.includes("g
           o.material = materials.Picture1;
           o.material.needsUpdate = true;
         }
-
-        // Ensure it starts at texture 01 (index 0)
-        setPicture1Texture(0);
       }
 
           // ✅ CHAIN (clickable)
@@ -6920,15 +7167,28 @@ if (n.includes("door") && o.material && o.material.color) {
   o.material.needsUpdate = true;
 }
 
+// ============================================================
+// ✅ REMOTE — reduce visual dominance (hierarchy control)
+// ============================================================
+if (n.includes("remote") && o.material) {
+  o.material = o.material.clone(); // isolate
 
-      if (n.includes("remote")) {
-  remoteMeshRef = o;
+  // Slightly darken overall
+  if (o.material.color) {
+    o.material.color.multiplyScalar(0.93); // subtle (0.88–0.95)
+  }
 
-  // already used by your accent lights
-  o.layers.enable(LAYER_ACCENT);
+  // Reduce highlight sharpness
+  if ("roughness" in o.material) {
+    o.material.roughness = Math.max(o.material.roughness ?? 0.6, 0.75);
+  }
 
-  // NEW: allow pin light to affect remote
-  o.layers.enable(LAYER_PIN);
+  // Kill excessive reflections
+  if ("envMapIntensity" in o.material) {
+    o.material.envMapIntensity = 0.01;
+  }
+
+  o.material.needsUpdate = true;
 }
 
 if (n.includes("board") || n.includes("skate")) {
@@ -6940,11 +7200,31 @@ if (n.includes("board") || n.includes("skate")) {
   o.layers.enable(LAYER_PIN);
 }
 
+// ============================================================
+// ✅ SHELF CONTENTS: allow depth fill to hit shelf items only
+// (adjust names if needed)
+// ============================================================
+const shelfy =
+  n.includes("book") ||
+  n.includes("dvd") ||
+  n.includes("mask") ||
+  n.includes("cam") ||
+  n.includes("cartridge") ||
+  n.includes("box") ||
+  n.includes("beer") ||
+  n.includes("ash") ||
+  n.includes("glass");
 
-     // ------------------------------------------------------------
-// ✅ MATERIAL ASSIGN (FIXED): do NOT overwrite o.material
-// until AFTER we've tried to match using the ORIGINAL names.
-// ------------------------------------------------------------
+if (shelfy) {
+  o.layers.enable(LAYER_ACCENT); // lets shelfFill light them
+}
+
+// ✅ DO NOT let the generic material assign overwrite Picture1
+if (picture1MeshRef && o === picture1MeshRef) {
+  // keep whatever we forced onto it (materials.Picture1)
+  return;
+}
+
 const originalMatName = o.material?.name;
 const keysToTry = [
   o.name,
@@ -6964,6 +7244,23 @@ for (const k of keysToTry) {
 // ✅ only fallback if nothing matched
 o.material = mat ? mat : fallbackMat;
 
+// ✅ FORCE Picture1 after material assignment so it can't be overwritten
+if (materials.Picture1) {
+  const nn = (o.name || "").toLowerCase();
+  const mm = (originalMatName || "").toLowerCase(); // you already declared originalMatName above
+
+  if (nn.includes("picture1") || mm.includes("picture1")) {
+    picture1MeshRef = o;
+
+    o.material = materials.Picture1;
+    o.material.needsUpdate = true;
+
+    // start at first texture if needed
+    setPicture1Texture(picture1TexIndex);
+
+    console.log("🖼 Picture1 forced material on mesh:", o.name, "origMat:", originalMatName);
+  }
+}
 
       // ✅ Make door more cream colored
 if (n.includes("door") && o.material && o.material.color) {
@@ -6980,15 +7277,102 @@ if (n.includes("door") && o.material && o.material.color) {
   o.material.needsUpdate = true;
 }
 
-      // Global IBL control
-      if (o.material && "envMapIntensity" in o.material) {
-        o.material.envMapIntensity = 0.02;
-      }
+// ============================================================
+// ✅ PICTURE FRAME — brighten + restore detail
+// ============================================================
+if (
+  (n.includes("picture_frame") || n.includes("frame")) &&
+  o.material
+) {
+  o.material = o.material.clone(); // isolate so we don't affect others
+
+  // brighten base color slightly
+  if (o.material.color) {
+    o.material.color.multiplyScalar(1.18); // 🔥 try 1.2–1.5
+  }
+
+  // allow subtle reflections for edge detail
+  if ("envMapIntensity" in o.material) {
+    o.material.envMapIntensity = 0.06; // small reflection
+  }
+
+  // reduce roughness so highlights show shape
+  if ("roughness" in o.material) {
+    o.material.roughness = 0.7; // was likely ~1.0
+  }
+
+  // ensure not metallic unless it actually is
+  if ("metalness" in o.material) {
+    o.material.metalness = 0.0;
+  }
+
+  o.material.needsUpdate = true;
+}
+
+// ============================================================
+// ✅ TV BEZEL (metal around screen) — improve edge definition
+// ============================================================
+if (
+  o.material &&
+  (
+    n.includes("tv") ||
+    n.includes("monitor") ||
+    n.includes("screen_frame") ||
+    n.includes("bezel")
+  ) &&
+  !n.includes("screen")
+) {
+  o.material = o.material.clone();
+
+  // Slight brightness lift
+  if (o.material.color) {
+    o.material.color.multiplyScalar(1.12);
+  }
+
+  // Controlled reflections for edge separation
+  if ("envMapIntensity" in o.material) {
+    o.material.envMapIntensity = 0.08;
+  }
+
+  // Proper metal look
+  if ("roughness" in o.material) {
+    o.material.roughness = 0.45;
+  }
+
+  if ("metalness" in o.material) {
+    o.material.metalness = 0.6;
+  }
+
+  o.material.needsUpdate = true;
+}
+
+if (
+  o.material &&
+  "envMapIntensity" in o.material &&
+  !(
+    n.includes("tv") ||
+    n.includes("monitor") ||
+    n.includes("screen_frame") ||
+    n.includes("bezel")
+  )
+) {
+  o.material.envMapIntensity = 0.012;
+}
 
       o.castShadow = true;
       o.receiveShadow = true;
     ;
     });
+    
+
+      // ✅ FINALIZE Picture1 AFTER traverse so nothing overwrites it
+    if (picture1MeshRef) {
+      if (materials.Picture1) {
+        picture1MeshRef.material = materials.Picture1;
+        picture1MeshRef.material.needsUpdate = true;
+      }
+      setPicture1Texture(picture1TexIndex); // starts at 0 unless changed
+    }
 
    // Center the whole anchor based on the ROOM bounds
 const box = new THREE.Box3().setFromObject(model);
@@ -7020,6 +7404,24 @@ if (isIOSDevice()) {
 
     // Setup lights
     nightLights = setupNightLights(maxDim);
+
+// ============================================================
+// ✅ SHELF DEPTH FILL (subtle, no shadows, helps objects read)
+// Paste directly under: nightLights = setupNightLights(maxDim);
+// ============================================================
+const shelfFill = new THREE.SpotLight(0xffd2a6, 10); // warm low fill
+shelfFill.layers.set(LAYER_ACCENT);
+shelfFill.castShadow = false;
+shelfFill.decay = 2;
+shelfFill.distance = maxDim * 0.55;
+shelfFill.angle = Math.PI / 7;
+shelfFill.penumbra = 1.0;
+
+// Position: slightly inside / above shelf opening
+shelfFill.position.set(maxDim * -0.18, maxDim * 0.14, maxDim * 0.22);
+shelfFill.target.position.set(maxDim * -0.18, maxDim * 0.02, maxDim * -0.32);
+scene.add(shelfFill);
+scene.add(shelfFill.target);
 
     // ============================================================
 // UNDER-SHELF UP LIGHT (THIS is what creates the shadow "upward")
@@ -7470,6 +7872,7 @@ if (isRightArrow) {
     if (o.material && "envMapIntensity" in o.material) {
       o.material.envMapIntensity = 0.02;
     }
+
     o.material.needsUpdate = true;
   } else {
     o.material = fallbackMat;
@@ -7483,6 +7886,7 @@ if (isRightArrow) {
 
 ui.updateMatrixWorld(true);
 console.log("✅ Interactives loaded");
+syncDesktopPulseWithTvState();
 // Force TV to start OFF
 tvOn = false;
 tvAnim = null;
@@ -7507,7 +7911,7 @@ undefined,
 const __endNewMaterials = __beginAsset("New Materials GLB");
 
 newMaterialsLoader.load(
-  "./assets/models/New Materials3.glb",
+  "./assets/models/New Materials5.glb",
   (gltf) => {
     __endNewMaterials();
 
@@ -7800,6 +8204,14 @@ function applyIOSMicroPan() {
   camera.lookAt(fixedCamTarget0.clone().add(targetOff));
 }
 
+// ============================================================
+// ✅ GLOBAL LOOK CONTROL (mood / overall darkness)
+// ============================================================
+const LOOK = {
+  exposure: 0.70, // try 0.88–0.98
+};
+
+
 
 //ANIMATE
 const clock = new THREE.Clock();
@@ -7854,6 +8266,13 @@ const useNightVisionFX =
   composer &&
   nightVisionPass &&
   (MOBILE_PROFILE.postFX || isIOSDevice());
+
+// ============================================================
+// ✅ FORCE TONEMAP + EXPOSURE RIGHT BEFORE RENDER
+// (prevents "it does nothing" from overrides or composer passes)
+// ============================================================
+renderer.toneMapping = THREE.ACESFilmicToneMapping;  // exposure works with this
+renderer.toneMappingExposure = LOOK.exposure;
 
 if (useNightVisionFX) {
   updateNightVisionAutoGain(dt);
