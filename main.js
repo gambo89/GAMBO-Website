@@ -8380,7 +8380,7 @@ function handleResize() {
   const aspect = w / h;
 
   const dpr = window.devicePixelRatio || 1;
-  const maxDpr = isIOS ? 2.2 : 2.0;
+  const maxDpr = isIOS ? 1.5 : 1.75;
   renderer.setPixelRatio(Math.min(dpr, maxDpr));
   renderer.setSize(w, h, true);
 
