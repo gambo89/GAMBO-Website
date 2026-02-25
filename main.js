@@ -6981,7 +6981,7 @@ if (materials.Foot && materials.Foot.color) {
 if (materials.cabnet) {
   darkenMaterial(materials.cabnet, {
     env: 0.0,
-    rough: 0.75,
+    rough: 0.7,
     colorMul: 0.25,
   });
 }
