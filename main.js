@@ -8208,10 +8208,8 @@ function applyIOSMicroPan() {
 // ✅ GLOBAL LOOK CONTROL (mood / overall darkness)
 // ============================================================
 const LOOK = {
-  exposure: 0.70, // try 0.88–0.98
+  exposure: 0.60, // try 0.88–0.98
 };
-
-
 
 //ANIMATE
 const clock = new THREE.Clock();
