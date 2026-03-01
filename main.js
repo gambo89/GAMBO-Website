@@ -9,7 +9,6 @@ import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 
-
 const DEBUG = false;
 const log  = (...args) => DEBUG && console.log(...args);
 const warn = (...args) => DEBUG && console.warn(...args);
@@ -35,6 +34,7 @@ const MOBILE_PROFILE = {
 const LAYER_WORLD = 0;
 const LAYER_ACCENT = 2;
 const LAYER_PIN = 3;
+const LAYER_LAMP = 6;
 
 const DESIGN_W = 1920;
 const DESIGN_H = 1080;
@@ -674,10 +674,10 @@ function setNightVision(on) {
     aeSampleAccum = 0;
     if (nightVisionPass) nightVisionPass.uniforms.uGain.value = aeGain;
 
-    renderer.toneMappingExposure = 1.10;
+    renderer.toneMappingExposure = 1.15;
     hemi.intensity = 0.06;
   } else {
-    renderer.toneMappingExposure = baseExposure ?? 0.8;
+    renderer.toneMappingExposure = baseExposure ?? 0.9;
     hemi.intensity = 0.0;
   }
 
@@ -1392,7 +1392,6 @@ let iosPulseTimer = null;
 let iosPulseOn = false;
 let iosNextPulseAtMs = 0;     // when the next ON pulse should start
 let iosPulseStarted = false;  // helps initialize schedule once
-
 
 function setRemoteGlowPulse(on) {
   if (iosSoloGlowActive) return;
@@ -2316,7 +2315,7 @@ function applyLampMood(mode) {
 
   // pick palettes
   const warm = {
-    lamp: 0xffe2c6,
+    lamp: 0xffe6c8,
     push: 0xffc07a,
     hemiSky: 0x2b3140,
     hemiGround: 0x0b0b0b,
@@ -3452,7 +3451,7 @@ function goBackToTvMenu() {
 // PHOTO GALLERY (draw images to the TV canvas)
 // ============================================================
 const PHOTO_PATHS = [
-  "./assets/Photo/01-sweet.jpg",
+  //"./assets/Photo/01-sweet.jpg",
   "./assets/Photo/02-carti.jpg",
   "./assets/Photo/03-james.jpg",
   "./assets/Photo/04-roof.jpg",
@@ -3578,8 +3577,8 @@ function nextPhoto(delta) {
 // ============================================================
 const VIDEO_PATHS = [
   "./assets/Video/01-sweet93-OG.mp4",
-  "./assets/Video/02-sweet93-chopped.mp4",
-  "./assets/Video/03-sweet93-snow.mp4",
+  //"./assets/Video/02-sweet93-chopped.mp4",
+  //"./assets/Video/03-sweet93-snow.mp4",
 ];
 
 let videoIndex = 0;
@@ -3587,8 +3586,6 @@ let videoEl = null;          // single persistent <video>
 let videoReady = false;      // true once we have dimensions/frames
 let videoPlaying = false;    // our UI state
 let videoWantsAutoPlay = false; 
-
-
 
 function ensureVideoEl() {
   if (videoEl) return;
@@ -3756,7 +3753,6 @@ async function overlayNextVideo(delta) {
     console.warn("overlayNextVideo failed:", e);
   }
 }
-
 
 function drawVideoFrameToTv() {
   if (!videoEl || !videoReady) return;
@@ -4611,7 +4607,6 @@ if (tvUiState === "PHOTO") {
   return false;
 }
 
-
 function openExternal(url) {
   if (!url) return false;
 
@@ -4637,7 +4632,6 @@ function openExternal(url) {
   window.location.assign(url);
   return false;
 }
-
 
 function setTvPower(nextOn) {
   log("setTvPower", nextOn, {
@@ -4713,8 +4707,6 @@ function updateTv() {
     tvScreenScale0.y * (0.985 + 0.015 * a),     // squeeze in Y only
     tvScreenScale0.z
   );
-
-
 
   // emissive animation (OFF -> ON)
   const offI = 0.0;
@@ -5836,22 +5828,27 @@ clearAllButtonPresses();
 function setupNightLights(maxDim) {
   // --- main warm lamp key (rect area) ---
   const lampKey = new THREE.RectAreaLight(
-    0xffe2c6,
-    18,
-    maxDim * 0.12,
-    maxDim * 0.18
-  );
+  0xffffff, // temporary
+  18,
+  maxDim * 0.12,
+  maxDim * 0.18
+);
+
+// 🔧 Desaturate lamp color 15%
+lampKey.color.setHex(0xffe2c6);
+lampKey.color.offsetHSL(0, -0.15, 0);
+
   lampKey.position.set(maxDim * 0.30, maxDim * 0.02, maxDim * 0.18);
   lampKey.lookAt(maxDim * 0.05, maxDim * -0.10, 0);
   scene.add(lampKey);
 
   // --- shadow caster (warm spotlight) ---
-  const lampShadow = new THREE.SpotLight(0xffe2c6, 220);
+  const lampShadow = new THREE.SpotLight(0xffe2c6, 160);
   lampShadow.position.copy(lampKey.position);
   lampShadow.target.position.set(maxDim * 0.05, maxDim * -0.12, 0);
 
-  lampShadow.angle = Math.PI / 8;
-  lampShadow.penumbra = 0.7;
+  lampShadow.angle = Math.PI / 6;
+  lampShadow.penumbra = 0.6;
   lampShadow.decay = 2;
   lampShadow.distance = maxDim *0.9;
 
@@ -6884,6 +6881,46 @@ let picture1TexIndex = 0;
 let picture1MeshRef = null; // will be captured from Main GLB
 let grimReaperRef = null;
 
+// ============================================================
+// ✅ GRIM OPACITY CONTROL (simple transparency)
+// ============================================================
+
+const GRIM_OPACITY = 0.15; // change 0.15–0.6 to taste
+
+function applyGrimOpacity(alpha) {
+  if (!grimReaperRef) return;
+
+  grimReaperRef.traverse((x) => {
+    if (!x.isMesh || !x.material) return;
+
+    // handle multi-material meshes safely
+    const mats = Array.isArray(x.material) ? x.material : [x.material];
+
+    for (let i = 0; i < mats.length; i++) {
+      const original = mats[i];
+      if (!original) continue;
+
+      // clone once so we don't affect other meshes
+      if (!original.userData?.__grimCloned) {
+        const cloned = original.clone();
+        cloned.userData = { ...(original.userData || {}), __grimCloned: true };
+        mats[i] = cloned;
+      }
+    }
+
+    x.material = Array.isArray(x.material) ? mats : mats[0];
+
+    const finalMats = Array.isArray(x.material) ? x.material : [x.material];
+
+    for (const m of finalMats) {
+      m.transparent = true;
+      m.opacity = alpha;
+      m.depthWrite = false; // prevents visual cutouts
+      m.needsUpdate = true;
+    }
+  });
+}
+
 function setGrimVisible(on) {
   if (!grimReaperRef) return;
 
@@ -6981,7 +7018,7 @@ if (materials.Foot && materials.Foot.color) {
 if (materials.cabnet) {
   darkenMaterial(materials.cabnet, {
     env: 0.0,
-    rough: 0.7,
+    rough: 0.75,
     colorMul: 0.25,
   });
 }
@@ -7083,24 +7120,28 @@ if (n.includes("foot") && o.material) {
   o.material.needsUpdate = true;
 }
 
-// ============================================================
-// ✅ FOOD — reduce “too bright” (spec + reflections)
-// ============================================================
+// ✅ FOOD — STOP lamp blowout (darken diffuse + kill reflections)
 if (
   (n.includes("food") || n.includes("popcorn") || n.includes("bowl")) &&
   o.material
 ) {
-  o.material = o.material.clone(); // isolate
+  o.material = o.material.clone(); // isolate (important)
 
-  // reduce reflections
-  if ("envMapIntensity" in o.material) {
-    o.material.envMapIntensity = 0.005;
+  // 1) darken the diffuse response (this is the main brightness fix)
+  if (o.material.color) {
+    o.material.color.setHex(0xffffff);       // reset any tint first
+    o.material.color.multiplyScalar(0.55);   // ✅ try 0.45–0.70
   }
 
-  // make it less shiny
-  o.material.roughness = Math.max(o.material.roughness ?? 1.0, 0.90);
+  // 2) kill strong reflections (often reads as "too bright")
+  if ("envMapIntensity" in o.material) {
+    o.material.envMapIntensity = 0.0;        // ✅ hard stop IBL washout
+  }
 
-  // food should not be metallic
+  // 3) make highlights broader + weaker
+  if ("roughness" in o.material) {
+    o.material.roughness = 1.0;
+  }
   if ("metalness" in o.material) {
     o.material.metalness = 0.0;
   }
@@ -7116,8 +7157,8 @@ const grimMatNameLower = (o.material?.name || "").toLowerCase();
 if (!grimReaperRef && (n.includes("grim_reaper") || grimMatNameLower.includes("grim_reaper"))) {
   grimReaperRef = o;
 
-  // lampMood 0 is your default "normal" state, so start hidden:
-  setGrimVisible(false);
+  applyGrimOpacity(GRIM_OPACITY); // ✅ apply transparency
+  setGrimVisible(false);          // keep your existing visibility logic
 
   console.log("☠️ Grim_reaper captured:", o.name, "| material:", o.material?.name);
 }
@@ -7243,6 +7284,28 @@ for (const k of keysToTry) {
 
 // ✅ only fallback if nothing matched
 o.material = mat ? mat : fallbackMat;
+
+// ============================================================
+// TV SCREEN — subtle cool emissive glow (not frame/bezel)
+// ============================================================
+if (
+  n.includes("screen") &&
+  !n.includes("frame") &&
+  !n.includes("bezel") &&
+  o.material
+) {
+  o.material = o.material.clone(); // isolate from shared mat
+
+  if ("metalness" in o.material) o.material.metalness = 0.0;
+  if ("roughness" in o.material) o.material.roughness = 1.0;
+
+  o.material.color.setHex(0x000000); // keep screen dark
+
+  o.material.emissive = new THREE.Color(0x0a0f1c); // subtle cool blue
+  o.material.emissiveIntensity = 0.4;
+
+  o.material.needsUpdate = true;
+}
 
 // ✅ FORCE Picture1 after material assignment so it can't be overwritten
 if (materials.Picture1) {
@@ -7928,9 +7991,82 @@ newMaterialsLoader.load(
 const nn = (o.name || "").toLowerCase();
 const mm = (o.material?.name || "").toLowerCase();
 
+// ✅ FOOD in New Materials GLB — stop blowout here too
+if (
+  (nn.includes("food") || nn.includes("popcorn") || nn.includes("bowl") ||
+   mm.includes("food") || mm.includes("popcorn") || mm.includes("bowl")) &&
+  o.material
+) {
+  o.material = o.material.clone();
+
+  if (o.material.color) {
+    o.material.color.setHex(0xffffff);
+    o.material.color.multiplyScalar(0.2); // ✅ try 0.45–0.70
+  }
+
+  if ("envMapIntensity" in o.material) {
+    o.material.envMapIntensity = 0.0;
+  }
+
+  if ("roughness" in o.material) o.material.roughness = 1.0;
+  if ("metalness" in o.material) o.material.metalness = 0.0;
+
+  o.material.needsUpdate = true;
+}
+
+// ======================================================
+  // ✅ HIDE FOOT (New Materials GLB)
+  const isFoot =
+    (nn === "foot" || nn.includes("foot") || mm === "foot" || mm.includes("foot")) &&
+    !nn.includes("toe") &&
+    !mm.includes("toe");
+
+  if (isFoot) {
+    o.visible = false;
+    o.castShadow = false;
+    o.receiveShadow = false;
+    o.raycast = () => null;
+
+
+    console.log("🦶 Foot hidden (New Materials):", o.name);
+    return; // 🚨 VERY IMPORTANT — stop here for this mesh
+  }
+
+  // ======================================================
+// ✅ DARKEN FOOD_BOWL (reduce brightness)
+const isFoodBowl =
+  nn.includes("food_bowl") ||
+  nn.includes("foodbowl") ||
+  mm.includes("food_bowl") ||
+  mm.includes("foodbowl");
+
+if (isFoodBowl) {
+  // Clone material so we don't affect shared materials
+  o.material = o.material.clone();
+
+  // Option 1 — safest brightness reduction
+  o.material.color.multiplyScalar(0.3);  // lower = darker (try 0.5–0.8)
+
+  // Option 2 — reduce light response
+  o.material.metalness = 0.0;
+  o.material.roughness = 0.9;
+
+  // Option 3 — reduce env reflections (if you use HDRI)
+  o.material.envMapIntensity = 0.2;
+
+  o.material.toneMapped = true;
+
+  o.material.needsUpdate = true;
+
+  console.log("🥣 Food_Bowl darkened:", o.name);
+}
+
 if (!grimReaperRef && (nn.includes("grim_reaper") || mm.includes("grim_reaper"))) {
   grimReaperRef = o;
-  setGrimVisible(false); // start hidden
+
+  applyGrimOpacity(GRIM_OPACITY); // ✅ apply transparency
+  setGrimVisible(false);
+
   console.log("☠️ Grim_reaper captured (New Materials):", o.name, "| material:", o.material?.name);
 }
 
@@ -8208,7 +8344,7 @@ function applyIOSMicroPan() {
 // ✅ GLOBAL LOOK CONTROL (mood / overall darkness)
 // ============================================================
 const LOOK = {
-  exposure: 0.60, // try 0.88–0.98
+  exposure: 0.55, // try 0.88–0.98
 };
 
 //ANIMATE
@@ -8380,7 +8516,7 @@ function handleResize() {
   const aspect = w / h;
 
   const dpr = window.devicePixelRatio || 1;
-  const maxDpr = isIOS ? 1.5 : 1.75;
+  const maxDpr = isIOS ? 2.2 : 2.0;
   renderer.setPixelRatio(Math.min(dpr, maxDpr));
   renderer.setSize(w, h, true);
 
