@@ -768,14 +768,15 @@ function setInitialCameraFraming(maxDim) {
   baseCamPos = camera.position.clone();
 }
 
-
 // iOS Camera Values ONLY (desktop untouched)
 // Change these numbers to move iOS camera on X / Y / Z
 // ============================================================
 const IOS_CAM = {
-  x: 0.030,    // + = right,  - = left
+    fov: 22.5,
+
+  x: 0.027,    // + = right,  - = left
   y: -0.146,   // + = up,     - = down
-  z: 0.282,    // + = farther, - = closer
+  z: 0.203,    // + = farther, - = closer
 
   targetX: 1.18,
   targetY: -0.186, // multiplied by maxDim below
@@ -783,21 +784,37 @@ const IOS_CAM = {
 };
 
 function setIOSCameraFraming(maxDim) {
+  camera.fov = IOS_CAM.fov;
+  camera.updateProjectionMatrix();
+
   const fov = camera.fov * (Math.PI / 180);
   const baseDist = maxDim / (2 * Math.tan(fov / 2));
 
+  // current iOS camera position
   const camX = maxDim * IOS_CAM.x;
   const camY = maxDim * IOS_CAM.y;
   const camZ = baseDist * IOS_CAM.z;
 
-  const targetX = IOS_CAM.targetX;
-  const targetY = maxDim * IOS_CAM.targetY;
-  const targetZ = IOS_CAM.targetZ;
+  // ORIGINAL iOS baseline values
+  const baseCamX = maxDim * 0.030;
+  const baseCamY = maxDim * -0.146;
+
+  const baseTargetX = 1.18;
+  const baseTargetY = maxDim * -0.186;
+  const baseTargetZ = 0;
+
+  // how far you moved the camera from baseline
+  const dx = camX - baseCamX;
+  const dy = camY - baseCamY;
+
+  // move target by same amount so aim stays the same
+  const targetX = baseTargetX + dx;
+  const targetY = baseTargetY + dy;
+  const targetZ = baseTargetZ;
 
   camera.position.set(camX, camY, camZ);
   camera.lookAt(targetX, targetY, targetZ);
 
-  // keep iOS baseline values separate/safe
   baseCamTarget0 = new THREE.Vector3(targetX, targetY, targetZ);
   baseCamPos = camera.position.clone();
 }
