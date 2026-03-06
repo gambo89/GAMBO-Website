@@ -236,7 +236,6 @@ window.addEventListener("unhandledrejection", (e) => {
 
 let composer = null;
 let nightVisionPass = null;
-let screenBreathPass = null; // ✅ NEW (breathing without camera movement)
 let baseExposure = renderer.toneMappingExposure;
 
 
@@ -702,22 +701,6 @@ const camera = new THREE.PerspectiveCamera(
   1000000
 );
 
-function adjustCameraForMobile() {
-  const aspect = window.innerWidth / window.innerHeight;
-
-  // if screen is tall (portrait iPhone)
-  if (aspect < 1.2) {
-    camera.fov = 45;   // try 38–45 (40 is a great starting point)
-  } else {
-    camera.fov = 32.5; // your original desktop value
-  }
-
-  camera.aspect = aspect;
-  camera.updateProjectionMatrix();
-}
-
-adjustCameraForMobile();
-
 // ============================================================
 // ✅ Composer render target (critical for iOS quality)
 // Replace your composer creation block with this
@@ -754,20 +737,13 @@ if (MOBILE_PROFILE.postFX || isIOSDevice()) {
   nightVisionPass = null;
 }
 
-// ============================================================
-// SUBTLE "FIRST PERSON" BREATHING CAMERA MOTION ✅
-// (translation only — no rotation = no nausea)
-// ============================================================
-let baseCamPos = null; // will be set after you position the camera
+let baseCamPos = null; 
 let baseCamPos0 = null;
 let baseCamDir0 = null;
 let baseCamFov0 = null;
-let baseCamTarget0 = null; // ✅ NEW: the lookAt point we want to keep
+let baseCamTarget0 = null; 
 
-// ============================================================
-// ✅ ONE TRUE CAMERA FRAMING FUNCTION (no iOS offsets)
-// Call this ONLY after viewport is correct.
-// ============================================================
+// Desktop Camera Values
 function setInitialCameraFraming(maxDim) {
   // keep your original FOV
   const fov = camera.fov * (Math.PI / 180);
@@ -793,6 +769,39 @@ function setInitialCameraFraming(maxDim) {
 }
 
 
+// iOS Camera Values ONLY (desktop untouched)
+// Change these numbers to move iOS camera on X / Y / Z
+// ============================================================
+const IOS_CAM = {
+  x: 0.030,    // + = right,  - = left
+  y: -0.146,   // + = up,     - = down
+  z: 0.282,    // + = farther, - = closer
+
+  targetX: 1.18,
+  targetY: -0.186, // multiplied by maxDim below
+  targetZ: 0,
+};
+
+function setIOSCameraFraming(maxDim) {
+  const fov = camera.fov * (Math.PI / 180);
+  const baseDist = maxDim / (2 * Math.tan(fov / 2));
+
+  const camX = maxDim * IOS_CAM.x;
+  const camY = maxDim * IOS_CAM.y;
+  const camZ = baseDist * IOS_CAM.z;
+
+  const targetX = IOS_CAM.targetX;
+  const targetY = maxDim * IOS_CAM.targetY;
+  const targetZ = IOS_CAM.targetZ;
+
+  camera.position.set(camX, camY, camZ);
+  camera.lookAt(targetX, targetY, targetZ);
+
+  // keep iOS baseline values separate/safe
+  baseCamTarget0 = new THREE.Vector3(targetX, targetY, targetZ);
+  baseCamPos = camera.position.clone();
+}
+
 // ============================================================
 // ✅ FIXED CAMERA BASELINE (never changes after boot)
 // ============================================================
@@ -816,16 +825,6 @@ function captureFixedCameraBaseline() {
   fixedCamCaptured = true;
   console.log("✅ Fixed camera baseline captured");
 }
-
-// ============================================================
-// CALM BREATHING PRESET ✅ (slow + grounded)
-// ============================================================
-const BREATH = {
-  speed: 0.07,   // ⬅️ very slow breathing (~8–9 sec per cycle)
-  yAmp: 0.0014,  // ⬅️ softer vertical motion
-  zAmp: 0.0006,  // ⬅️ barely perceptible sway
-  xAmp: 0.00025, // ⬅️ subtle body drift
-};
 
 // Layers: 0 = normal world, 2 = “accent only” objects (remote, skateboard)
 camera.layers.enable(LAYER_WORLD);
@@ -991,35 +990,6 @@ const S = dt * 60;
   }
 
   dustGeo.attributes.position.needsUpdate = true;
-}
-
-// ============================================================
-// CAMERA BREATHING UPDATE ✅
-// ============================================================
-function updateBreathing() {
-  // wait until we have a base position saved
-  if (!baseCamPos) return;
-
-  const t = performance.now() * 0.001;
-
-  // main breath (sin wave)
-  const b = Math.sin(t * Math.PI * 2 * BREATH.speed);
-
-  // slower posture sway so it doesn't feel like a loop
-  const s = Math.sin(t * 0.55);
-
-  // ✅ scale by room size so it stays subtle in any scene
-  const scale = Math.max(0.15, roomMaxDim);
-
-  const y = b * BREATH.yAmp * scale;
-  const z = b * BREATH.zAmp * scale;
-  const x = s * BREATH.xAmp * scale;
-
-  camera.position.set(
-    baseCamPos.x + x,
-    baseCamPos.y + y,
-    baseCamPos.z + z
-  );
 }
 
 // ENVIRONMENT (IBL)
@@ -2796,7 +2766,12 @@ function refitCameraAfterViewportChange() {
   if (!__roomMaxDimForCamera) return;
 
   applyVisibleViewportToRendererAndCamera();
-  setInitialCameraFraming(__roomMaxDimForCamera);
+
+  if (isIOSDevice()) {
+    setIOSCameraFraming(__roomMaxDimForCamera);
+  } else {
+    setInitialCameraFraming(__roomMaxDimForCamera);
+  }
 }
 
 if (isIOS && window.visualViewport) {
@@ -4325,29 +4300,6 @@ function isIOSPortraitBlocked() {
   return isIOSDevice() && !isLandscapeNow();
 }
 
-// ============================================================
-// ✅ iOS LANDSCAPE FRAMING FIX
-// Match desktop-like horizontal crop on ultra-wide iPhone landscape
-// ============================================================
-const DESKTOP_REF_ASPECT = 16 / 9; // what you want iPhone to "feel like"
-
-function applyIOSLandscapeFovFix(camera, aspect) {
-  if (!isIOSDevice()) return;
-  if (!isLandscapeNow()) return;
-  if (baseCamFov0 == null) return;
-
-  // Convert your baseline (desktop-ish) vertical FOV to a reference horizontal FOV
-  const refVFovRad = THREE.MathUtils.degToRad(baseCamFov0);
-  const refHFovRad = 2 * Math.atan(Math.tan(refVFovRad / 2) * DESKTOP_REF_ASPECT);
-
-  // Now compute the vertical FOV needed to keep the SAME horizontal FOV on this (wider) screen
-  const newVFovRad = 2 * Math.atan(Math.tan(refHFovRad / 2) / aspect);
-  const newVFovDeg = THREE.MathUtils.radToDeg(newVFovRad);
-
-  camera.fov = newVFovDeg;
-}
-
-
 function isInHierarchy(obj, target) {
   let o = obj;
   while (o) {
@@ -5417,121 +5369,6 @@ if (isIOSDevice()) {
   });
 }
 
-// ============================================================
-// ✅ iOS MICRO-PAN (1-finger drag) — VERY SUBTLE
-// Put directly under: renderer.domElement.addEventListener("pointerdown", onPointerDown);
-// ============================================================
-renderer.domElement.style.touchAction = "none"; // prevent page scroll / Safari rubber band
-
-const IOS_MICROPAN = {
-  // how far the user can pan (world units scaled by roomMaxDim)
-  maxWorld: 0.020,      // ✅ subtle (try 0.015–0.03)
-  // how quickly the pan follows finger
-  follow: 0.12,         // ✅ smoothing toward desired
-  // how quickly it returns to center after release
-  return: 0.10,         // ✅ smoothing back to 0
-  // how many px you can move before we consider it a "drag" (not a tap)
-  dragThresholdPx: 8,
-};
-
-let iosPanActive = false;
-let iosPanDragging = false;
-
-let iosPanStart = { x: 0, y: 0 };
-let iosPanDesired = { x: 0, y: 0 }; // normalized -1..1
-let iosPanNow = { x: 0, y: 0 };     // smoothed -1..1
-
-function _clamp01(v, a, b) {
-  return Math.max(a, Math.min(b, v));
-}
-
-// Start tracking 1-finger touch drag (pointer events)
-renderer.domElement.addEventListener("pointerdown", (e) => {
-  if (!isIOSDevice()) return;
-  if (e.pointerType !== "touch") return;
-  if (overlayOpen || videoOverlayOpen || modelOverlayOpen) return;
-
-  if (tvScreenMeshRef) {
-    if (!setPointerFromEvent(e)) return;
-    raycaster.setFromCamera(pointer, camera);
-
-    let hits = [];
-    if (interactivesRootRef) {
-      hits = raycaster.intersectObject(interactivesRootRef, true);
-    }
-    if (!hits.length) {
-      hits = raycaster.intersectObject(anchor, true);
-    }
-
-    if (hits.length && isInHierarchy(hits[0].object, tvScreenMeshRef)) return;
-  }
-
-  iosPanActive = true;
-  iosPanDragging = false;
-
-  iosPanStart.x = e.clientX;
-  iosPanStart.y = e.clientY;
-
-  // capture this pointer so moves keep coming even if finger leaves canvas
-  try { renderer.domElement.setPointerCapture(e.pointerId); } catch {}
-
-}, { passive: true });
-
-renderer.domElement.addEventListener("pointermove", (e) => {
-  if (!isIOSDevice()) return;
-  if (!iosPanActive) return;
-  if (e.pointerType !== "touch") return;
-
-  const dxPx = e.clientX - iosPanStart.x;
-  const dyPx = e.clientY - iosPanStart.y;
-
-  // Only become a "drag" if movement is beyond threshold (so taps still work)
-  if (!iosPanDragging) {
-    if (Math.abs(dxPx) < IOS_MICROPAN.dragThresholdPx && Math.abs(dyPx) < IOS_MICROPAN.dragThresholdPx) {
-      return;
-    }
-    iosPanDragging = true;
-  }
-
-  const w = Math.max(1, window.innerWidth);
-  const h = Math.max(1, window.innerHeight);
-
-  // normalize to -1..1 range (small)
-  const nx = _clamp01(dxPx / w, -1, 1);
-  const ny = _clamp01(dyPx / h, -1, 1);
-
-  // finger right -> pan right, finger down -> pan down (invert if you want)
-  iosPanDesired.x = nx;
-  iosPanDesired.y = ny;
-
-  // IMPORTANT: only prevent default once we're dragging
-  // (prevents Safari page scroll)
-  e.preventDefault();
-
-}, { passive: false });
-
-function _endIOSPan() {
-  iosPanActive = false;
-  iosPanDragging = false;
-
-  // ease back to center
-  iosPanDesired.x = 0;
-  iosPanDesired.y = 0;
-}
-
-renderer.domElement.addEventListener("pointerup", (e) => {
-  if (!isIOSDevice()) return;
-  if (e.pointerType !== "touch") return;
-  _endIOSPan();
-}, { passive: true });
-
-renderer.domElement.addEventListener("pointercancel", (e) => {
-  if (!isIOSDevice()) return;
-  if (e.pointerType !== "touch") return;
-  _endIOSPan();
-}, { passive: true });
-
-
 renderer.domElement.addEventListener("pointerup", () => {
   // ✅ If something was queued on pointerdown, open it now
   if (pendingExternalUrl) {
@@ -5843,12 +5680,12 @@ lampKey.color.offsetHSL(0, -0.15, 0);
   scene.add(lampKey);
 
   // --- shadow caster (warm spotlight) ---
-  const lampShadow = new THREE.SpotLight(0xffe2c6, 160);
+  const lampShadow = new THREE.SpotLight(0xffe2c6, 75);
   lampShadow.position.copy(lampKey.position);
   lampShadow.target.position.set(maxDim * 0.05, maxDim * -0.12, 0);
 
-  lampShadow.angle = Math.PI / 6;
-  lampShadow.penumbra = 0.6;
+  lampShadow.angle = Math.PI / 5.5;
+  lampShadow.penumbra = 0.95;
   lampShadow.decay = 2;
   lampShadow.distance = maxDim *0.9;
 
@@ -6688,7 +6525,8 @@ Lamp1: (() => {
 
   // emission glow BUT texture stays visible
   m.emissive = new THREE.Color(0xffb45a);      // warm glow color
-  m.emissiveIntensity = 2;                  // keep low so texture still shows
+  m.emissiveIntensity = 2.0;                  // keep low so texture still shows
+  m.emissive.offsetHSL(0, -0.07, 0);
   m.emissiveMap = m.map;                       // uses the lamp texture as the glow pattern
   m.toneMapped = true;
   return m;
@@ -7130,7 +6968,7 @@ if (
   // 1) darken the diffuse response (this is the main brightness fix)
   if (o.material.color) {
     o.material.color.setHex(0xffffff);       // reset any tint first
-    o.material.color.multiplyScalar(0.55);   // ✅ try 0.45–0.70
+    o.material.color.multiplyScalar(0.45);   // ✅ try 0.45–0.70
   }
 
   // 2) kill strong reflections (often reads as "too bright")
@@ -7452,17 +7290,12 @@ roomMaxDim = maxDim;
 __roomMaxDimForCamera = roomMaxDim;
 
 if (isIOSDevice()) {
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      applyVisibleViewportToRendererAndCamera();
-      setInitialCameraFraming(roomMaxDim);
-      captureBreathBaseline();
-    });
-  });
+  applyVisibleViewportToRendererAndCamera();
+  setIOSCameraFraming(roomMaxDim);
 } else {
+  // ✅ Desktop stays EXACTLY the same
   applyVisibleViewportToRendererAndCamera();
   setInitialCameraFraming(roomMaxDim);
-  captureBreathBaseline();
 }
 
     // Setup lights
@@ -7573,10 +7406,7 @@ lampMeshRef = (() => {
       nightLights.skateAccent.target.position.copy(skatePos);
       nightLights.skateAccent.target.updateMatrixWorld(true);
     }
-
-    // ============================================================
-    // CAMERA (keeps your same framing logic)
-    // ============================================================
+    
     const fov = camera.fov * (Math.PI / 180);
     const baseDist = maxDim / (2 * Math.tan(fov / 2));
 
@@ -7587,36 +7417,6 @@ lampMeshRef = (() => {
     const targetX = 1.18;
     const targetY = maxDim * -0.186;
     const targetZ = 0;
-
-    // ✅ iOS-only framing tweaks (landscape)
-const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-              (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-
-let iosCamYOff = 0;
-let iosCamZOff = 0;
-let iosTargetYOff = 0;
-let iosCamXOff = 0;
-
-if (isiOS) {
-  iosCamXOff = maxDim * -0.01;
-  iosCamYOff = maxDim * +0.0005;   // small nudge down
-  iosCamZOff = maxDim * +0.05;   // small nudge closer
-  iosTargetYOff = maxDim * -0.04;
-}
-
-
-  camera.position.set(
-  camX + iosCamXOff,
-  camY + iosCamYOff,
-  camZ + iosCamZOff
-);
-
-camera.lookAt(
-  targetX,
-  targetY + iosTargetYOff,
-  targetZ
-);
-
 
     // ✅ NEW: store the exact target we framed for desktop
     baseCamTarget0 = new THREE.Vector3(targetX, targetY, targetZ);
@@ -7655,8 +7455,7 @@ setTimeout(() => {
   // ✅ NOW that the final resize has happened, lock the “never move” camera
   captureFixedCameraBaseline();
 
-  // ✅ Make breathing start from the locked pose
-  captureBreathBaseline();
+
 }, 260);
 
   },
@@ -8041,24 +7840,29 @@ const isFoodBowl =
   mm.includes("foodbowl");
 
 if (isFoodBowl) {
-  // Clone material so we don't affect shared materials
   o.material = o.material.clone();
 
-  // Option 1 — safest brightness reduction
-  o.material.color.multiplyScalar(0.3);  // lower = darker (try 0.5–0.8)
+  // ✅ Keep bowl readable (don’t over-darken)
+  if (o.material.color) {
+    o.material.color.setHex(0xffffff);
+    o.material.color.multiplyScalar(0.45); // try 0.65–0.85
+  }
 
-  // Option 2 — reduce light response
-  o.material.metalness = 0.0;
-  o.material.roughness = 0.9;
+  // ✅ Kill lamp “hot highlights”
+  if ("metalness" in o.material) o.material.metalness = 0.0;
+  if ("roughness" in o.material) o.material.roughness = 1.0;
 
-  // Option 3 — reduce env reflections (if you use HDRI)
-  o.material.envMapIntensity = 0.2;
+  // ✅ This is the big one: removes sharp reflective hits (IBL/specular)
+  if ("envMapIntensity" in o.material) o.material.envMapIntensity = 0.0;
 
-  o.material.toneMapped = true;
+  // ✅ If it’s MeshPhysicalMaterial, also kill extra gloss features
+  if ("clearcoat" in o.material) o.material.clearcoat = 0.0;
+  if ("clearcoatRoughness" in o.material) o.material.clearcoatRoughness = 1.0;
+  if ("sheen" in o.material) o.material.sheen = 0.0;
 
   o.material.needsUpdate = true;
 
-  console.log("🥣 Food_Bowl darkened:", o.name);
+  console.log("🥣 Food_Bowl highlight reduced:", o.name);
 }
 
 if (!grimReaperRef && (nn.includes("grim_reaper") || mm.includes("grim_reaper"))) {
@@ -8124,227 +7928,10 @@ if (!grimReaperRef && (nn.includes("grim_reaper") || mm.includes("grim_reaper"))
 );
 
 // ============================================================
-// ✅ BREATHING (subtle always + deeper breath every ~10s)
-// - consistent across normal + night vision (camera motion only)
-// ============================================================
-
-// baseline capture (you already call captureBreathBaseline() after camera setup)
-const baseCamQuat = new THREE.Quaternion();
-let baseCamFov = camera.fov;
-let breathBaselineCaptured = false;
-
-function captureBreathBaseline() {
-  baseCamQuat.copy(camera.quaternion);
-  baseCamFov = camera.fov;
-  breathBaselineCaptured = true;
-}
-
-const BREATH3 = {
-  // subtle continuous breath
-  baseCycle: 12.0,      // slower (seconds per cycle)
-  baseJitter: 0.4,      // less variation
-  baseAmount: 0.55,     // master multiplier (overall strength)
-
-  // ✅ disable deep breaths entirely
-  deepEvery: 99999.0,
-  deepJitter: 0.0,
-  deepStrength: 1.0,
-  deepInhale: 1.3,
-  deepExhale: 2.6,
-  deepHold: 0.25,
-
-  // motion amplitudes (multiplied by roomMaxDim scale)
-  posY: 0.00045,
-  posX: 0.00008,
-  posZ: 0.00018,
-
-  // ✅ kill rotation (this is what makes it feel like “fighting”)
-  yaw:   0.0,
-  pitch: 0.0,
-  roll:  0.0,
-};
-
-
-let _tBreath = 0;
-
-// deep-breath scheduler/state
-let _nextDeepAt = 0;
-let _deepState = "idle"; // "idle" | "inhale" | "hold" | "exhale"
-let _deepT = 0;
-let _deepAmp = 0;
-
-function _randRange(a, b) {
-  return a + Math.random() * (b - a);
-}
-
-function _smoothstep(x) {
-  x = Math.max(0, Math.min(1, x));
-  return x * x * (3 - 2 * x);
-}
-
-// inhale -> tiny hold -> exhale envelope
-function updateDeepBreath(dt, now) {
-  if (_nextDeepAt === 0) {
-    _nextDeepAt = now + BREATH3.deepEvery + _randRange(-BREATH3.deepJitter, BREATH3.deepJitter);
-  }
-
-  if (_deepState === "idle" && now >= _nextDeepAt) {
-    _deepState = "inhale";
-    _deepT = 0;
-  }
-
-  if (_deepState === "idle") {
-    _deepAmp += (0 - _deepAmp) * 0.08;
-    return _deepAmp;
-  }
-
-  _deepT += dt;
-
-  if (_deepState === "inhale") {
-    const u = _deepT / Math.max(1e-5, BREATH3.deepInhale);
-    _deepAmp = _smoothstep(u);
-    if (u >= 1) {
-      _deepState = "hold";
-      _deepT = 0;
-    }
-  } else if (_deepState === "hold") {
-    _deepAmp = 1.0;
-    if (_deepT >= BREATH3.deepHold) {
-      _deepState = "exhale";
-      _deepT = 0;
-    }
-  } else if (_deepState === "exhale") {
-    const u = _deepT / Math.max(1e-5, BREATH3.deepExhale);
-    _deepAmp = 1.0 - _smoothstep(u);
-    if (u >= 1) {
-      _deepState = "idle";
-      _deepT = 0;
-      _nextDeepAt =
-        now + BREATH3.deepEvery + _randRange(-BREATH3.deepJitter, BREATH3.deepJitter);
-    }
-  }
-
-  return _deepAmp;
-}
-
-// ============================================================
-// ✅ BREATHING DOESN'T FIGHT THE USER
-// Fade breathing OUT while the user interacts, fade back IN after.
-// ============================================================
-let lastUserInputMs = performance.now();
-let breathMix = 1.0; // 1 = full breathing, 0 = no breathing
-
-const BREATH_INPUT = {
-  fadeOutSpeed: 0.18,   // faster fade out (during interaction)
-  fadeInSpeed: 0.06,    // slower fade in (after idle)
-  idleDelayMs: 650,     // how long after input before breathing returns
-  minWhileActive: 0.0,  // breathing amount while active (0 = fully off)
-};
-
-function markUserInput() {
-  lastUserInputMs = performance.now();
-}
-
-// treat these as “user controlling the camera / attention”
-window.addEventListener("pointerdown", markUserInput, { passive: true });
-window.addEventListener("pointermove", markUserInput, { passive: true });
-window.addEventListener("wheel", markUserInput, { passive: true });
-window.addEventListener("keydown", markUserInput, { passive: true });
-window.addEventListener("touchstart", markUserInput, { passive: true });
-window.addEventListener("touchmove", markUserInput, { passive: true });
-
-function updateBreath2(dt) {
-  if (!breathBaselineCaptured || !baseCamPos) return;
-
-  const now = performance.now() * 0.001;
-
-    // ✅ fade breathing based on recent user input
-  const msSinceInput = performance.now() - lastUserInputMs;
-  const targetMix = (msSinceInput < BREATH_INPUT.idleDelayMs)
-    ? BREATH_INPUT.minWhileActive
-    : 1.0;
-
-  const mixSpeed = (targetMix < breathMix)
-    ? BREATH_INPUT.fadeOutSpeed
-    : BREATH_INPUT.fadeInSpeed;
-
-  breathMix += (targetMix - breathMix) * mixSpeed;
-
-
-  // scale by room size so it stays subtle across differently-sized scenes
-  const scale = Math.max(0.15, roomMaxDim);
-
-  // continuous baseline breathing
-  const cycle = BREATH3.baseCycle + Math.sin(now * 0.13) * BREATH3.baseJitter * 0.35;
-  _tBreath += dt * (Math.PI * 2) / Math.max(0.001, cycle);
-
-  const baseEase = 0.5 - 0.5 * Math.cos(_tBreath); // 0..1
-  const sway = Math.sin(_tBreath * 0.63 + 1.1);
-
-  // deeper breath pulse every ~10s
-  const deepEnv = updateDeepBreath(dt, now);
-
-  // baseline always + boosted inhale/exhale during deep event
-  const breath01 = baseEase * (1.0 + deepEnv * (BREATH3.deepStrength - 1.0));
-
-  const breathSigned = (breath01 - 0.5) * 2.0;
-
-  // POSITION
-  const yBob = breathSigned * BREATH3.posY * scale;
-  const zBob = (breathSigned * 0.70 + sway * 0.30) * BREATH3.posZ * scale;
-  const xBob = sway * BREATH3.posX * scale;
-
-  camera.position.set(
-    baseCamPos.x + xBob,
-    baseCamPos.y + yBob,
-    baseCamPos.z + zBob
-  );
-
-  // ROTATION (very subtle)
-  const yaw   = (sway * 0.65 + breathSigned * 0.35) * BREATH3.yaw;
-  const pitch = breathSigned * BREATH3.pitch * 0.85;
-  const roll  = sway * BREATH3.roll;
-
-  const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(pitch, yaw, roll, "YXZ"));
-  camera.quaternion.copy(baseCamQuat).multiply(q);
-
-  // keep FOV stable
-  camera.fov = baseCamFov;
-}
-
-function applyIOSMicroPan() {
-  if (!fixedCamCaptured) return;
-  if (!isIOSDevice()) return;
-  if (!roomMaxDim) return;
-  if (!fixedCamCaptured) return;
-
-  // Smooth toward desired
-  const k = iosPanActive ? IOS_MICROPAN.follow : IOS_MICROPAN.return;
-  iosPanNow.x += (iosPanDesired.x - iosPanNow.x) * k;
-  iosPanNow.y += (iosPanDesired.y - iosPanNow.y) * k;
-
-  const amt = roomMaxDim * IOS_MICROPAN.maxWorld;
-
-  // IMPORTANT: use the FIXED quaternion basis (not current)
-  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(fixedCamQuat0);
-  const up    = new THREE.Vector3(0, 1, 0).applyQuaternion(fixedCamQuat0);
-
-  const off = new THREE.Vector3()
-    .addScaledVector(right,  iosPanNow.x * amt)
-    .addScaledVector(up,    -iosPanNow.y * amt);
-
-  // Apply offset on top of fixed pose
-  camera.position.copy(fixedCamPos0).add(off);
-
-  const targetOff = off.clone().multiplyScalar(0.65);
-  camera.lookAt(fixedCamTarget0.clone().add(targetOff));
-}
-
-// ============================================================
 // ✅ GLOBAL LOOK CONTROL (mood / overall darkness)
 // ============================================================
 const LOOK = {
-  exposure: 0.55, // try 0.88–0.98
+  exposure: 0.7, // try 0.88–0.98
 };
 
 //ANIMATE
@@ -8366,8 +7953,6 @@ if (bugMixer) bugMixer.update(dt);
     updateGlow();
     updatePress();
   }
-
-    applyIOSMicroPan(); // ✅ iOS subtle pan
 
  // ✅ Throttle TV redraw so it doesn't hammer performance
 if (!window.__tvRedrawAcc) window.__tvRedrawAcc = 0;
@@ -8447,61 +8032,6 @@ document.head.appendChild(grainStyle);
 let renderW = window.innerWidth;
 let renderH = window.innerHeight;
 
-// ============================================================
-// ✅ CAMERA BOOT ONCE (fixes "wrong view until refresh")
-// Put ABOVE: function handleResize()
-// ============================================================
-let __cameraBooted = false;
-
-// returns stable viewport size (waits until Safari settles)
-async function waitForStableViewport() {
-  if (!window.visualViewport) return;
-
-  let lastW = -1, lastH = -1;
-  let stableCount = 0;
-
-  while (stableCount < 3) {
-    await new Promise((r) => requestAnimationFrame(r));
-
-    const w = Math.round(window.visualViewport.width);
-    const h = Math.round(window.visualViewport.height);
-
-    // consider stable if it stays the same for a few frames
-    if (Math.abs(w - lastW) <= 1 && Math.abs(h - lastH) <= 1) stableCount++;
-    else stableCount = 0;
-
-    lastW = w; lastH = h;
-  }
-
-  // give Safari one more beat (address bar)
-  await new Promise((r) => setTimeout(r, 120));
-}
-
-async function bootCameraOnce(maxDim) {
-  if (__cameraBooted) return;
-  __cameraBooted = true;
-
-  // 1) wait for viewport to settle (iOS first-load issue)
-  await waitForStableViewport();
-
-  // 2) run ONE clean resize pass (sets renderer + camera aspect correctly)
-  handleResize();
-
-  // 3) now frame the camera using correct bounds + correct aspect
-  setInitialCameraFraming(maxDim);
-
-  // 4) capture baselines AFTER framing
-  captureBreathBaseline();
-
-  // 5) if you use "fixedCamCaptured" restore logic, lock it NOW
-  if (typeof fixedCamPos0 !== "undefined") {
-    fixedCamPos0.copy(camera.position);
-    fixedCamQuat0.copy(camera.quaternion);
-    fixedCamFov0 = camera.fov;
-    fixedCamCaptured = true;
-  }
-}
-
 function handleResize() {
   if (!renderer || !renderer.domElement) return;
   if (!camera) return;
@@ -8521,16 +8051,6 @@ function handleResize() {
   renderer.setSize(w, h, true);
 
   viewX = 0; viewY = 0; viewW = w; viewH = h;
-
-  if (fixedCamCaptured) {
-    camera.position.copy(fixedCamPos0);
-    camera.quaternion.copy(fixedCamQuat0);
-    camera.fov = fixedCamFov0;
-
-    applyIOSLandscapeFovFix(camera, aspect);
-
-    if (fixedCamTarget0) camera.lookAt(fixedCamTarget0);
-  }
 
   camera.aspect = aspect;
   camera.updateProjectionMatrix();
