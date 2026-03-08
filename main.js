@@ -44,8 +44,8 @@ const BASE_ASPECT = DESIGN_ASPECT;
 let baseFovDeg = 0;          // ✅ numeric default
 let baseFovCaptured = false; // ✅ add this
 
-// current viewport inside the full canvas
 let viewX = 0, viewY = 0, viewW = window.innerWidth, viewH = window.innerHeight;
+
 
 const canvas = document.querySelector("#c");
 if (!canvas) throw new Error('Canvas "#c" not found. Check your HTML id="c".');
@@ -772,18 +772,18 @@ function setInitialCameraFraming(maxDim) {
 const IOS_CAM = {
     fov: 22,
 
-  x: 0.027,    // + = right,  - = left
-  y: -0.146,   // + = up,     - = down
+  x: 0.02,    // + = right,  - = left
+  y: -0.148,   // + = up,     - = down
   z: 0.228,    // + = farther, - = closer
 
   targetX: 1.18,
-  targetY: -0.186, // multiplied by maxDim below
+  targetY: -0.155, // multiplied by maxDim below
   targetZ: 0,
 };
 
 const IOS_LAMP = {
   scale: 1.0,
-  x: 1.6,
+  x: 1.4,
   y: 0.2,
   z: 0.0,
 };
@@ -1497,9 +1497,13 @@ const POWER_GLOW_INTENSITY  = 0.50;  // slightly stronger but still subtle
 
 const GLOW_TINT_STRENGTH = 0.20;
 
-const GLOW_LERP_IN  = 0.22; // normal fade in
-const GLOW_LERP_OUT = 0.22; // normal fade out (non-power)
+const GLOW_LERP_IN  = 0.22; // default fade in
+const GLOW_LERP_OUT = 0.22; // default fade out (non-power)
 const POWER_GLOW_LERP_OUT = 0.45; // faster power fade out
+
+// ✅ Remote nav buttons: slower / softer like iOS
+const REMOTE_NAV_GLOW_LERP_IN  = 0.10;
+const REMOTE_NAV_GLOW_LERP_OUT = 0.10;
 const MAX_GLOW_HOVER_MS = 2000;
 
 const glowState = new Map(); 
@@ -1587,10 +1591,10 @@ function clearAllButtonGlows() {
 // ✅ iOS REMOTE "ATTENTION PULSE"
 // ============================================================
 const IOS_PULSE_ON_MS  = 2000;
-const IOS_PULSE_OFF_MS = 8000;
+const IOS_PULSE_OFF_MS = 3000;
 
 const IOS_POWER_ON_MS  = 2000;
-const IOS_POWER_OFF_MS = 4000;
+const IOS_POWER_OFF_MS = 3000;
 
 let iosPulseTimer = null;
 let iosPulseOn = false;
@@ -1599,7 +1603,9 @@ let iosPulseStarted = false;  // helps initialize schedule once
 
 function setRemoteGlowPulse(on) {
   if (iosSoloGlowActive) return;
+  if (!iosRemotePulseArmed) return;
   if (overlayOpen || videoOverlayOpen || modelOverlayOpen) return;
+
   if (!tvOn) {
     setGlowTarget(powerButtonMeshRef, on, POWER_GLOW_COLOR);
 
@@ -1612,16 +1618,42 @@ function setRemoteGlowPulse(on) {
     return;
   }
 
-  // --------------------------------------------------
-  // ✅ TV ON → only REMOTE pulses
-  // --------------------------------------------------
+  // TV ON → only remote pulses
   setGlowTarget(powerButtonMeshRef, false, POWER_GLOW_COLOR);
 
-  setGlowTarget(okButtonMeshRef,    on, REMOTE_GLOW_COLOR);
-  setGlowTarget(upArrowMeshRef,     on, REMOTE_GLOW_COLOR);
-  setGlowTarget(downArrowMeshRef,   on, REMOTE_GLOW_COLOR);
-  setGlowTarget(leftArrowMeshRef,   on, REMOTE_GLOW_COLOR);
-  setGlowTarget(rightArrowMeshRef,  on, REMOTE_GLOW_COLOR);
+  // ✅ OFF state: everything fades out together
+  if (!on) {
+    setGlowTarget(okButtonMeshRef,    false, REMOTE_GLOW_COLOR);
+    setGlowTarget(upArrowMeshRef,     false, REMOTE_GLOW_COLOR);
+    setGlowTarget(downArrowMeshRef,   false, REMOTE_GLOW_COLOR);
+    setGlowTarget(leftArrowMeshRef,   false, REMOTE_GLOW_COLOR);
+    setGlowTarget(rightArrowMeshRef,  false, REMOTE_GLOW_COLOR);
+    return;
+  }
+
+  // ✅ ON state: center → outward ripple
+  setGlowTarget(okButtonMeshRef,    false, REMOTE_GLOW_COLOR);
+  setGlowTarget(upArrowMeshRef,     false, REMOTE_GLOW_COLOR);
+  setGlowTarget(downArrowMeshRef,   false, REMOTE_GLOW_COLOR);
+  setGlowTarget(leftArrowMeshRef,   false, REMOTE_GLOW_COLOR);
+  setGlowTarget(rightArrowMeshRef,  false, REMOTE_GLOW_COLOR);
+
+  setTimeout(() => {
+    if (!iosRemotePulseArmed || iosSoloGlowActive || !tvOn) return;
+    setGlowTarget(okButtonMeshRef, true, REMOTE_GLOW_COLOR);
+  }, 0);
+
+  setTimeout(() => {
+    if (!iosRemotePulseArmed || iosSoloGlowActive || !tvOn) return;
+    setGlowTarget(upArrowMeshRef, true, REMOTE_GLOW_COLOR);
+    setGlowTarget(downArrowMeshRef, true, REMOTE_GLOW_COLOR);
+  }, 80);
+
+  setTimeout(() => {
+    if (!iosRemotePulseArmed || iosSoloGlowActive || !tvOn) return;
+    setGlowTarget(leftArrowMeshRef, true, REMOTE_GLOW_COLOR);
+    setGlowTarget(rightArrowMeshRef, true, REMOTE_GLOW_COLOR);
+  }, 160);
 }
 
 function stopIosRemotePulse() {
@@ -1635,6 +1667,7 @@ function stopIosRemotePulse() {
 
 function startIosRemotePulse() {
   if (!isIOSDevice()) return;
+  if (!iosRemotePulseArmed) return;
 
   // prevent duplicates
   stopIosRemotePulse();
@@ -1715,6 +1748,7 @@ function nudgeIosRemotePulse() {
 // ============================================================
 let iosSoloGlowTimer = null;
 let iosSoloGlowActive = false;
+let iosRemotePulseArmed = true;
 
 function stopIosSoloGlow() {
   if (iosSoloGlowTimer) {
@@ -1722,6 +1756,18 @@ function stopIosSoloGlow() {
     iosSoloGlowTimer = null;
   }
   iosSoloGlowActive = false;
+}
+
+function markIosRemoteUsed() {
+  if (!isIOSDevice()) return;
+  if (!tvOn) return;
+
+  // ✅ permanently stop the repeating pulse for this TV-on session
+  iosRemotePulseArmed = false;
+  stopIosRemotePulse();
+
+  // ✅ IMPORTANT: do NOT force all button glows off here
+  // iosSoloGlow() should still be allowed to show the pressed-button emission
 }
 
 // Call this when a remote button is pressed on iOS
@@ -1753,8 +1799,10 @@ if (!iosNextPulseAtMs) iosNextPulseAtMs = performance.now() + IOS_PULSE_OFF_MS;
 
     iosSoloGlowActive = false;
 
-    // Resume the normal "all together" pulse timing
-    startIosRemotePulse();
+    // ✅ only restart repeating pulse if it has NOT been permanently disabled
+    if (iosRemotePulseArmed) {
+      startIosRemotePulse();
+    }
   }, ms);
 }
 
@@ -1776,17 +1824,27 @@ function updateGlow() {
     const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
     if (!mat || !("emissive" in mat) || !("emissiveIntensity" in mat)) return;
 
-  // smooth transition (power fades out faster)
 const isPower = st.color.equals(POWER_GLOW_COLOR);
+
+// ✅ identify the nav buttons so desktop can use the softer iOS-like fade
+const isRemoteNav =
+  mesh === okButtonMeshRef ||
+  mesh === upArrowMeshRef ||
+  mesh === downArrowMeshRef ||
+  mesh === leftArrowMeshRef ||
+  mesh === rightArrowMeshRef;
 
 let lerpSpeed;
 
 if (st.target > st.t) {
   // fading IN
-  lerpSpeed = GLOW_LERP_IN;
+  if (isRemoteNav) lerpSpeed = REMOTE_NAV_GLOW_LERP_IN;
+  else lerpSpeed = GLOW_LERP_IN;
 } else {
   // fading OUT
-  lerpSpeed = isPower ? POWER_GLOW_LERP_OUT : GLOW_LERP_OUT;
+  if (isPower) lerpSpeed = POWER_GLOW_LERP_OUT;
+  else if (isRemoteNav) lerpSpeed = REMOTE_NAV_GLOW_LERP_OUT;
+  else lerpSpeed = GLOW_LERP_OUT;
 }
 
 st.t += (st.target - st.t) * lerpSpeed;
@@ -4831,11 +4889,14 @@ function setTvPower(nextOn) {
 
 tvOn = nextOn;
 
-// ✅ reset iOS TV gesture state when powering off (prevents stale pointerup behavior)
 if (!tvOn) {
   tvTouchActive = false;
   tvTouchStartedWhileOff = false;
   tvTouchPointerId = null;
+
+  // ✅ reset iOS remote pulse for the next power-on session
+  iosRemotePulseArmed = true;
+  stopIosRemotePulse();
 }
 
 if (!tvOn) {
@@ -4867,8 +4928,14 @@ if (!tvOn) {
 
   tvAnim = { from, to, t0: performance.now() / 1000 };
 
-// ✅ Desktop: keep pulses perfectly in sync with TV on/off
-if (!isIOSDevice()) {
+// ✅ Keep remote pulses in sync with TV on/off
+if (isIOSDevice()) {
+  if (tvOn) {
+    startIosRemotePulse();
+  } else {
+    stopIosRemotePulse();
+  }
+} else {
   syncDesktopPulseWithTvState();
 }
 
@@ -5002,15 +5069,19 @@ function startDesktopPowerPulse() {
 
   stopDesktopPowerPulse();
 
-  const everyMs = 3600;  // ~3–4s
-  const onMs    = 950;   // ✅ LONGER = visible fade in/out (smooth)
+  // ✅ Match the iOS timing you liked
+  const onMs   = IOS_POWER_ON_MS;
+  const offMs  = IOS_POWER_OFF_MS;
+  const everyMs = onMs + offMs;
 
   const tick = () => {
-    // only pulse if TV is OFF
     if (tvOn) return;
 
     _setRemoteGlow(powerButtonMeshRef, true, POWER_GLOW_COLOR);
-    setTimeout(() => _setRemoteGlow(powerButtonMeshRef, false, POWER_GLOW_COLOR), onMs);
+
+    setTimeout(() => {
+      _setRemoteGlow(powerButtonMeshRef, false, POWER_GLOW_COLOR);
+    }, onMs);
 
     desktopPowerPulseTimer = setTimeout(tick, everyMs);
   };
@@ -5034,30 +5105,41 @@ function stopDesktopRemoteOnPulse() {
 
 function startDesktopRemoteOnPulse() {
   if (isIOSDevice()) return;
+  if (!desktopRemotePulseArmed) return;
 
-  // need the remote meshes ready
   if (!okButtonMeshRef && !upArrowMeshRef && !downArrowMeshRef && !leftArrowMeshRef && !rightArrowMeshRef) {
     return;
   }
 
   stopDesktopRemoteOnPulse();
 
-  // ✅ When TV turns ON, do NOT flash immediately.
-  // Wait 8s before first pulse (prevents "OK lights when power is pressed")
-  const everyMs = 3000;
-  const onMs    = 900;  // ✅ longer glow window = nicer fades
+  // glow lasts 2s, then stays OFF for 3s before next pulse
+  const onMs = 2000;
+  const offMs = 3000;
+  const cycleMs = onMs + offMs;
 
   const pulseAll = () => {
-    if (!tvOn) return;                // only while TV ON
-    if (!desktopRemotePulseArmed) return; // stop permanently once used
+    if (!tvOn) return;
+    if (!desktopRemotePulseArmed) return;
 
+    // ✅ center → outward ripple
     _setRemoteGlow(okButtonMeshRef, true, REMOTE_GLOW_COLOR);
-    _setRemoteGlow(upArrowMeshRef, true, REMOTE_GLOW_COLOR);
-    _setRemoteGlow(downArrowMeshRef, true, REMOTE_GLOW_COLOR);
-    _setRemoteGlow(leftArrowMeshRef, true, REMOTE_GLOW_COLOR);
-    _setRemoteGlow(rightArrowMeshRef, true, REMOTE_GLOW_COLOR);
 
     setTimeout(() => {
+      if (!tvOn || !desktopRemotePulseArmed) return;
+      _setRemoteGlow(upArrowMeshRef, true, REMOTE_GLOW_COLOR);
+      _setRemoteGlow(downArrowMeshRef, true, REMOTE_GLOW_COLOR);
+    }, 80);
+
+    setTimeout(() => {
+      if (!tvOn || !desktopRemotePulseArmed) return;
+      _setRemoteGlow(leftArrowMeshRef, true, REMOTE_GLOW_COLOR);
+      _setRemoteGlow(rightArrowMeshRef, true, REMOTE_GLOW_COLOR);
+    }, 160);
+
+    setTimeout(() => {
+      if (!desktopRemotePulseArmed) return;
+
       _setRemoteGlow(okButtonMeshRef, false, REMOTE_GLOW_COLOR);
       _setRemoteGlow(upArrowMeshRef, false, REMOTE_GLOW_COLOR);
       _setRemoteGlow(downArrowMeshRef, false, REMOTE_GLOW_COLOR);
@@ -5065,35 +5147,47 @@ function startDesktopRemoteOnPulse() {
       _setRemoteGlow(rightArrowMeshRef, false, REMOTE_GLOW_COLOR);
     }, onMs);
 
-    desktopRemotePulseTimer = setTimeout(pulseAll, everyMs);
+    desktopRemotePulseTimer = setTimeout(pulseAll, cycleMs);
   };
 
-  // ✅ initial delay
-  desktopRemotePulseTimer = setTimeout(pulseAll, everyMs);
+  // first pulse starts after the OFF gap
+  desktopRemotePulseTimer = setTimeout(pulseAll, offMs);
 }
 
-// Call this when user presses OK/Up/Down/Left/Right (while TV ON)
 function markDesktopRemoteUsed() {
   if (isIOSDevice()) return;
   if (!tvOn) return;
 
   desktopRemotePulseArmed = false;
+
+  if (desktopRemotePulseTimer) {
+    clearTimeout(desktopRemotePulseTimer);
+    desktopRemotePulseTimer = null;
+  }
+
   stopDesktopRemoteOnPulse();
+
+  _setRemoteGlow(okButtonMeshRef, false, REMOTE_GLOW_COLOR);
+  _setRemoteGlow(upArrowMeshRef, false, REMOTE_GLOW_COLOR);
+  _setRemoteGlow(downArrowMeshRef, false, REMOTE_GLOW_COLOR);
+  _setRemoteGlow(leftArrowMeshRef, false, REMOTE_GLOW_COLOR);
+  _setRemoteGlow(rightArrowMeshRef, false, REMOTE_GLOW_COLOR);
 }
 
-// Central sync helper (call when TV power toggles or after interactives load)
 function syncDesktopPulseWithTvState() {
   if (isIOSDevice()) return;
 
   if (!tvOn) {
-    // TV OFF: power pulses forever, and reset remote pulse for next time
+    // reset only when TV turns OFF
     desktopRemotePulseArmed = true;
     stopDesktopRemoteOnPulse();
     startDesktopPowerPulse();
   } else {
-    // TV ON: stop power pulsing, start group pulsing (unless already "used")
     stopDesktopPowerPulse();
-    startDesktopRemoteOnPulse();
+
+    if (desktopRemotePulseArmed) {
+      startDesktopRemoteOnPulse();
+    }
   }
 }
 
@@ -5331,22 +5425,31 @@ if (powerButtonMeshRef && isInHierarchy(hit, powerButtonMeshRef)) {
 }
 
 if (okButtonMeshRef && isInHierarchy(hit, okButtonMeshRef)) {
-  if (isIOSDevice() && e.pointerType === "touch") iosSoloGlow(okButtonMeshRef);
-    markDesktopRemoteUsed();
+  if (isIOSDevice() && e.pointerType === "touch") {
+    iosSoloGlow(okButtonMeshRef);
+    markIosRemoteUsed();
+  }
+  markDesktopRemoteUsed();
   setPressAxisFromHit(okButtonMeshRef, hitInfo);
   setPressTarget(okButtonMeshRef, true);
 }
 
 if (upArrowMeshRef && isInHierarchy(hit, upArrowMeshRef)) {
-  if (isIOSDevice() && e.pointerType === "touch") iosSoloGlow(upArrowMeshRef);
-    markDesktopRemoteUsed();
+  if (isIOSDevice() && e.pointerType === "touch") {
+    iosSoloGlow(upArrowMeshRef);
+    markIosRemoteUsed();
+  }
+  markDesktopRemoteUsed();
   setPressAxisFromHit(upArrowMeshRef, hitInfo);
   setPressTarget(upArrowMeshRef, true);
 }
 
 if (downArrowMeshRef && isInHierarchy(hit, downArrowMeshRef)) {
-  if (isIOSDevice() && e.pointerType === "touch") iosSoloGlow(downArrowMeshRef);
-    markDesktopRemoteUsed();
+  if (isIOSDevice() && e.pointerType === "touch") {
+    iosSoloGlow(downArrowMeshRef);
+    markIosRemoteUsed();
+  }
+  markDesktopRemoteUsed();
   setPressAxisFromHit(downArrowMeshRef, hitInfo);
   setPressTarget(downArrowMeshRef, true);
 }
@@ -5359,8 +5462,11 @@ if (leftArrowMeshRef && isInHierarchy(hit, leftArrowMeshRef)) {
 }
 
 if (rightArrowMeshRef && isInHierarchy(hit, rightArrowMeshRef)) {
-  if (isIOSDevice() && e.pointerType === "touch") iosSoloGlow(rightArrowMeshRef);
-    markDesktopRemoteUsed();
+  if (isIOSDevice() && e.pointerType === "touch") {
+    iosSoloGlow(rightArrowMeshRef);
+    markIosRemoteUsed();
+  }
+  markDesktopRemoteUsed();
   setPressAxisFromHit(rightArrowMeshRef, hitInfo);
   setPressTarget(rightArrowMeshRef, true);
 }
@@ -8310,6 +8416,7 @@ document.head.appendChild(grainStyle);
 let renderW = window.innerWidth;
 let renderH = window.innerHeight;
 
+
 function handleResize() {
   if (!renderer || !renderer.domElement) return;
   if (!camera) return;
@@ -8328,7 +8435,10 @@ function handleResize() {
   renderer.setPixelRatio(Math.min(dpr, maxDpr));
   renderer.setSize(w, h, true);
 
-  viewX = 0; viewY = 0; viewW = w; viewH = h;
+  viewX = 0;
+  viewY = 0;
+  viewW = w;
+  viewH = h;
 
   camera.aspect = aspect;
   camera.updateProjectionMatrix();
