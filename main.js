@@ -781,6 +781,13 @@ const IOS_CAM = {
   targetZ: 0,
 };
 
+const IOS_LAMP = {
+  scale: 1.0,
+  x: 1.6,
+  y: 0.2,
+  z: 0.0,
+};
+
 function setIOSCameraFraming(maxDim) {
   camera.fov = IOS_CAM.fov;
   camera.updateProjectionMatrix();
@@ -815,6 +822,42 @@ function setIOSCameraFraming(maxDim) {
 
   baseCamTarget0 = new THREE.Vector3(targetX, targetY, targetZ);
   baseCamPos = camera.position.clone();
+}
+
+function applyIOSLampTransform() {
+  if (!isIOSDevice()) return;
+  if (!lampMeshRef) return;
+
+  const target = lampMeshRef; // ✅ only Lamp1, never parent Scene
+
+  if (!target.userData.__iosLampBase) {
+    target.userData.__iosLampBase = {
+      position: target.position.clone(),
+      scale: target.scale.clone(),
+    };
+  }
+
+  const base = target.userData.__iosLampBase;
+
+  target.position.set(
+    base.position.x + IOS_LAMP.x,
+    base.position.y + IOS_LAMP.y,
+    base.position.z + IOS_LAMP.z
+  );
+
+  target.scale.set(
+    base.scale.x * IOS_LAMP.scale,
+    base.scale.y * IOS_LAMP.scale,
+    base.scale.z * IOS_LAMP.scale
+  );
+
+  target.updateMatrixWorld(true);
+
+  console.log("✅ iOS lamp transform applied:", {
+    target: target.name,
+    pos: target.position,
+    scale: target.scale,
+  });
 }
 
 // ============================================================
@@ -1040,6 +1083,7 @@ let remoteMeshRef = null;
 let skateboardMeshRef = null;
 
 let lampMeshRef = null; 
+let lampGroupRef = null;
 let nightVisionOn = false; 
 let chainMeshRef = null;
 
@@ -1202,6 +1246,7 @@ const IOS_REMOTE_BUTTON_TWEAK = {
   right: { x: -0.02, y: -0.115, z: 3.55 },
   ok:    { x: 0.02, y: -0.115, z: 3.55 },
 };
+
 
 function pushMeshAwayFromCamera(mesh, amount) {
   if (!mesh || !mesh.parent || !camera) return;
@@ -7062,6 +7107,19 @@ loader.load(
     const model = gltf.scene;
 anchor.add(model);
 
+console.log("======== FINAL STATIC MATERIALS GLB MESH LIST ========");
+
+model.traverse((o) => {
+  if (!o.isMesh) return;
+
+  console.log(
+    "[MESH]",
+    "name:", o.name,
+    "| material:", o.material?.name,
+    "| parent:", o.parent?.name
+  );
+});
+
 // ============================================================
 // ✅ START GLB ANIMATIONS (bugs)
 // ============================================================
@@ -7299,16 +7357,30 @@ const originalMatName = o.material?.name;
 const keysToTry = [
   o.name,
   o.parent?.name,
-  originalMatName,          // ✅ keep the GLB-authored material name
+  originalMatName,
   o.parent?.parent?.name,
 ].filter(Boolean);
 
 let mat = null;
+let matchedKey = null;
+
 for (const k of keysToTry) {
   if (materials[k]) {
     mat = materials[k];
+    matchedKey = k;
     break;
   }
+}
+
+// ✅ DEBUG: show exactly which mesh got Lamp1 material
+if (matchedKey === "Lamp1") {
+  console.log("🔥 LAMP1 MATERIAL APPLIED TO:", {
+    meshName: o.name,
+    parentName: o.parent?.name,
+    grandParentName: o.parent?.parent?.name,
+    originalMatName,
+    matchedKey,
+  });
 }
 
 // ✅ only fallback if nothing matched
@@ -7546,43 +7618,9 @@ contactShadow.castShadow = true;
 scene.add(contactShadow);
 scene.add(contactShadow.target);
 
-
-    // ============================================================
-// ✅ LAMP MESH REF (for click detection)
-// ============================================================
-lampMeshRef = (() => {
-  let found = null;
-  model.traverse((o) => {
-    if (found) return;
-
-    const n = (o.name || "").toLowerCase();
-
-    // ✅ matches your material key "Lamp1" naming style
-    if (n.includes("lamp1") || n.includes("lamp")) found = o;
-  });
-  return found;
-})();
-    if (lampMeshRef && lampMeshRef.material) {
+if (lampMeshRef && lampMeshRef.material) {
   const m = lampMeshRef.material;
-
-  // subtle center boost
   m.emissiveIntensity = 1.6;
-
-  // tiny variation
-  m.onBeforeCompile = (shader) => {
-    shader.fragmentShader = shader.fragmentShader.replace(
-      '#include <emissivemap_fragment>',
-      `
-      #include <emissivemap_fragment>
-
-      // fake bulb hotspot
-      float d = distance(vUv, vec2(0.5));
-      float hot = smoothstep(0.45, 0.0, d);
-      totalEmissiveRadiance *= mix(1.0, 1.25, hot);
-      `
-    );
-  };
-
   m.needsUpdate = true;
 }
 
@@ -7647,6 +7685,7 @@ setTimeout(() => {
 
   // ✅ iOS only: fix remote body perspective after camera/layout settle
   applyIOSRemoteTweaks();
+  applyIOSLampTransform();
 
 }, 260);
 
@@ -7674,7 +7713,36 @@ interactiveLoader.load(
     const ui = gltf.scene;
     anchor.add(ui);
 
-interactivesRootRef = ui;
+    interactivesRootRef = ui;
+
+    lampMeshRef = null;
+    lampGroupRef = null;
+
+    ui.traverse((o) => {
+      const n = (o.name || "").toLowerCase();
+
+      if (n === "lamp1") {
+  lampMeshRef = o;
+  lampGroupRef = o; // ✅ IMPORTANT: do NOT use parent, parent is the whole Scene
+
+  console.log("💡 Lamp found in Interactive Materials GLB:", {
+    objectName: o.name,
+    parentName: o.parent?.name,
+    type: o.type,
+  });
+}
+    });
+
+    console.log("💡 FINAL interactive lampMeshRef:", lampMeshRef?.name);
+    console.log("💡 FINAL interactive lampGroupRef:", lampGroupRef?.name);
+
+    applyIOSLampTransform();
+
+    if (lampMeshRef && lampMeshRef.material) {
+  lampMeshRef.material = lampMeshRef.material.clone();
+  lampMeshRef.material.emissiveIntensity = 1.6;
+  lampMeshRef.material.needsUpdate = true;
+}
 
   ui.traverse((o) => {
   if (!o.isMesh) return;
@@ -7978,6 +8046,19 @@ newMaterialsLoader.load(
 
     // ✅ Add to scene (same parent as your other models)
     anchor.add(extra);
+
+    console.log("======== NEW MATERIALS GLB MESH LIST ========");
+
+extra.traverse((o) => {
+  if (!o.isMesh) return;
+
+  console.log(
+    "[NEW GLB MESH]",
+    "name:", o.name,
+    "| material:", o.material?.name,
+    "| parent:", o.parent?.name
+  );
+});
 
     // ✅ Make meshes behave like your other scene meshes
     extra.traverse((o) => {
