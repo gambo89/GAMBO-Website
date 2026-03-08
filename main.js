@@ -47,10 +47,8 @@ let baseFovCaptured = false; // ✅ add this
 // current viewport inside the full canvas
 let viewX = 0, viewY = 0, viewW = window.innerWidth, viewH = window.innerHeight;
 
-
 const canvas = document.querySelector("#c");
 if (!canvas) throw new Error('Canvas "#c" not found. Check your HTML id="c".');
-
 
 // ============================================================
 // ✅ LOADING UI (matches your index.html #loader / #loader-text)
@@ -89,12 +87,12 @@ renderer.toneMappingExposure = 0.92; // subtle cinematic darkening (try 0.88–0
 // ============================================================
 renderer.outputColorSpace = THREE.SRGBColorSpace;     // modern three
 renderer.toneMapping = THREE.ACESFilmicToneMapping;  // if desktop uses this
-renderer.toneMappingExposure = renderer.toneMappingExposure ?? 0.8;
+renderer.toneMappingExposure = renderer.toneMappingExposure ?? 1.3;
 
 // renderer settings...
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = isIOS ? 0.75 : 0.8;
+renderer.toneMappingExposure = isIOS ? 1.1 : 1.0;
 renderer.physicallyCorrectLights = true;
 
 renderer.shadowMap.enabled = MOBILE_PROFILE.shadows;
@@ -656,7 +654,7 @@ function setNightVision(on) {
 
   // capture baseline exposure once
   if (__baseExposure == null) {
-    __baseExposure = renderer.toneMappingExposure ?? 0.92;
+    __baseExposure = renderer.toneMappingExposure ?? 1.0;
   }
 
   const isiOS = isIOSDevice();
@@ -772,11 +770,11 @@ function setInitialCameraFraming(maxDim) {
 // Change these numbers to move iOS camera on X / Y / Z
 // ============================================================
 const IOS_CAM = {
-    fov: 22.5,
+    fov: 22,
 
   x: 0.027,    // + = right,  - = left
   y: -0.146,   // + = up,     - = down
-  z: 0.203,    // + = farther, - = closer
+  z: 0.228,    // + = farther, - = closer
 
   targetX: 1.18,
   targetY: -0.186, // multiplied by maxDim below
@@ -1160,6 +1158,180 @@ if (t < window.lampBurstUntil && window.lampBurstParams) {
 
   nightLights.lampKey.intensity = lampBaseKeyI * clamped;
   nightLights.lampShadow.intensity = lampBaseShadowI * clamped;
+}
+
+// ============================================================
+// ✅ iOS REMOTE PERSPECTIVE FIX
+// - ONLY affects iOS
+// - does NOT touch desktop
+// - does NOT change camera
+// - narrows remote slightly on X
+// - pushes remote slightly farther from camera
+// ============================================================
+const IOS_REMOTE_TWEAK = {
+  enabled: true,
+
+  // make the remote look less wide
+  // lower = narrower
+  scaleX: 0.90,
+  scaleY: 1.00,
+  scaleZ: 1.00,
+
+  // push remote slightly away from camera
+  // this is multiplied by roomMaxDim
+  pushBackFactor: 0.000,
+
+  offsetX: 7.5,
+  offsetY: -0.1,
+  offsetZ: 3.5,
+};
+
+// ============================================================
+// ✅ iOS REMOTE BUTTON OFFSETS
+// - ONLY for the 6 remote buttons
+// - DO NOT affect desktop
+// - DO NOT affect remote body
+// ============================================================
+const IOS_REMOTE_BUTTON_TWEAK = {
+  enabled: true,
+
+  power: { x: 0.15, y: -0.1, z: 3.5 }, // x
+  up:    { x: 0.04, y: -0.115, z: 3.55 },
+  down:  { x: 0.02, y: -0.115, z: 3.55 },
+  left:  { x: 0.065, y: -0.115, z: 3.55 },
+  right: { x: -0.02, y: -0.115, z: 3.55 },
+  ok:    { x: 0.02, y: -0.115, z: 3.55 },
+};
+
+function pushMeshAwayFromCamera(mesh, amount) {
+  if (!mesh || !mesh.parent || !camera) return;
+
+  // get current mesh world position
+  const worldPos = new THREE.Vector3();
+  mesh.getWorldPosition(worldPos);
+
+  // direction from camera -> mesh
+  const dir = worldPos.clone().sub(camera.position).normalize();
+
+  // move farther away from camera
+  const newWorldPos = worldPos.clone().addScaledVector(dir, amount);
+
+  // convert world position back into mesh parent's local space
+  mesh.parent.worldToLocal(newWorldPos);
+  mesh.position.copy(newWorldPos);
+}
+
+function applyIOSRemoteTweakToMesh(mesh) {
+  if (!isIOSDevice()) return;
+  if (!IOS_REMOTE_TWEAK.enabled) return;
+  if (!mesh) return;
+
+  // prevent double-applying
+  if (mesh.userData.__iosRemoteTweaked) return;
+
+  // ✅ this function is now for the REMOTE BODY ONLY
+  mesh.scale.x *= IOS_REMOTE_TWEAK.scaleX;
+  mesh.scale.y *= IOS_REMOTE_TWEAK.scaleY;
+  mesh.scale.z *= IOS_REMOTE_TWEAK.scaleZ;
+
+  const pushAmount = roomMaxDim * IOS_REMOTE_TWEAK.pushBackFactor;
+  pushMeshAwayFromCamera(mesh, pushAmount);
+
+  mesh.position.x += IOS_REMOTE_TWEAK.offsetX;
+  mesh.position.y += IOS_REMOTE_TWEAK.offsetY;
+  mesh.position.z += IOS_REMOTE_TWEAK.offsetZ;
+
+  mesh.updateMatrixWorld(true);
+
+  mesh.userData.__iosRemoteTweaked = true;
+}
+
+function applyIOSButtonOffset(mesh, offset, keyName) {
+  if (!isIOSDevice()) return;
+  if (!IOS_REMOTE_BUTTON_TWEAK.enabled) return;
+  if (!mesh) return;
+  if (!offset) return;
+
+  // prevent double-applying
+  if (mesh.userData.__iosButtonTweaked) return;
+
+  // ----------------------------------------------------------
+  // 1) First apply your current tuned position offset
+  // ----------------------------------------------------------
+  mesh.position.x += offset.x;
+  mesh.position.y += offset.y;
+  mesh.position.z += offset.z;
+
+  mesh.updateMatrixWorld(true);
+
+  // ----------------------------------------------------------
+  // 2) Capture current world-space CENTER before scaling
+  // ----------------------------------------------------------
+  const boxBefore = new THREE.Box3().setFromObject(mesh);
+  const centerBefore = boxBefore.getCenter(new THREE.Vector3());
+
+  // ----------------------------------------------------------
+  // 3) Apply the same X compression as the remote body
+  // ----------------------------------------------------------
+  mesh.scale.x *= IOS_REMOTE_TWEAK.scaleX;
+
+  mesh.updateMatrixWorld(true);
+
+  // ----------------------------------------------------------
+  // 4) Capture world-space CENTER after scaling
+  // ----------------------------------------------------------
+  const boxAfter = new THREE.Box3().setFromObject(mesh);
+  const centerAfter = boxAfter.getCenter(new THREE.Vector3());
+
+  // ----------------------------------------------------------
+  // 5) Move mesh so its center goes back to where it was
+  // ----------------------------------------------------------
+  const deltaWorld = centerBefore.clone().sub(centerAfter);
+
+  const parent = mesh.parent;
+  if (parent) {
+    const worldPos = new THREE.Vector3();
+    mesh.getWorldPosition(worldPos);
+
+    const correctedWorldPos = worldPos.clone().add(deltaWorld);
+
+    parent.worldToLocal(correctedWorldPos);
+    mesh.position.copy(correctedWorldPos);
+  }
+
+  mesh.updateMatrixWorld(true);
+
+  // ----------------------------------------------------------
+  // 6) Update press-state base position so updatePress()
+  //    does not snap the button back every frame
+  // ----------------------------------------------------------
+  const st = pressState.get(mesh);
+  if (st) {
+    st.basePos.copy(mesh.position);
+  }
+
+  mesh.userData.__iosButtonTweaked = true;
+
+  console.log(`✅ iOS button scaled+kept in place: ${keyName}`, mesh.position);
+}
+
+function applyIOSRemoteTweaks() {
+  if (!isIOSDevice()) return;
+
+  // ==========================================================
+  // REMOTE BODY ONLY
+  // ==========================================================
+  applyIOSRemoteTweakToMesh(remoteMeshRef);
+
+  // ==========================================================
+  // BUTTONS ONLY
+  // ==========================================================
+  applyIOSButtonOffset(powerButtonMeshRef, IOS_REMOTE_BUTTON_TWEAK.power, "power");
+  applyIOSButtonOffset(okButtonMeshRef,    IOS_REMOTE_BUTTON_TWEAK.ok,    "ok");
+  applyIOSButtonOffset(upArrowMeshRef,     IOS_REMOTE_BUTTON_TWEAK.up,    "up");
+  applyIOSButtonOffset(downArrowMeshRef,   IOS_REMOTE_BUTTON_TWEAK.down,  "down");
+  applyIOSButtonOffset(leftArrowMeshRef,   IOS_REMOTE_BUTTON_TWEAK.left,  "left");
+  applyIOSButtonOffset(rightArrowMeshRef,  IOS_REMOTE_BUTTON_TWEAK.right, "right");
 }
 
 // ============================================================
@@ -4827,7 +4999,7 @@ function startDesktopRemoteOnPulse() {
 
   // ✅ When TV turns ON, do NOT flash immediately.
   // Wait 8s before first pulse (prevents "OK lights when power is pressed")
-  const everyMs = 5000;
+  const everyMs = 3000;
   const onMs    = 900;  // ✅ longer glow window = nicer fades
 
   const pulseAll = () => {
@@ -7067,6 +7239,8 @@ if (n.includes("door") && o.material && o.material.color) {
 // ✅ REMOTE — reduce visual dominance (hierarchy control)
 // ============================================================
 if (n.includes("remote") && o.material) {
+  remoteMeshRef = o; // ✅ store the main remote body mesh
+
   o.material = o.material.clone(); // isolate
 
   // Slightly darken overall
@@ -7463,7 +7637,6 @@ lampMeshRef = (() => {
 baseFovDeg = camera.fov;
 baseFovCaptured = true;
 
-// ✅ iOS first-load framing fix: let the viewport settle, then lock camera baseline
 scheduleResize();
 setTimeout(scheduleResize, 120);
 setTimeout(() => {
@@ -7472,6 +7645,8 @@ setTimeout(() => {
   // ✅ NOW that the final resize has happened, lock the “never move” camera
   captureFixedCameraBaseline();
 
+  // ✅ iOS only: fix remote body perspective after camera/layout settle
+  applyIOSRemoteTweaks();
 
 }, 260);
 
@@ -7764,8 +7939,13 @@ if (isRightArrow) {
 
 
 ui.updateMatrixWorld(true);
-console.log("✅ Interactives loaded");
+console.log("Interactives loaded");
+
+// ✅ iOS only: fix remote buttons after they exist
+applyIOSRemoteTweaks();
+
 syncDesktopPulseWithTvState();
+
 // Force TV to start OFF
 tvOn = false;
 tvAnim = null;
@@ -8063,7 +8243,7 @@ function handleResize() {
   const aspect = w / h;
 
   const dpr = window.devicePixelRatio || 1;
-  const maxDpr = isIOS ? 2.2 : 2.0;
+  const maxDpr = isIOS ? 2.0 : 2.0;
   renderer.setPixelRatio(Math.min(dpr, maxDpr));
   renderer.setSize(w, h, true);
 
