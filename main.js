@@ -774,7 +774,7 @@ const IOS_CAM = {
 
   x: 0.02,    // + = right,  - = left
   y: -0.148,   // + = up,     - = down
-  z: 0.228,    // + = farther, - = closer
+  z: 0.224,    // + = farther, - = closer
 
   targetX: 1.18,
   targetY: -0.155, // multiplied by maxDim below
@@ -1600,60 +1600,62 @@ let iosPulseTimer = null;
 let iosPulseOn = false;
 let iosNextPulseAtMs = 0;     // when the next ON pulse should start
 let iosPulseStarted = false;  // helps initialize schedule once
+let iosRemoteRippleTimers = [];
+let iosRemotePulseCycleId = 0; // ✅ invalidates stale ripple timeouts
 
 function setRemoteGlowPulse(on) {
   if (iosSoloGlowActive) return;
-  if (!iosRemotePulseArmed) return;
   if (overlayOpen || videoOverlayOpen || modelOverlayOpen) return;
+
+  clearIOSRemoteRippleTimers();
+
+  // ✅ each call gets a unique pulse id so old stagger timers can't interfere
+  const pulseId = ++iosRemotePulseCycleId;
 
   if (!tvOn) {
     setGlowTarget(powerButtonMeshRef, on, POWER_GLOW_COLOR);
-
-    // make sure remotes are OFF
-    setGlowTarget(okButtonMeshRef,    false, REMOTE_GLOW_COLOR);
-    setGlowTarget(upArrowMeshRef,     false, REMOTE_GLOW_COLOR);
-    setGlowTarget(downArrowMeshRef,   false, REMOTE_GLOW_COLOR);
-    setGlowTarget(leftArrowMeshRef,   false, REMOTE_GLOW_COLOR);
-    setGlowTarget(rightArrowMeshRef,  false, REMOTE_GLOW_COLOR);
+    forceAllRemoteNavGlowOff();
     return;
   }
 
-  // TV ON → only remote pulses
+  // TV ON → power button should not glow
   setGlowTarget(powerButtonMeshRef, false, POWER_GLOW_COLOR);
 
-  // ✅ OFF state: everything fades out together
+  // ✅ OFF state: hard turn all nav buttons off together
   if (!on) {
-    setGlowTarget(okButtonMeshRef,    false, REMOTE_GLOW_COLOR);
-    setGlowTarget(upArrowMeshRef,     false, REMOTE_GLOW_COLOR);
-    setGlowTarget(downArrowMeshRef,   false, REMOTE_GLOW_COLOR);
-    setGlowTarget(leftArrowMeshRef,   false, REMOTE_GLOW_COLOR);
-    setGlowTarget(rightArrowMeshRef,  false, REMOTE_GLOW_COLOR);
+    forceAllRemoteNavGlowOff();
     return;
   }
 
-  // ✅ ON state: center → outward ripple
-  setGlowTarget(okButtonMeshRef,    false, REMOTE_GLOW_COLOR);
-  setGlowTarget(upArrowMeshRef,     false, REMOTE_GLOW_COLOR);
-  setGlowTarget(downArrowMeshRef,   false, REMOTE_GLOW_COLOR);
-  setGlowTarget(leftArrowMeshRef,   false, REMOTE_GLOW_COLOR);
-  setGlowTarget(rightArrowMeshRef,  false, REMOTE_GLOW_COLOR);
+  // ✅ if repeating pulse has been disabled, do not pulse
+  if (!iosRemotePulseArmed) {
+    forceAllRemoteNavGlowOff();
+    return;
+  }
 
-  setTimeout(() => {
+  // ✅ IMPORTANT: hard reset all nav buttons OFF before every new ripple
+  forceAllRemoteNavGlowOff();
+
+  // center → outward ripple
+  iosRemoteRippleTimers.push(setTimeout(() => {
+    if (pulseId !== iosRemotePulseCycleId) return;
     if (!iosRemotePulseArmed || iosSoloGlowActive || !tvOn) return;
     setGlowTarget(okButtonMeshRef, true, REMOTE_GLOW_COLOR);
-  }, 0);
+  }, 0));
 
-  setTimeout(() => {
+  iosRemoteRippleTimers.push(setTimeout(() => {
+    if (pulseId !== iosRemotePulseCycleId) return;
     if (!iosRemotePulseArmed || iosSoloGlowActive || !tvOn) return;
     setGlowTarget(upArrowMeshRef, true, REMOTE_GLOW_COLOR);
     setGlowTarget(downArrowMeshRef, true, REMOTE_GLOW_COLOR);
-  }, 80);
+  }, 80));
 
-  setTimeout(() => {
+  iosRemoteRippleTimers.push(setTimeout(() => {
+    if (pulseId !== iosRemotePulseCycleId) return;
     if (!iosRemotePulseArmed || iosSoloGlowActive || !tvOn) return;
     setGlowTarget(leftArrowMeshRef, true, REMOTE_GLOW_COLOR);
     setGlowTarget(rightArrowMeshRef, true, REMOTE_GLOW_COLOR);
-  }, 160);
+  }, 160));
 }
 
 function stopIosRemotePulse() {
@@ -1661,7 +1663,14 @@ function stopIosRemotePulse() {
     clearTimeout(iosPulseTimer);
     iosPulseTimer = null;
   }
+
+  clearIOSRemoteRippleTimers();
+
+  // ✅ kill any stale stagger callbacks from older pulse cycles
+  iosRemotePulseCycleId++;
+
   iosPulseOn = false;
+  forceAllRemoteNavGlowOff();
   setRemoteGlowPulse(false);
 }
 
@@ -1674,25 +1683,30 @@ function startIosRemotePulse() {
 
   const now = performance.now();
 
-  // If we haven't started a schedule yet, start it so user sees it soon:
-  // ON now (2s), then OFF (8s), repeat.
-  // If schedule exists (iosNextPulseAtMs set), we resume without changing it.
   if (!iosPulseStarted || !iosNextPulseAtMs) {
     iosPulseStarted = true;
 
-    iosPulseOn = true;
-    setRemoteGlowPulse(true);
-
-    // after ON window ends, schedule next ON time
-    iosNextPulseAtMs = now + IOS_PULSE_ON_MS + IOS_PULSE_OFF_MS;
+    // ✅ small startup delay so the first OK glow is visible after TV power-on settles
+    const firstOnDelayMs = 220;
 
     iosPulseTimer = setTimeout(() => {
-      iosPulseOn = false;
-      setRemoteGlowPulse(false);
+      if (!tvOn || !iosRemotePulseArmed) return;
 
-      // schedule next ON
-      scheduleNextPulseTick();
-    }, IOS_PULSE_ON_MS);
+      iosPulseOn = true;
+      setRemoteGlowPulse(true);
+
+      // after ON window ends, schedule next ON time
+      iosNextPulseAtMs = performance.now() + IOS_PULSE_ON_MS + IOS_PULSE_OFF_MS;
+
+      iosPulseTimer = setTimeout(() => {
+        iosPulseOn = false;
+        setRemoteGlowPulse(false);
+
+        // schedule next ON
+        scheduleNextPulseTick();
+      }, IOS_PULSE_ON_MS);
+
+    }, firstOnDelayMs);
 
     return;
   }
@@ -4896,6 +4910,8 @@ if (!tvOn) {
 
   // ✅ reset iOS remote pulse for the next power-on session
   iosRemotePulseArmed = true;
+  iosPulseStarted = false;
+  iosNextPulseAtMs = 0;
   stopIosRemotePulse();
 }
 
@@ -4931,6 +4947,9 @@ if (!tvOn) {
 // ✅ Keep remote pulses in sync with TV on/off
 if (isIOSDevice()) {
   if (tvOn) {
+    // ✅ always restart iOS pulse fresh when TV turns on
+    iosPulseStarted = false;
+    iosNextPulseAtMs = 0;
     startIosRemotePulse();
   } else {
     stopIosRemotePulse();
@@ -5044,6 +5063,7 @@ let tvMenuHoverFlipV = null; // null until we detect correct orientation
 
 let desktopPowerPulseTimer = null;
 let desktopRemotePulseTimer = null;
+let desktopRemoteRippleTimers = [];
 
 let desktopRemotePulseArmed = true; // ✅ true until user presses any remote btn while TV ON
 
@@ -5089,18 +5109,37 @@ function startDesktopPowerPulse() {
   tick();
 }
 
-// ---- REMOTE GROUP PULSE (TV ON) ----
 function stopDesktopRemoteOnPulse() {
   if (desktopRemotePulseTimer) {
     clearTimeout(desktopRemotePulseTimer);
     desktopRemotePulseTimer = null;
   }
 
+  clearDesktopRemoteRippleTimers();
+
   _setRemoteGlow(okButtonMeshRef, false, REMOTE_GLOW_COLOR);
   _setRemoteGlow(upArrowMeshRef, false, REMOTE_GLOW_COLOR);
   _setRemoteGlow(downArrowMeshRef, false, REMOTE_GLOW_COLOR);
   _setRemoteGlow(leftArrowMeshRef, false, REMOTE_GLOW_COLOR);
   _setRemoteGlow(rightArrowMeshRef, false, REMOTE_GLOW_COLOR);
+}
+
+function clearDesktopRemoteRippleTimers() {
+  for (const id of desktopRemoteRippleTimers) clearTimeout(id);
+  desktopRemoteRippleTimers.length = 0;
+}
+
+function clearIOSRemoteRippleTimers() {
+  for (const id of iosRemoteRippleTimers) clearTimeout(id);
+  iosRemoteRippleTimers.length = 0;
+}
+
+function forceAllRemoteNavGlowOff() {
+  setGlowTarget(okButtonMeshRef,    false, REMOTE_GLOW_COLOR);
+  setGlowTarget(upArrowMeshRef,     false, REMOTE_GLOW_COLOR);
+  setGlowTarget(downArrowMeshRef,   false, REMOTE_GLOW_COLOR);
+  setGlowTarget(leftArrowMeshRef,   false, REMOTE_GLOW_COLOR);
+  setGlowTarget(rightArrowMeshRef,  false, REMOTE_GLOW_COLOR);
 }
 
 function startDesktopRemoteOnPulse() {
@@ -5113,31 +5152,33 @@ function startDesktopRemoteOnPulse() {
 
   stopDesktopRemoteOnPulse();
 
-  // glow lasts 2s, then stays OFF for 3s before next pulse
   const onMs = 2000;
   const offMs = 3000;
   const cycleMs = onMs + offMs;
+  const firstDelayMs = 250;
 
   const pulseAll = () => {
     if (!tvOn) return;
     if (!desktopRemotePulseArmed) return;
 
-    // ✅ center → outward ripple
+    clearDesktopRemoteRippleTimers();
+
+    // center → outward ripple
     _setRemoteGlow(okButtonMeshRef, true, REMOTE_GLOW_COLOR);
 
-    setTimeout(() => {
+    desktopRemoteRippleTimers.push(setTimeout(() => {
       if (!tvOn || !desktopRemotePulseArmed) return;
       _setRemoteGlow(upArrowMeshRef, true, REMOTE_GLOW_COLOR);
       _setRemoteGlow(downArrowMeshRef, true, REMOTE_GLOW_COLOR);
-    }, 80);
+    }, 80));
 
-    setTimeout(() => {
+    desktopRemoteRippleTimers.push(setTimeout(() => {
       if (!tvOn || !desktopRemotePulseArmed) return;
       _setRemoteGlow(leftArrowMeshRef, true, REMOTE_GLOW_COLOR);
       _setRemoteGlow(rightArrowMeshRef, true, REMOTE_GLOW_COLOR);
-    }, 160);
+    }, 160));
 
-    setTimeout(() => {
+    desktopRemoteRippleTimers.push(setTimeout(() => {
       if (!desktopRemotePulseArmed) return;
 
       _setRemoteGlow(okButtonMeshRef, false, REMOTE_GLOW_COLOR);
@@ -5145,13 +5186,12 @@ function startDesktopRemoteOnPulse() {
       _setRemoteGlow(downArrowMeshRef, false, REMOTE_GLOW_COLOR);
       _setRemoteGlow(leftArrowMeshRef, false, REMOTE_GLOW_COLOR);
       _setRemoteGlow(rightArrowMeshRef, false, REMOTE_GLOW_COLOR);
-    }, onMs);
+    }, onMs));
 
     desktopRemotePulseTimer = setTimeout(pulseAll, cycleMs);
   };
 
-  // first pulse starts after the OFF gap
-  desktopRemotePulseTimer = setTimeout(pulseAll, offMs);
+  desktopRemotePulseTimer = setTimeout(pulseAll, firstDelayMs);
 }
 
 function markDesktopRemoteUsed() {
@@ -5165,6 +5205,7 @@ function markDesktopRemoteUsed() {
     desktopRemotePulseTimer = null;
   }
 
+  clearDesktopRemoteRippleTimers();
   stopDesktopRemoteOnPulse();
 
   _setRemoteGlow(okButtonMeshRef, false, REMOTE_GLOW_COLOR);
