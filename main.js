@@ -1118,6 +1118,21 @@ function updateLampFlicker() {
     });
   }
 
+  function updateCigaretteEmber_OLD() {
+  if (!emberTipRef || !emberTipRef.material) return;
+
+  const t = performance.now() * 0.003;
+
+  // subtle breathing glow
+  const flicker =
+    0.8 +
+    Math.sin(t * 3.0) * 0.2 +
+    Math.sin(t * 9.5) * 0.05 +
+    Math.random() * 0.05;
+
+  emberTipRef.material.emissiveIntensity = flicker * 2.2;
+}
+
   const t = performance.now() / 1000;
 
   // ------------------------------------------------------------
@@ -2217,6 +2232,41 @@ function showPicture1Hint(show) {
 }
 
 // ============================================================
+// CIGARETTE HOVER HINT (Smoke)
+// ============================================================
+const cigaretteHint = document.createElement("div");
+cigaretteHint.innerText = "smoke";
+
+cigaretteHint.style.position = "fixed";
+cigaretteHint.style.left = "50%";
+cigaretteHint.style.bottom = "80px";
+cigaretteHint.style.transform = "translateX(-50%)";
+
+cigaretteHint.style.padding = "8px 16px";
+cigaretteHint.style.borderRadius = "20px";
+
+cigaretteHint.style.background = "rgba(0,0,0,0.6)";
+cigaretteHint.style.color = "#fff";
+cigaretteHint.style.fontSize = "14px";
+cigaretteHint.style.fontFamily = "Arial, sans-serif";
+
+cigaretteHint.style.pointerEvents = "none";
+cigaretteHint.style.opacity = "0";
+cigaretteHint.style.transition = "opacity 0.25s ease";
+
+cigaretteHint.style.zIndex = "9998";
+
+document.body.appendChild(cigaretteHint);
+
+let cigaretteHintVisible = false;
+
+function showCigaretteHint(show) {
+  if (show === cigaretteHintVisible) return;
+  cigaretteHintVisible = show;
+  cigaretteHint.style.opacity = show ? "1" : "0";
+}
+
+// ============================================================
 // REMOTE BUTTON HOVER HINTS (OK / UP / DOWN / LEFT / RIGHT)
 // ============================================================
 function makeMiniHint(text) {
@@ -2336,6 +2386,7 @@ let hintTimeoutId = null;
 const hintSuppressed = {
   tv: false,
   speaker: false,
+  smoke: false,
   power: false,
   ok: false,
   up: false,
@@ -2354,6 +2405,7 @@ const hintSuppressed = {
 function hideAllHintsImmediate() {
   showTvHint(false);
   showSpeakerHint(false);
+  showCigaretteHint(false);
   showPowerHint(false);
   showLampHint(false);
   showAllDvdHint(false);
@@ -2379,6 +2431,11 @@ function showHintForKey(key) {
   if (key === "speaker") {
     updateSpeakerHintText();
     showSpeakerHint(true);
+    return;
+  }
+
+    if (key === "smoke") {
+    showCigaretteHint(true);
     return;
   }
 
@@ -5312,6 +5369,14 @@ const tvHitInfo =
 const hitInfo = tvHitInfo ?? hits[0];
 const hit = hitInfo.object;
 
+// ✅ cigarette click (check ALL hits, not just closest)
+const cigaretteHit = hits.find(h => cigaretteRoot && isInHierarchy(h.object, cigaretteRoot));
+if (cigaretteHit) {
+  console.log("🚬 cigarette hit:", cigaretteHit.object.name);
+  playCigaretteAnimation();
+  return;
+}
+
 // ✅ Picture1 click/tap (check ALL hits, not just closest)
 const picHit = hits.find(h => hitIsPicture1(h.object));
 if (picHit) {
@@ -5878,10 +5943,10 @@ if (
 
 const hoveringTvScreen = !!(tvScreenMeshRef && isInHierarchy(hit, tvScreenMeshRef));
 
-
   let hoveringTv = false;
   let hoveringSpeaker = false;
   let hoveringPower = false;
+  let hoveringCigarette = false;
   let hoveringOk = false;
   let hoveringUp = false;
   let hoveringDown = false;
@@ -5978,6 +6043,11 @@ if (menuHover !== prevMenuHover) {
     hoveringSpeaker = true;
   }
 
+  // Cigarette hover hint
+if (cigaretteRoot && isInHierarchy(hit, cigaretteRoot)) {
+  hoveringCigarette = true;
+}
+
     // Power hint (anytime power button exists)
   if (powerButtonMeshRef && isInHierarchy(hit, powerButtonMeshRef)) {
     hoveringPower = true;
@@ -5997,6 +6067,7 @@ if (menuHover !== prevMenuHover) {
   // ------------------------------------------------------------
   let nextKey = null;
 
+  if (hoveringCigarette) nextKey = "smoke";
   if (hoveringSpeaker) nextKey = "speaker";
   else if (hoveringPower) nextKey = "power";
   else if (hoveringLamp) nextKey = "lamp";
@@ -6366,12 +6437,7 @@ TV_stand: makePBR({
     { metalness: 0.0, roughness: 0.0 }
   ),
 
-  //CIGARETTES
-  Cig1: makePBR({
-    albedo: "./assets/Textures/Cigarettes/Cig1 Albeto.jpg",
-    },
-    { roughness: 1.0, metalness: 0.0}
-),
+//Cigarettes
 
  Cig2: makePBR({
     albedo: "./assets/Textures/Cigarettes/Cig2 Albeto.jpg",
@@ -7037,6 +7103,51 @@ BluetoothSpeaker: makePBR(
 
 };
 
+const cigaretteFilterMat = makePBR(
+  {
+    albedo: "./assets/Textures/New Cigarette Folder/Cig Filter Albeto.jpg",
+  },
+  { roughness: 1.0, metalness: 0.0 }
+);
+
+const cigaretteTobaccoMat = makePBR(
+  {
+    albedo: "./assets/Textures/New Cigarette Folder/Cig Tobacco Albeto.jpg",
+  },
+  { roughness: 1.0, metalness: 0.0 }
+);
+
+const cigaretteAshMat = makePBR(
+  {
+    albedo: "./assets/Textures/New Cigarette Folder/Cig Ash Albeto.jpg",
+  },
+  { roughness: 1.0, metalness: 0.0 }
+);
+
+const cigaretteEmberMat = new THREE.MeshBasicMaterial({
+  color: 0xff5a00,
+  side: THREE.DoubleSide,
+  toneMapped: false,
+});
+
+darkenMaterial(cigaretteFilterMat, {
+  env: 0.0,
+  rough: 1.0,
+  colorMul: 0.7,
+});
+
+darkenMaterial(cigaretteTobaccoMat, {
+  env: 0.0,
+  rough: 1.0,
+  colorMul: 0.7,
+});
+
+darkenMaterial(cigaretteAshMat, {
+  env: 0.0,
+  rough: 1.0,
+  colorMul: 0.7,
+});
+
 // ============================================================
 // ✅ WALL DETAIL BOOST (micro-contrast without "brightening")
 // Paste directly under: const materials = { ... };
@@ -7099,6 +7210,72 @@ const PICTURE1_TEXTURES = [
 let picture1TexIndex = 0;
 let picture1MeshRef = null; // will be captured from Main GLB
 let grimReaperRef = null;
+
+let cigaretteRoot = null;
+let cigaretteMeshRef = null;
+let emberTipRef = null;
+let emberLightRef = null;
+let hoveringCigarette = false;
+
+let cigaretteMixer = null;
+let cigaretteActions = [];
+
+const CIG_START_FRAME = 200;
+const CIG_FPS = 24;
+const CIG_START_TIME = CIG_START_FRAME / CIG_FPS;
+
+function playCigaretteAnimation() {
+  if (!cigaretteActions.length) {
+    console.warn("⚠️ cigaretteActions missing");
+    return;
+  }
+
+  for (const action of cigaretteActions) {
+    action.enabled = true;
+    action.paused = false;
+    action.reset();
+    action.time = CIG_START_TIME;
+    action.setLoop(THREE.LoopOnce, 1);
+    action.clampWhenFinished = true;
+    action.play();
+  }
+
+  console.log("▶️ cigarette animation triggered", cigaretteActions.map(a => a.getClip().name));
+}
+
+function updateCigaretteEmber() {
+  if (!emberTipRef || !emberTipRef.material) return;
+
+  const mat = Array.isArray(emberTipRef.material)
+    ? emberTipRef.material[0]
+    : emberTipRef.material;
+
+  if (!mat) return;
+
+  const t = performance.now() * 0.008;
+  const pulse = 0.75 + 0.25 * Math.sin(t);
+
+  // ✅ If using MeshBasicMaterial, pulse COLOR directly
+  if ("color" in mat) {
+    mat.color.setRGB(1.0, 0.22 + pulse * 0.45, 0.0);
+  }
+
+  // ✅ If using emissive material, pulse emissive too
+  if ("emissive" in mat) {
+    mat.emissive.setRGB(1.0, 0.22 + pulse * 0.35, 0.0);
+  }
+
+  if ("emissiveIntensity" in mat) {
+    mat.emissiveIntensity = 5.0 + pulse * 4.0;
+  }
+
+  // ✅ Make the real light MUCH stronger
+  if (emberLightRef) {
+    emberLightRef.intensity = 10.0 + pulse * 10.0;
+    emberLightRef.distance = 2.0;
+    emberLightRef.color.setRGB(1.0, 0.3 + pulse * 0.2, 0.0);
+  }
+}
 
 // ============================================================
 // ✅ GRIM OPACITY CONTROL (simple transparency)
@@ -7322,6 +7499,7 @@ bugMixer.addEventListener("finished", (e) => {
 
       // ✅ ensure all static meshes are raycastable on WORLD layer
 o.layers.enable(LAYER_WORLD);
+
 
 if (o.isMesh && o.geometry && o.geometry.attributes.uv && !o.geometry.attributes.uv2) {
   o.geometry.setAttribute("uv2", o.geometry.attributes.uv);
@@ -7850,6 +8028,8 @@ const interactiveLoader = new GLTFLoader();
 
 const newMaterialsLoader = new GLTFLoader();
 
+const cigaretteLoader = new GLTFLoader();
+
 const __endUI = __beginAsset("Interactives GLB");
 
 interactiveLoader.load(
@@ -7893,6 +8073,29 @@ interactiveLoader.load(
 
   ui.traverse((o) => {
   if (!o.isMesh) return;
+
+    // 🚬 HIDE Cig1 from Interactive Materials GLB
+  const on = (o.name || "").toLowerCase();
+  const mn = (o.material?.name || "").toLowerCase();
+  const pn = (o.parent?.name || "").toLowerCase();
+
+  if (
+    on.includes("mesh.011") ||
+    on.includes("cig1") ||
+    mn.includes("cig1") ||
+    pn.includes("cig1")
+  ) {
+    console.log("🚬 Hiding Interactive Cig1:", {
+      meshName: o.name,
+      materialName: o.material?.name,
+      parentName: o.parent?.name,
+    });
+
+    o.visible = false;
+    o.castShadow = false;
+    o.receiveShadow = false;
+    return;
+  }
 
   // ensure uv2 exists if we use AO maps
   if (o.geometry && o.geometry.attributes.uv && !o.geometry.attributes.uv2) {
@@ -8352,6 +8555,144 @@ if (!grimReaperRef && (nn.includes("grim_reaper") || mm.includes("grim_reaper"))
   }
 );
 
+const __endCigaretteGLB = __beginAsset("Cigarette Smoke GLB");
+
+cigaretteLoader.load(
+  "./assets/models/cigarette_smoke2.glb",
+  (gltf) => {
+    __endCigaretteGLB();
+
+    cigaretteRoot = gltf.scene;
+    anchor.add(cigaretteRoot);
+
+cigaretteRoot.traverse((o) => {
+  if (!o.isMesh) return;
+
+  o.castShadow = true;
+  o.receiveShadow = true;
+  o.frustumCulled = false;
+  o.layers.enable(LAYER_WORLD);
+
+  if (o.geometry && o.geometry.attributes.uv && !o.geometry.attributes.uv2) {
+    o.geometry.setAttribute("uv2", o.geometry.attributes.uv);
+  }
+
+  const n = (o.name || "").toLowerCase();
+  const pn = (o.parent?.name || "").toLowerCase();
+  const mn = (o.material?.name || "").toLowerCase();
+
+  if (!cigaretteMeshRef) cigaretteMeshRef = o;
+
+  // FILTER
+  if (
+    n.includes("filter") ||
+    pn.includes("filter") ||
+    mn.includes("filter")
+  ) {
+    o.material = cigaretteFilterMat.clone();
+    o.material.needsUpdate = true;
+    console.log("🚬 Filter material applied:", o.name);
+    return;
+  }
+
+  // TOBACCO / PAPER BODY
+  if (
+    n.includes("tobacco") ||
+    n.includes("cig") ||
+    pn.includes("tobacco") ||
+    mn.includes("tobacco")
+  ) {
+    o.material = cigaretteTobaccoMat.clone();
+    o.material.needsUpdate = true;
+    console.log("🚬 Tobacco material applied:", o.name);
+    return;
+  }
+
+  // ASH
+  if (
+    n.includes("ashes") ||
+    n.includes("ash_body") ||
+    n.includes("ash") ||
+    pn.includes("ashes") ||
+    mn.includes("ash")
+  ) {
+    o.material = cigaretteAshMat.clone();
+    o.material.needsUpdate = true;
+    console.log("🚬 Ash material applied:", o.name);
+    return;
+  }
+
+    // EMBER TIP
+  if (
+    n.includes("ember_tip") ||
+    n.includes("ember") ||
+    pn.includes("ember") ||
+    mn.includes("ember")
+  ) {
+    emberTipRef = o;
+
+    o.material = cigaretteEmberMat.clone();
+    o.material.toneMapped = false;
+    o.material.emissiveIntensity = 6.0;
+    o.material.needsUpdate = true;
+
+if (!emberLightRef) {
+  emberLightRef = new THREE.PointLight(0xff5a00, 14.0, 2.0, 2.0);
+  emberLightRef.castShadow = false;
+  emberTipRef.add(emberLightRef);
+  emberLightRef.position.set(0, 0, 0);
+
+  console.log("🔥 ember light created", emberLightRef);
+}
+
+    console.log("🔥 Ember tip found + ember material applied:", o.name);
+    return;
+  }
+
+  console.log("⚠️ cigarette mesh got no special material:", o.name);
+});
+
+    cigaretteRoot.updateMatrixWorld(true);
+
+    if (gltf.animations && gltf.animations.length > 0) {
+  cigaretteMixer = new THREE.AnimationMixer(cigaretteRoot);
+  cigaretteActions = [];
+
+  console.log("🚬 all cigarette clips:", gltf.animations.map(a => ({
+    name: a.name,
+    duration: a.duration
+  })));
+
+for (const clip of gltf.animations) {
+  const action = cigaretteMixer.clipAction(clip);
+
+  action.enabled = true;
+  action.setLoop(THREE.LoopOnce, 1);
+  action.clampWhenFinished = true;
+
+  action.reset();
+  action.time = CIG_START_TIME; // 🔥 start at frame 265
+  action.paused = true;
+
+  cigaretteActions.push(action);
+}
+
+  cigaretteMixer.update(0);
+
+  console.log("✅ cigarette animation actions ready:", cigaretteActions.map(a => a.getClip().name));
+} else {
+  console.warn("⚠️ No cigarette animations found in cigarette_smoke.glb");
+}
+
+    console.log("✅ cigarette_smoke.glb loaded");
+  },
+  undefined,
+  (err) => {
+    console.error("❌ cigarette_smoke.glb failed to load:", err);
+    __endCigaretteGLB();
+  }
+);
+
 // ============================================================
 // ✅ GLOBAL LOOK CONTROL (mood / overall darkness)
 // ============================================================
@@ -8371,12 +8712,15 @@ function animate() {
   // ✅ advance bug animations
 if (bugMixer) bugMixer.update(dt);
 
+if (cigaretteMixer) cigaretteMixer.update(dt);
+
   if (!blocked) {
     updateTv();
     updateLampFlicker();
     updateDust(dt);
     updateGlow();
     updatePress();
+    updateCigaretteEmber();
   }
 
  // ✅ Throttle TV redraw so it doesn't hammer performance
