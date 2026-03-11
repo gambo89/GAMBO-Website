@@ -2129,7 +2129,7 @@ function showBook4Hint(show) {
 // DOG_TAG1 HOVER HINT (Press to go to playlist)
 // ============================================================
 const dogTagHint = document.createElement("div");
-dogTagHint.innerText = "press to go to playlist";
+dogTagHint.innerText = "press to view playlist";
 
 dogTagHint.style.position = "fixed";
 dogTagHint.style.left = "50%";
@@ -2161,39 +2161,38 @@ function showDogTagHint(show) {
 }
 
 // ============================================================
-// BOARD2 HOVER HINT (Press to watch my favorite skate video)
+// DOOR4 HOVER HINT (Door is locked)
 // ============================================================
-const board2Hint = document.createElement("div");
-board2Hint.innerHTML = "press to watch my<br>favorite skate video";
+const door4Hint = document.createElement("div");
+door4Hint.innerText = "door is locked";
 
-board2Hint.style.position = "fixed";
-board2Hint.style.left = "50%";
-board2Hint.style.bottom = "80px";
-board2Hint.style.transform = "translateX(-50%)";
+door4Hint.style.position = "fixed";
+door4Hint.style.left = "50%";
+door4Hint.style.bottom = "80px";
+door4Hint.style.transform = "translateX(-50%)";
 
-board2Hint.style.padding = "8px 16px";
-board2Hint.style.borderRadius = "20px";
+door4Hint.style.padding = "8px 16px";
+door4Hint.style.borderRadius = "20px";
 
-board2Hint.style.background = "rgba(0,0,0,0.6)";
-board2Hint.style.color = "#fff";
-board2Hint.style.fontSize = "14px";
-board2Hint.style.fontFamily = "Arial, sans-serif";
-board2Hint.style.textAlign = "center";
+door4Hint.style.background = "rgba(0,0,0,0.6)";
+door4Hint.style.color = "#fff";
+door4Hint.style.fontSize = "14px";
+door4Hint.style.fontFamily = "Arial, sans-serif";
 
-board2Hint.style.pointerEvents = "none";
-board2Hint.style.opacity = "0";
-board2Hint.style.transition = "opacity 0.25s ease";
+door4Hint.style.pointerEvents = "none";
+door4Hint.style.opacity = "0";
+door4Hint.style.transition = "opacity 0.25s ease";
 
-board2Hint.style.zIndex = "9998";
+door4Hint.style.zIndex = "9998";
 
-document.body.appendChild(board2Hint);
+document.body.appendChild(door4Hint);
 
-let board2HintVisible = false;
+let door4HintVisible = false;
 
-function showBoard2Hint(show) {
-  if (show === board2HintVisible) return;
-  board2HintVisible = show;
-  board2Hint.style.opacity = show ? "1" : "0";
+function showDoor4Hint(show) {
+  if (show === door4HintVisible) return;
+  door4HintVisible = show;
+  door4Hint.style.opacity = show ? "1" : "0";
 }
 
 // ============================================================
@@ -2382,7 +2381,6 @@ const HINT_AUTOHIDE_MS = 2000;
 let currentHoverKey = null;     // "tv" | "speaker" | "power" | "ok" | "up" | "down" | "left" | "right" | null
 let hintTimeoutId = null;
 
-// If a hint timed-out while still hovering, we suppress it until user leaves that hover target
 const hintSuppressed = {
   tv: false,
   speaker: false,
@@ -2398,7 +2396,7 @@ const hintSuppressed = {
   dvdplayer1: false,
   book4: false,
   dogtag1: false,
-  board2: false,
+  door4: false,
   picture1: false,
 };
 
@@ -2412,7 +2410,7 @@ function hideAllHintsImmediate() {
   showDvdPlayer1Hint(false);
   showBook4Hint(false);
   showDogTagHint(false);
-  showBoard2Hint(false);
+  showDoor4Hint(false);
   showPicture1Hint(false);
   hideRemoteHints();
 }
@@ -2471,8 +2469,8 @@ if (key === "dogtag1") {
   return;
 }
 
-if (key === "board2") {
-  showBoard2Hint(true);
+if (key === "door4") {
+  showDoor4Hint(true);
   return;
 }
 
@@ -4482,7 +4480,7 @@ function applyTvTextureEnabled(enabled) {
 }
 
 const tracks = [
-  "./assets/Audio/01-Bathory.mp3",
+  "./assets/Audio/01-Aftonvarldar.mp3",
   "./assets/Audio/02-rip-fredo-notice-me-01.mp3",
   "./assets/Audio/03-floor-555-01.mp3",
   "./assets/Audio/04-12r-01.mp3",
@@ -4509,6 +4507,9 @@ let isPlaying = false;
 // 🔓 ADD THIS BLOCK RIGHT HERE
 let audioUnlocked = false;
 
+let bgAudio = null;
+let bgAudioEnabled = true;
+
 async function unlockAudioOnce() {
   if (audioUnlocked) return;
 
@@ -4522,13 +4523,12 @@ async function unlockAudioOnce() {
     a.muted = false;
 
     audioUnlocked = true;
-    console.log("🔓 Audio unlocked");
+    console.log("🔓 Speaker audio unlocked");
   } catch (e) {
-    console.warn("Audio unlock failed:", e);
+    console.warn("Speaker audio unlock failed:", e);
     audioUnlocked = false;
   }
 }
-
 
 const audioEls = tracks.map((src) => {
   const a = new Audio(src);
@@ -4570,13 +4570,34 @@ function currentAudio() {
   return audioEls[trackIndex];
 }
 
-// ✅ iOS: pause music if Safari goes to background / user leaves the page
+function ensureBackgroundAudio() {
+  if (bgAudio) return bgAudio;
+
+  bgAudio = new Audio("./assets/Audio/Background sound1.m4a");
+  bgAudio.preload = "auto";
+  bgAudio.crossOrigin = "anonymous";
+  bgAudio.loop = true;
+  bgAudio.volume = 0.60;
+  bgAudio.playsInline = true;
+  bgAudio.setAttribute?.("webkit-playsinline", "");
+
+  return bgAudio;
+}
+
 function stopMusicBecauseUserLeft() {
-  // if you want it to STOP and reset to start:
+  // stop speaker music
   for (const a of audioEls) {
     try {
       a.pause();
       a.currentTime = 0;
+    } catch {}
+  }
+
+  // stop background ambience
+  if (bgAudio) {
+    try {
+      bgAudio.pause();
+      bgAudio.currentTime = 0;
     } catch {}
   }
 
@@ -4592,6 +4613,44 @@ function pauseAll() {
   isPlaying = false;
 }
 
+async function playBackgroundAudio() {
+  if (!bgAudioEnabled) return;
+
+  const bg = ensureBackgroundAudio();
+
+  try {
+    if (bg.paused) {
+      await bg.play();
+      console.log("🌫️ Background ambience playing");
+    }
+  } catch (err) {
+    console.warn("Background ambience play blocked:", err);
+  }
+}
+
+async function tryAutoStartBackgroundAudio() {
+  if (!bgAudioEnabled) return;
+
+  const bg = ensureBackgroundAudio();
+
+  try {
+    await bg.play();
+    console.log("🌫️ Background ambience autoplay started");
+    return true;
+  } catch (err) {
+    console.warn("Background ambience autoplay blocked:", err);
+    return false;
+  }
+}
+
+function pauseBackgroundAudio() {
+  if (!bgAudio) return;
+  bgAudio.pause();
+}
+
+ensureBackgroundAudio();
+tryAutoStartBackgroundAudio();
+
 async function playCurrent() {
   const a = currentAudio();
   try {
@@ -4600,6 +4659,23 @@ async function playCurrent() {
     console.log("▶️ Playing track:", trackIndex, tracks[trackIndex]);
   } catch (err) {
     console.warn("Audio play blocked:", err);
+  }
+}
+
+let bgAudioStartedOnce = false;
+
+async function startBackgroundAudioFromUserGesture() {
+  if (bgAudioStartedOnce) return;
+  if (!bgAudioEnabled) return;
+
+  const bg = ensureBackgroundAudio();
+
+  try {
+    await bg.play();
+    bgAudioStartedOnce = true;
+    console.log("🌫️ Background ambience started from early gesture");
+  } catch (err) {
+    console.warn("Background ambience early gesture start blocked:", err);
   }
 }
 
@@ -4699,6 +4775,19 @@ function hitIsDogTag(obj) {
   return false;
 }
 
+function hitIsDunkeheitAlbum(obj) {
+  let o = obj;
+  while (o) {
+    const n = (o.name || "").toLowerCase();
+    const mn = (o.material?.name || "").toLowerCase();
+
+    if (n.includes("dunkeheit_album") || mn.includes("dunkeheit_album")) return true;
+
+    o = o.parent;
+  }
+  return false;
+}
+
 function hitIsAllDVD(obj) {
   let o = obj;
   while (o) {
@@ -4748,6 +4837,19 @@ function hitIsBoard2(obj) {
     const mn = (o.material?.name || "").toLowerCase();
 
     if (n.includes("board2") || mn.includes("board2")) return true;
+
+    o = o.parent;
+  }
+  return false;
+}
+
+function hitIsDoor4(obj) {
+  let o = obj;
+  while (o) {
+    const n = (o.name || "").toLowerCase();
+    const mn = (o.material?.name || "").toLowerCase();
+
+    if (n.includes("door4") || mn.includes("door4")) return true;
 
     o = o.parent;
   }
@@ -5336,6 +5438,7 @@ function hitIsPicture1(obj) {
 async function onPointerDown(e) {
   if (isIOSPortraitBlocked()) return;
   if (isIOSDevice()) nudgeIosRemotePulse();
+
   if (!setPointerFromEvent(e)) return; // ✅ ignore clicks in black bars
   raycaster.setFromCamera(pointer, camera);
 
@@ -5462,10 +5565,10 @@ if (hitIsLamp(hit)) {
   return;
 }
 
-// ✅ DOG TAG click -> open playlist (Safari-safe: open on pointerup)
-if (hitIsDogTag(hit)) {
+// ✅ Dunkeheit Album click -> open playlist (Safari-safe: open on pointerup)
+if (hitIsDunkeheitAlbum(hit)) {
   const url = "https://open.spotify.com/playlist/29St0Hbsl7aWEyq7LBV4O6";
-  console.log("🏷️ Dog_Tag1 hit — queued for pointerup:", url);
+  console.log("💿 Dunkeheit_Album hit — queued for pointerup:", url);
   pendingExternalUrl = url;
   return;
 }
@@ -5490,14 +5593,6 @@ if (hitIsDVDOnPlayer1(hit)) {
 if (hitIsBook4(hit)) {
   const url = "https://welib.org/md5/0516e985137dba6cae48c7e5a0eeb57d";
   console.log("📖 Book4 hit — queued for pointerup:", url);
-  pendingExternalUrl = url;
-  return;
-}
-
-// ✅ Board2 click -> open YouTube link (Safari-safe: open on pointerup)
-if (hitIsBoard2(hit)) {
-  const url = "https://www.youtube.com/watch?v=D8hMVPSTysU";
-  console.log("📋 Board2 hit — queued for pointerup:", url);
   pendingExternalUrl = url;
   return;
 }
@@ -5785,6 +5880,15 @@ function onPointerCancel() {
   tvTouchActive = false;
 }
 
+const startBgOnce = async () => {
+  await startBackgroundAudioFromUserGesture();
+};
+
+window.addEventListener("pointerdown", startBgOnce, { passive: true, once: true });
+window.addEventListener("touchstart", startBgOnce, { passive: true, once: true });
+window.addEventListener("mousedown", startBgOnce, { passive: true, once: true });
+window.addEventListener("pointerenter", startBgOnce, { passive: true, once: true });
+
 // ============================================================
 // ✅ POINTER EVENTS (EDIT 2): hook down/up/cancel to canvas
 // ============================================================
@@ -5943,29 +6047,31 @@ if (
 
 const hoveringTvScreen = !!(tvScreenMeshRef && isInHierarchy(hit, tvScreenMeshRef));
 
-  let hoveringTv = false;
-  let hoveringSpeaker = false;
-  let hoveringPower = false;
-  let hoveringCigarette = false;
-  let hoveringOk = false;
-  let hoveringUp = false;
-  let hoveringDown = false;
-  let hoveringLeft = false;
-  let hoveringRight = false;
-  let hoveringLamp = false;
-  let hoveringAllDvd = false;
-  let hoveringDvdPlayer1 = false;
-  let hoveringBook4 = false;
-  let hoveringDogTag1 = false;
-  let hoveringBoard2 = false;
-  let hoveringPicture1 = false;
+let hoveringTv = false;
+let hoveringSpeaker = false;
+let hoveringPower = false;
+let hoveringCigarette = false;
+let hoveringOk = false;
+let hoveringUp = false;
+let hoveringDown = false;
+let hoveringLeft = false;
+let hoveringRight = false;
+let hoveringLamp = false;
+let hoveringAllDvd = false;
+let hoveringDvdPlayer1 = false;
+let hoveringBook4 = false;
+let hoveringDogTag1 = false;
+let hoveringDunkeheitAlbum = false;
+let hoveringBoard2 = false;
+let hoveringDoor4 = false;
+let hoveringPicture1 = false;
 
   if (hitIsLamp(hit)) hoveringLamp = true;
   if (hitIsAllDVD(hit)) hoveringAllDvd = true;
   if (hitIsDVDOnPlayer1(hit)) hoveringDvdPlayer1 = true;
   if (hitIsBook4(hit)) hoveringBook4 = true;
-  if (hitIsDogTag(hit)) hoveringDogTag1 = true;
-  if (hitIsBoard2(hit)) hoveringBoard2 = true;
+  if (hitIsDunkeheitAlbum(hit)) hoveringDunkeheitAlbum = true;
+  if (hitIsDoor4(hit)) hoveringDoor4 = true;
   if (hoveringPicture1AllHits) hoveringPicture1 = true;
 
   // ✅ CRITICAL: TV hover must not allow remote glow at all
@@ -6074,8 +6180,8 @@ if (cigaretteRoot && isInHierarchy(hit, cigaretteRoot)) {
   else if (hoveringAllDvd) nextKey = "alldvd";
   else if (hoveringDvdPlayer1) nextKey = "dvdplayer1";
   else if (hoveringBook4) nextKey = "book4";
-  else if (hoveringDogTag1) nextKey = "dogtag1";
-  else if (hoveringBoard2) nextKey = "board2";
+  else if (hoveringDunkeheitAlbum) nextKey = "dogtag1";
+  else if (hoveringDoor4) nextKey = "door4";
   else if (hoveringPicture1) nextKey = "picture1";
   else if (hoveringOk) nextKey = "ok";
   else if (hoveringUp) nextKey = "up";
@@ -6598,11 +6704,26 @@ Door4: (() => {
     { roughness: 0.0, metalness: 0.0}
 ),
 
- Dunkeheit_Album: makePBR({
-    albedo: "./assets/Textures/Bathory/Blood-fire Albeto.jpg",
+ Dunkeheit_Album: (() => {
+  const m = makePBR(
+    {
+      albedo: "./assets/Textures/Album/Album Albedo.jpg",
     },
-    { roughness: 1.0, metalness: 0.0}
-),
+    { roughness: -0.2, metalness: 0.2 }
+  );
+
+  // ✅ brighten the texture slightly
+  m.color.multiplyScalar(0.7);
+
+  // ✅ subtle self-light so it reads even in dark areas
+  m.emissive = new THREE.Color(0xffffff);
+  m.emissiveIntensity = 0.0102;
+
+  // ✅ reduce harsh reflections from lamp
+  if ("envMapIntensity" in m) m.envMapIntensity = 0.04;
+
+  return m;
+})(),
 
  Sony_Handicam1: makePBR({
     albedo: "./assets/Textures/Sony Handicam/Sony Handicam Albeto.jpg",
@@ -6835,10 +6956,10 @@ cabnet_hinge5: (() => {
   );
 
   // 2️⃣ DARKEN IT HERE 👇 (THIS is where multiplyScalar goes)
-  m.color.multiplyScalar(0.37);
+  m.color.multiplyScalar(0.2);
 
   // 3️⃣ Optional: subtle reflection
-  m.envMapIntensity = 0.10;
+  m.envMapIntensity = 0.05;
 
   // 4️⃣ Return finished material
   return m;
@@ -7117,15 +7238,31 @@ const cigaretteTobaccoMat = makePBR(
   { roughness: 1.0, metalness: 0.0 }
 );
 
-const cigaretteAshMat = makePBR(
-  {
-    albedo: "./assets/Textures/New Cigarette Folder/Cig Ash Albeto.jpg",
-  },
-  { roughness: 1.0, metalness: 0.0 }
-);
+const cigaretteAshMat = (() => {
+  const m = makePBR(
+    {
+      albedo: "./assets/Textures/New Cigarette Folder/Cig Ash Albeto.jpg",
+    },
+    { roughness: 1.0, metalness: 0.0 }
+  );
 
-const cigaretteEmberMat = new THREE.MeshBasicMaterial({
-  color: 0xff5a00,
+  // keep the ash darker so the heat reads stronger
+  m.color.multiplyScalar(0.55);
+
+  // deeper ember base — red/orange, not yellow
+  m.emissive = new THREE.Color(0xff2a00);
+  m.emissiveIntensity = 2.4;
+  m.toneMapped = false;
+
+  return m;
+})();
+
+const cigaretteEmberMat = new THREE.MeshStandardMaterial({
+  color: 0x2a0a00,
+  emissive: 0xff2400,
+  emissiveIntensity: 11.5,
+  roughness: 0.95,
+  metalness: 0.0,
   side: THREE.DoubleSide,
   toneMapped: false,
 });
@@ -7214,8 +7351,16 @@ let grimReaperRef = null;
 let cigaretteRoot = null;
 let cigaretteMeshRef = null;
 let emberTipRef = null;
+let emberTipMatRef = null;
+let emberTipMatIndex = -1;
+let ashMatRef = null;
+let ashMeshRef = null;
 let emberLightRef = null;
 let hoveringCigarette = false;
+
+let emberCrackle = 0.72;
+let emberCrackleTarget = 0.72;
+let emberCrackleNextT = 0;
 
 let cigaretteMixer = null;
 let cigaretteActions = [];
@@ -7244,36 +7389,72 @@ function playCigaretteAnimation() {
 }
 
 function updateCigaretteEmber() {
-  if (!emberTipRef || !emberTipRef.material) return;
+  const now = performance.now() * 0.001;
 
-  const mat = Array.isArray(emberTipRef.material)
-    ? emberTipRef.material[0]
-    : emberTipRef.material;
+  // slow stepped coal crackle — not stroby
+  if (now > emberCrackleNextT) {
+    emberCrackleNextT = now + 0.09 + Math.random() * 0.20;
 
-  if (!mat) return;
+    const r = Math.random();
 
-  const t = performance.now() * 0.008;
-  const pulse = 0.75 + 0.25 * Math.sin(t);
-
-  // ✅ If using MeshBasicMaterial, pulse COLOR directly
-  if ("color" in mat) {
-    mat.color.setRGB(1.0, 0.22 + pulse * 0.45, 0.0);
+    if (r < 0.58) {
+      emberCrackleTarget = 0.68 + Math.random() * 0.08; // stable burn
+    } else if (r < 0.86) {
+      emberCrackleTarget = 0.54 + Math.random() * 0.08; // slight dim
+    } else {
+      emberCrackleTarget = 0.86 + Math.random() * 0.12; // crack/pop
+    }
   }
 
-  // ✅ If using emissive material, pulse emissive too
-  if ("emissive" in mat) {
-    mat.emissive.setRGB(1.0, 0.22 + pulse * 0.35, 0.0);
+  emberCrackle += (emberCrackleTarget - emberCrackle) * 0.12;
+
+  // subtle slow breathing underneath
+  const breathe =
+    0.025 * Math.sin(now * 1.6) +
+    0.012 * Math.sin(now * 3.7);
+
+  const heat = Math.max(0.35, emberCrackle + breathe);
+
+  // ember tip material
+  if (emberTipMatRef) {
+    emberTipMatRef.emissive.setRGB(
+      1.0,
+      0.03 + heat * 0.045,
+      0.0
+    );
+
+    emberTipMatRef.emissiveIntensity = 12.5 + heat * 7.5;
+
+    emberTipMatRef.color.setRGB(
+      0.22 + heat * 0.10,
+      0.02,
+      0.0
+    );
+
+    emberTipMatRef.needsUpdate = true;
   }
 
-  if ("emissiveIntensity" in mat) {
-    mat.emissiveIntensity = 5.0 + pulse * 4.0;
+  // ash rim / visible outer glow
+  if (ashMatRef) {
+    ashMatRef.emissive.setRGB(
+      1.0,
+      0.025 + heat * 0.04,
+      0.0
+    );
+
+    ashMatRef.emissiveIntensity = 3.2 + heat * 2.6;
+    ashMatRef.needsUpdate = true;
   }
 
-  // ✅ Make the real light MUCH stronger
+  // keep point light extremely subtle so it doesn't turn yellow
   if (emberLightRef) {
-    emberLightRef.intensity = 10.0 + pulse * 10.0;
-    emberLightRef.distance = 2.0;
-    emberLightRef.color.setRGB(1.0, 0.3 + pulse * 0.2, 0.0);
+    emberLightRef.intensity = 0.10 + heat * 0.18;
+    emberLightRef.distance = 0.2 + heat * 0.015;
+    emberLightRef.color.setRGB(
+      1.0,
+      0.015 + heat * 0.07,
+      0.0
+    );
   }
 }
 
@@ -8557,132 +8738,185 @@ if (!grimReaperRef && (nn.includes("grim_reaper") || mm.includes("grim_reaper"))
 
 const __endCigaretteGLB = __beginAsset("Cigarette Smoke GLB");
 
+console.log("🚬 ABOUT TO START cigaretteLoader.load");
+
 cigaretteLoader.load(
-  "./assets/models/cigarette_smoke2.glb",
+  "./assets/models/cigarette_smoke3.glb",
   (gltf) => {
+    console.log("✅ cigarette GLB SUCCESS callback entered");
     __endCigaretteGLB();
 
     cigaretteRoot = gltf.scene;
     anchor.add(cigaretteRoot);
 
-cigaretteRoot.traverse((o) => {
-  if (!o.isMesh) return;
+    cigaretteRoot.traverse((o) => {
+      if (!o.isMesh) return;
 
-  o.castShadow = true;
-  o.receiveShadow = true;
-  o.frustumCulled = false;
-  o.layers.enable(LAYER_WORLD);
+      o.castShadow = true;
+      o.receiveShadow = true;
+      o.frustumCulled = false;
+      o.layers.enable(LAYER_WORLD);
 
-  if (o.geometry && o.geometry.attributes.uv && !o.geometry.attributes.uv2) {
-    o.geometry.setAttribute("uv2", o.geometry.attributes.uv);
-  }
+      if (o.geometry && o.geometry.attributes.uv && !o.geometry.attributes.uv2) {
+        o.geometry.setAttribute("uv2", o.geometry.attributes.uv);
+      }
 
-  const n = (o.name || "").toLowerCase();
-  const pn = (o.parent?.name || "").toLowerCase();
-  const mn = (o.material?.name || "").toLowerCase();
+      const objName = (o.name || "").toLowerCase();
+      const parentName = (o.parent?.name || "").toLowerCase();
 
-  if (!cigaretteMeshRef) cigaretteMeshRef = o;
+      if (!cigaretteMeshRef) cigaretteMeshRef = o;
 
-  // FILTER
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      const newMats = [];
+
+      for (let i = 0; i < mats.length; i++) {
+  const mat = mats[i];
+  const matName = (mat?.name || "").toLowerCase();
+
+  console.log("[CIG SLOT]", {
+    object: o.name,
+    parent: o.parent?.name,
+    material: mat?.name || "(no material name)",
+    slot: i
+  });
+
+  // EMBER
   if (
-    n.includes("filter") ||
-    pn.includes("filter") ||
-    mn.includes("filter")
+    matName.includes("ember") ||
+    matName.includes("tip") ||
+    objName.includes("ember") ||
+    objName.includes("tip") ||
+    parentName.includes("ember") ||
+    parentName.includes("tip")
   ) {
-    o.material = cigaretteFilterMat.clone();
-    o.material.needsUpdate = true;
-    console.log("🚬 Filter material applied:", o.name);
-    return;
-  }
+    const m = cigaretteEmberMat.clone();
+    m.name = "cigaretteEmberMat";
+    newMats.push(m);
 
-  // TOBACCO / PAPER BODY
-  if (
-    n.includes("tobacco") ||
-    n.includes("cig") ||
-    pn.includes("tobacco") ||
-    mn.includes("tobacco")
-  ) {
-    o.material = cigaretteTobaccoMat.clone();
-    o.material.needsUpdate = true;
-    console.log("🚬 Tobacco material applied:", o.name);
-    return;
-  }
-
-  // ASH
-  if (
-    n.includes("ashes") ||
-    n.includes("ash_body") ||
-    n.includes("ash") ||
-    pn.includes("ashes") ||
-    mn.includes("ash")
-  ) {
-    o.material = cigaretteAshMat.clone();
-    o.material.needsUpdate = true;
-    console.log("🚬 Ash material applied:", o.name);
-    return;
-  }
-
-    // EMBER TIP
-  if (
-    n.includes("ember_tip") ||
-    n.includes("ember") ||
-    pn.includes("ember") ||
-    mn.includes("ember")
-  ) {
     emberTipRef = o;
+    emberTipMatRef = m;
+    emberTipMatIndex = i;
 
-    o.material = cigaretteEmberMat.clone();
-    o.material.toneMapped = false;
-    o.material.emissiveIntensity = 6.0;
-    o.material.needsUpdate = true;
+    console.log("🔥 EMBER material captured:", {
+      object: o.name,
+      slot: i,
+      material: mat?.name
+    });
 
-if (!emberLightRef) {
-  emberLightRef = new THREE.PointLight(0xff5a00, 14.0, 2.0, 2.0);
+    continue;
+  }
+
+// ASH
+if (matName.includes("ash")) {
+  const m = cigaretteAshMat.clone();
+  m.name = "cigaretteAshMat";
+  newMats.push(m);
+
+  ashMatRef = m;
+  ashMeshRef = o;
+
+  console.log("🔥 ASH material captured:", {
+    object: o.name,
+    material: mat?.name
+  });
+
+  continue;
+}
+
+        // FILTER
+        if (
+          matName.includes("filter") ||
+          objName.includes("filter") ||
+          parentName.includes("filter")
+        ) {
+          const m = cigaretteFilterMat.clone();
+          m.name = "cigaretteFilterMat";
+          newMats.push(m);
+          continue;
+        }
+
+        // TOBACCO
+        if (
+          matName.includes("tobacco") ||
+          objName.includes("tobacco") ||
+          parentName.includes("tobacco")
+        ) {
+          const m = cigaretteTobaccoMat.clone();
+          m.name = "cigaretteTobaccoMat";
+          newMats.push(m);
+          continue;
+        }
+
+        newMats.push(mat);
+      }
+
+      o.material = Array.isArray(o.material) ? newMats : newMats[0];
+
+      if (Array.isArray(o.material)) {
+        o.material.forEach((m) => {
+          if (m) m.needsUpdate = true;
+        });
+      } else if (o.material) {
+        o.material.needsUpdate = true;
+      }
+    });
+
+    console.log("======== CIGARETTE GLB DUMP ========");
+
+    cigaretteRoot.traverse((o) => {
+      if (!o.isMesh) return;
+
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+
+      mats.forEach((m, i) => {
+        console.log("[CIG DUMP]", {
+          object: o.name,
+          slot: i,
+          material: m?.name || "(no material name)"
+        });
+      });
+    });
+
+ if (emberTipRef && !emberLightRef) {
+  emberLightRef = new THREE.PointLight(0xff2200, 0.22, 0.04, 2.0);
   emberLightRef.castShadow = false;
   emberTipRef.add(emberLightRef);
   emberLightRef.position.set(0, 0, 0);
 
-  console.log("🔥 ember light created", emberLightRef);
+  console.log("🔥 ember light created on:", emberTipRef.name);
 }
-
-    console.log("🔥 Ember tip found + ember material applied:", o.name);
-    return;
-  }
-
-  console.log("⚠️ cigarette mesh got no special material:", o.name);
-});
 
     cigaretteRoot.updateMatrixWorld(true);
 
     if (gltf.animations && gltf.animations.length > 0) {
-  cigaretteMixer = new THREE.AnimationMixer(cigaretteRoot);
-  cigaretteActions = [];
+      cigaretteMixer = new THREE.AnimationMixer(cigaretteRoot);
+      cigaretteActions = [];
 
-  console.log("🚬 all cigarette clips:", gltf.animations.map(a => ({
-    name: a.name,
-    duration: a.duration
-  })));
+      console.log("🚬 all cigarette clips:", gltf.animations.map(a => ({
+        name: a.name,
+        duration: a.duration
+      })));
 
-for (const clip of gltf.animations) {
-  const action = cigaretteMixer.clipAction(clip);
+      for (const clip of gltf.animations) {
+        const action = cigaretteMixer.clipAction(clip);
 
-  action.enabled = true;
-  action.setLoop(THREE.LoopOnce, 1);
-  action.clampWhenFinished = true;
+        action.enabled = true;
+        action.setLoop(THREE.LoopOnce, 1);
+        action.clampWhenFinished = true;
 
-  action.reset();
-  action.time = CIG_START_TIME; // 🔥 start at frame 265
-  action.paused = true;
+        action.reset();
+        action.time = CIG_START_TIME;
+        action.paused = true;
 
-  cigaretteActions.push(action);
-}
+        cigaretteActions.push(action);
+      }
 
-  cigaretteMixer.update(0);
+      cigaretteMixer.update(0);
 
-  console.log("✅ cigarette animation actions ready:", cigaretteActions.map(a => a.getClip().name));
-} else {
-  console.warn("⚠️ No cigarette animations found in cigarette_smoke.glb");
-}
+      console.log("✅ cigarette animation actions ready:", cigaretteActions.map(a => a.getClip().name));
+    } else {
+      console.warn("⚠️ No cigarette animations found in cigarette_smoke.glb");
+    }
 
     console.log("✅ cigarette_smoke.glb loaded");
   },
@@ -8697,7 +8931,7 @@ for (const clip of gltf.animations) {
 // ✅ GLOBAL LOOK CONTROL (mood / overall darkness)
 // ============================================================
 const LOOK = {
-  exposure: 0.7, // try 0.88–0.98
+  exposure: 1.0, // try 0.88–0.98
 };
 
 //ANIMATE
