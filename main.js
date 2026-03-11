@@ -8931,7 +8931,7 @@ if (matName.includes("ash")) {
 // ✅ GLOBAL LOOK CONTROL (mood / overall darkness)
 // ============================================================
 const LOOK = {
-  exposure: 1.0, // try 0.88–0.98
+  exposure: 0.9, // try 0.88–0.98
 };
 
 //ANIMATE
