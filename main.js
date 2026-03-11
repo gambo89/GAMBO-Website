@@ -6431,16 +6431,15 @@ function loadLinear(path) {
 
 function makePBR({ albedo, normal, roughness, metalness, ao }, opts = {}) {
   return new THREE.MeshStandardMaterial({
-  map: albedo ? loadSRGB(albedo) : null,
-  normalMap: null,
-  roughnessMap: null,
-  metalnessMap: null,
-  aoMap: null,
-  roughness: opts.roughness ?? 1.0,
-  metalness: opts.metalness ?? 0.0,
-  side: THREE.DoubleSide,
-});
-
+    map: albedo ? loadSRGB(albedo) : null,
+    normalMap: normal ? loadLinear(normal) : null,
+    roughnessMap: roughness ? loadLinear(roughness) : null,
+    metalnessMap: metalness ? loadLinear(metalness) : null,
+    aoMap: ao ? loadLinear(ao) : null,
+    roughness: opts.roughness ?? 1.0,
+    metalness: opts.metalness ?? 0.0,
+    side: THREE.DoubleSide,
+  });
 }
 
 // ✅ ADD THIS DIRECTLY UNDER makePBR()
@@ -7238,6 +7237,88 @@ const cigaretteTobaccoMat = makePBR(
   { roughness: 1.0, metalness: 0.0 }
 );
 
+function makeBurnBandTexture(size = 256) {
+  const c = document.createElement("canvas");
+  c.width = size;
+  c.height = size;
+  const ctx = c.getContext("2d");
+
+  // base horizontal band
+  const g = ctx.createLinearGradient(0, 0, size, 0);
+  g.addColorStop(0.00, "rgba(0,0,0,0.0)");
+  g.addColorStop(0.18, "rgba(70,0,0,0.18)");
+  g.addColorStop(0.34, "rgba(120,0,0,0.45)");
+  g.addColorStop(0.48, "rgba(255,70,30,0.95)");
+  g.addColorStop(0.60, "rgba(150,0,0,0.52)");
+  g.addColorStop(0.78, "rgba(50,0,0,0.16)");
+  g.addColorStop(1.00, "rgba(0,0,0,0.0)");
+
+  ctx.clearRect(0, 0, size, size);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+
+  // break it up vertically so it is NOT a perfect ring
+  for (let y = 0; y < size; y++) {
+    const noise = 0.65 + Math.random() * 0.35;
+    const hotChance = Math.random();
+
+    ctx.fillStyle =
+      hotChance > 0.92
+        ? `rgba(255,210,160,${0.06 + Math.random() * 0.08})`
+        : `rgba(0,0,0,${(1.0 - noise) * 0.55})`;
+
+    ctx.fillRect(0, y, size, 1);
+  }
+
+  // add a few brighter hot streaks
+  for (let i = 0; i < 10; i++) {
+    const x = size * (0.38 + Math.random() * 0.20);
+    const y = Math.random() * size;
+    const w = 10 + Math.random() * 24;
+    const h = 2 + Math.random() * 6;
+
+    ctx.fillStyle = `rgba(255,160,80,${0.08 + Math.random() * 0.18})`;
+    ctx.fillRect(x, y, w, h);
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.flipY = false;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+const ashGlowTex = makeBurnBandTexture();
+
+function makeEmberHaloTexture(size = 256) {
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const ctx = c.getContext("2d");
+
+  const g = ctx.createRadialGradient(
+    size * 0.5, size * 0.5, size * 0.18,
+    size * 0.5, size * 0.5, size * 0.5
+  );
+
+  g.addColorStop(0.00, "rgba(255,180,120,0.35)");
+  g.addColorStop(0.18, "rgba(255,60,20,0.28)");
+  g.addColorStop(0.38, "rgba(180,10,0,0.16)");
+  g.addColorStop(0.70, "rgba(50,0,0,0.04)");
+  g.addColorStop(1.00, "rgba(0,0,0,0.0)");
+
+  ctx.clearRect(0, 0, size, size);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.flipY = false;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+const emberHaloTex = makeEmberHaloTexture();
+
 const cigaretteAshMat = (() => {
   const m = makePBR(
     {
@@ -7246,22 +7327,25 @@ const cigaretteAshMat = (() => {
     { roughness: 1.0, metalness: 0.0 }
   );
 
-  // keep the ash darker so the heat reads stronger
-  m.color.multiplyScalar(0.55);
+  // darker coal/ash base
+  m.color.multiplyScalar(0.22);
 
-  // deeper ember base — red/orange, not yellow
-  m.emissive = new THREE.Color(0xff2a00);
-  m.emissiveIntensity = 2.4;
+  // subtle built-in heat, not the main visible glow
+  m.emissive = new THREE.Color(0x9b1200);
+  m.emissiveIntensity = 2.2;
+
+  // ✅ IMPORTANT: no emissiveMap here anymore
+  m.emissiveMap = null;
+
   m.toneMapped = false;
-
   return m;
 })();
 
 const cigaretteEmberMat = new THREE.MeshStandardMaterial({
-  color: 0x2a0a00,
-  emissive: 0xff2400,
-  emissiveIntensity: 11.5,
-  roughness: 0.95,
+  color: 0x220400,
+  emissive: 0xff2a0a,
+  emissiveIntensity: 6.5,
+  roughness: 1.0,
   metalness: 0.0,
   side: THREE.DoubleSide,
   toneMapped: false,
@@ -7358,6 +7442,9 @@ let ashMeshRef = null;
 let emberLightRef = null;
 let hoveringCigarette = false;
 
+let emberHaloRef = null;
+let emberHaloMatRef = null;
+
 let emberCrackle = 0.72;
 let emberCrackleTarget = 0.72;
 let emberCrackleNextT = 0;
@@ -7434,28 +7521,46 @@ function updateCigaretteEmber() {
     emberTipMatRef.needsUpdate = true;
   }
 
-  // ash rim / visible outer glow
-  if (ashMatRef) {
-    ashMatRef.emissive.setRGB(
-      1.0,
-      0.025 + heat * 0.04,
-      0.0
-    );
+if (ashMatRef) {
+  ashMatRef.emissive.setRGB(
+    0.95,
+    0.02 + heat * 0.02,
+    0.005
+  );
 
-    ashMatRef.emissiveIntensity = 3.2 + heat * 2.6;
-    ashMatRef.needsUpdate = true;
-  }
+  ashMatRef.emissiveIntensity = 1.8 + heat * 1.0;
+  ashMatRef.needsUpdate = true;
+}
 
-  // keep point light extremely subtle so it doesn't turn yellow
-  if (emberLightRef) {
-    emberLightRef.intensity = 0.10 + heat * 0.18;
-    emberLightRef.distance = 0.2 + heat * 0.015;
-    emberLightRef.color.setRGB(
-      1.0,
-      0.015 + heat * 0.07,
-      0.0
-    );
-  }
+if (emberTipMatRef) {
+  emberTipMatRef.emissive.setRGB(
+    1.0,
+    0.05 + heat * 0.05,
+    0.0
+  );
+
+  emberTipMatRef.emissiveIntensity = 7.5 + heat * 3.0;
+  emberTipMatRef.needsUpdate = true;
+}
+
+if (emberLightRef) {
+ emberLightRef.intensity = 0.9 + heat * 0.7;
+emberLightRef.distance = 0.16 + heat * 0.04;
+
+  emberLightRef.color.setRGB(
+    1.0,
+    0.08 + heat * 0.05,
+    0.02
+  );
+}
+
+if (emberHaloMatRef && emberHaloRef) {
+  emberHaloMatRef.opacity = 0.10 + heat * 0.08;
+
+  const sx = 0.026 + heat * 0.008;
+  const sy = 0.014 + heat * 0.006;
+  emberHaloRef.scale.set(sx, sy, 1.0);
+}
 }
 
 // ============================================================
@@ -8877,46 +8982,70 @@ if (matName.includes("ash")) {
       });
     });
 
- if (emberTipRef && !emberLightRef) {
-  emberLightRef = new THREE.PointLight(0xff2200, 0.22, 0.04, 2.0);
+if (emberTipRef && !emberLightRef) {
+  emberLightRef = new THREE.PointLight(0xff2a12, 2.1, 0.34, 1.8);
   emberLightRef.castShadow = false;
   emberTipRef.add(emberLightRef);
-  emberLightRef.position.set(0, 0, 0);
+
+  // push slightly into the cigarette body
+  emberLightRef.position.set(0.0, 0.0, 0.022);
 
   console.log("🔥 ember light created on:", emberTipRef.name);
 }
 
+if (emberTipRef && !emberHaloRef) {
+  emberHaloMatRef = new THREE.SpriteMaterial({
+  map: emberHaloTex,
+  color: 0xcc1a00,
+  transparent: true,
+  opacity: 0.18,
+  depthWrite: false,
+  depthTest: true,
+  blending: THREE.AdditiveBlending,
+  toneMapped: false,
+});
+
+  emberHaloRef = new THREE.Sprite(emberHaloMatRef);
+  emberTipRef.add(emberHaloRef);
+
+  emberHaloRef.position.set(0.0, 0.0, 0.010);
+emberHaloRef.scale.set(0.032, 0.018, 1.0);
+
+  console.log("🔥 ember halo sprite created on:", emberTipRef.name);
+}
+
     cigaretteRoot.updateMatrixWorld(true);
 
-    if (gltf.animations && gltf.animations.length > 0) {
-      cigaretteMixer = new THREE.AnimationMixer(cigaretteRoot);
-      cigaretteActions = [];
+if (gltf.animations && gltf.animations.length > 0) {
+  cigaretteMixer = new THREE.AnimationMixer(cigaretteRoot);
+  cigaretteActions = [];
 
-      console.log("🚬 all cigarette clips:", gltf.animations.map(a => ({
-        name: a.name,
-        duration: a.duration
-      })));
+  console.log("🚬 all cigarette clips:", gltf.animations.map(a => ({
+    name: a.name,
+    duration: a.duration
+  })));
 
-      for (const clip of gltf.animations) {
-        const action = cigaretteMixer.clipAction(clip);
+  for (const clip of gltf.animations) {
+  const action = cigaretteMixer.clipAction(clip);
 
-        action.enabled = true;
-        action.setLoop(THREE.LoopOnce, 1);
-        action.clampWhenFinished = true;
+  action.enabled = true;
+  action.setLoop(THREE.LoopOnce, 1);
+  action.clampWhenFinished = true;
 
-        action.reset();
-        action.time = CIG_START_TIME;
-        action.paused = true;
+  action.reset();
+  action.time = CIG_START_TIME;
+  action.paused = true;
 
-        cigaretteActions.push(action);
-      }
+  cigaretteActions.push(action);
+}
 
-      cigaretteMixer.update(0);
+  cigaretteMixer.update(0);
 
-      console.log("✅ cigarette animation actions ready:", cigaretteActions.map(a => a.getClip().name));
-    } else {
-      console.warn("⚠️ No cigarette animations found in cigarette_smoke.glb");
-    }
+  console.log("✅ cigarette animation actions ready:", cigaretteActions.map(a => a.getClip().name));
+
+} else {
+  console.warn("⚠️ No cigarette animations found in cigarette_smoke.glb");
+}
 
     console.log("✅ cigarette_smoke.glb loaded");
   },
@@ -8948,14 +9077,14 @@ if (bugMixer) bugMixer.update(dt);
 
 if (cigaretteMixer) cigaretteMixer.update(dt);
 
-  if (!blocked) {
-    updateTv();
-    updateLampFlicker();
-    updateDust(dt);
-    updateGlow();
-    updatePress();
-    updateCigaretteEmber();
-  }
+if (!blocked) {
+  updateTv();
+  updateLampFlicker();
+  updateDust(dt);
+  updateGlow();
+  updatePress();
+  updateCigaretteEmber();
+}
 
  // ✅ Throttle TV redraw so it doesn't hammer performance
 if (!window.__tvRedrawAcc) window.__tvRedrawAcc = 0;
