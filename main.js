@@ -750,7 +750,7 @@ function setInitialCameraFraming(maxDim) {
   // your original framing values
   const camX = maxDim * 0.030;
   const camY = maxDim * -0.146;
-  const camZ = baseDist * 0.282;
+  const camZ = baseDist * 0.278;
 
   const targetX = 1.18;
   const targetY = maxDim * -0.186;
