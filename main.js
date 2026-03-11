@@ -750,7 +750,7 @@ function setInitialCameraFraming(maxDim) {
   // your original framing values
   const camX = maxDim * 0.030;
   const camY = maxDim * -0.146;
-  const camZ = baseDist * 0.274;
+  const camZ = baseDist * 0.282;
 
   const targetX = 1.18;
   const targetY = maxDim * -0.186;
@@ -8738,10 +8738,10 @@ if (!grimReaperRef && (nn.includes("grim_reaper") || mm.includes("grim_reaper"))
 
 const __endCigaretteGLB = __beginAsset("Cigarette Smoke GLB");
 
-console.log("🚬 ABOUT TO START cigaretteLoader.load");
+console.log("🚬 ABOUT TO START cigaretteLoader.load", "./assets/models/cigarette_smoke3.glb?v=4");
 
 cigaretteLoader.load(
-  "./assets/models/cigarette_smoke3.glb",
+  "./assets/models/cigarette_smoke3.glb?v=4",
   (gltf) => {
     console.log("✅ cigarette GLB SUCCESS callback entered");
     __endCigaretteGLB();
