@@ -5477,6 +5477,7 @@ const cigaretteHit = hits.find(h => cigaretteRoot && isInHierarchy(h.object, cig
 if (cigaretteHit) {
   console.log("🚬 cigarette hit:", cigaretteHit.object.name);
   playCigaretteAnimation();
+  playSmokeTipAnimation();
   return;
 }
 
@@ -6506,14 +6507,12 @@ const materials = {
 
  TV_Box2: makePBR({
     albedo: "./assets/Textures/TV Box/TV Box Albeto.jpg",
-    normal: "./assets/Textures/TV Box/TV Box Normal.jpg"
     },
     { roughness: 0.5, metalness: 0.0}
 ),
 
 TV_stand: makePBR({
     albedo: "./assets/Textures/TV Stand/TV Stand Albeto.jpg",
-    normal: "./assets/Textures/TV Stand/TV Stand Normal.jpg",
     ao: "./assets/Textures/TV Stand/TV Stand AO.jpg",
     },
     { roughness: 1.0, metalness: 0.0}
@@ -7245,41 +7244,59 @@ function makeBurnBandTexture(size = 256) {
 
   // base horizontal band
   const g = ctx.createLinearGradient(0, 0, size, 0);
-  g.addColorStop(0.00, "rgba(0,0,0,0.0)");
-  g.addColorStop(0.18, "rgba(70,0,0,0.18)");
-  g.addColorStop(0.34, "rgba(120,0,0,0.45)");
-  g.addColorStop(0.48, "rgba(255,70,30,0.95)");
-  g.addColorStop(0.60, "rgba(150,0,0,0.52)");
-  g.addColorStop(0.78, "rgba(50,0,0,0.16)");
-  g.addColorStop(1.00, "rgba(0,0,0,0.0)");
+g.addColorStop(0.00, "rgba(0,0,0,0.0)");
+g.addColorStop(0.10, "rgba(25,0,0,0.06)");
+g.addColorStop(0.24, "rgba(70,0,0,0.18)");
+g.addColorStop(0.36, "rgba(120,0,0,0.38)");
+g.addColorStop(0.46, "rgba(185,18,0,0.72)");
+g.addColorStop(0.50, "rgba(255,95,18,0.92)");
+g.addColorStop(0.53, "rgba(255,170,60,0.42)");
+g.addColorStop(0.58, "rgba(160,10,0,0.62)");
+g.addColorStop(0.72, "rgba(65,0,0,0.20)");
+g.addColorStop(1.00, "rgba(0,0,0,0.0)");
 
   ctx.clearRect(0, 0, size, size);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, size, size);
 
-  // break it up vertically so it is NOT a perfect ring
   for (let y = 0; y < size; y++) {
-    const noise = 0.65 + Math.random() * 0.35;
-    const hotChance = Math.random();
+  const breakChance = Math.random();
 
-    ctx.fillStyle =
-      hotChance > 0.92
-        ? `rgba(255,210,160,${0.06 + Math.random() * 0.08})`
-        : `rgba(0,0,0,${(1.0 - noise) * 0.55})`;
+  // 🔥 kill parts of the ring (dead ash sections)
+  if (breakChance > 0.78) {
+    ctx.fillStyle = `rgba(0,0,0,${0.35 + Math.random() * 0.4})`;
+    ctx.fillRect(0, y, size, 1);
+    continue;
+  }
 
+  // 🔥 dim uneven areas
+  if (breakChance > 0.55) {
+    ctx.fillStyle = `rgba(0,0,0,${0.15 + Math.random() * 0.25})`;
     ctx.fillRect(0, y, size, 1);
   }
 
-  // add a few brighter hot streaks
-  for (let i = 0; i < 10; i++) {
-    const x = size * (0.38 + Math.random() * 0.20);
-    const y = Math.random() * size;
-    const w = 10 + Math.random() * 24;
-    const h = 2 + Math.random() * 6;
-
-    ctx.fillStyle = `rgba(255,160,80,${0.08 + Math.random() * 0.18})`;
-    ctx.fillRect(x, y, w, h);
+  // 🔥 rare hot bright streaks
+  if (Math.random() > 0.92) {
+    ctx.fillStyle = `rgba(255,200,120,${0.12 + Math.random() * 0.18})`;
+    ctx.fillRect(size * (0.45 + Math.random() * 0.1), y, 6, 1);
   }
+}
+
+  // add a few brighter hot streaks / flecks
+for (let i = 0; i < 14; i++) {
+  const x = size * (0.44 + Math.random() * 0.12);
+  const y = Math.random() * size;
+  const w = 4 + Math.random() * 10;
+  const h = 1 + Math.random() * 3;
+
+  const isHot = Math.random() > 0.72;
+
+  ctx.fillStyle = isHot
+    ? `rgba(255,210,120,${0.10 + Math.random() * 0.18})`
+    : `rgba(210,40,10,${0.06 + Math.random() * 0.12})`;
+
+  ctx.fillRect(x, y, w, h);
+}
 
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -7300,15 +7317,24 @@ function makeEmberHaloTexture(size = 256) {
     size * 0.5, size * 0.5, size * 0.5
   );
 
-  g.addColorStop(0.00, "rgba(255,180,120,0.35)");
-  g.addColorStop(0.18, "rgba(255,60,20,0.28)");
-  g.addColorStop(0.38, "rgba(180,10,0,0.16)");
-  g.addColorStop(0.70, "rgba(50,0,0,0.04)");
-  g.addColorStop(1.00, "rgba(0,0,0,0.0)");
+ g.addColorStop(0.00, "rgba(255,120,50,0.16)");
+g.addColorStop(0.14, "rgba(190,28,0,0.22)");
+g.addColorStop(0.34, "rgba(95,0,0,0.14)");
+g.addColorStop(0.70, "rgba(30,0,0,0.03)");
+g.addColorStop(1.00, "rgba(0,0,0,0.0)");
 
   ctx.clearRect(0, 0, size, size);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, size, size);
+
+  // 🔥 darken lower half (adds depth / realism)
+const shadowGrad = ctx.createLinearGradient(0, 0, 0, size);
+shadowGrad.addColorStop(0.0, "rgba(0,0,0,0.0)");
+shadowGrad.addColorStop(0.5, "rgba(0,0,0,0.15)");
+shadowGrad.addColorStop(1.0, "rgba(0,0,0,0.35)");
+
+ctx.fillStyle = shadowGrad;
+ctx.fillRect(0, 0, size, size);
 
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -7318,6 +7344,301 @@ function makeEmberHaloTexture(size = 256) {
 }
 
 const emberHaloTex = makeEmberHaloTexture();
+
+function makeSmokeSpriteTexture(size = 128) {
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const ctx = c.getContext("2d");
+
+  ctx.clearRect(0, 0, size, size);
+
+  // build a soft irregular cloud out of overlapping blobs
+  for (let i = 0; i < 14; i++) {
+    const x = size * (0.28 + Math.random() * 0.44);
+    const y = size * (0.18 + Math.random() * 0.64);
+
+    const rx = size * (0.10 + Math.random() * 0.16);
+    const ry = size * (0.06 + Math.random() * 0.14);
+
+    const a = 0.035 + Math.random() * 0.05;
+
+    const g = ctx.createRadialGradient(x, y, 0, x, y, Math.max(rx, ry));
+    g.addColorStop(0.00, `rgba(255,255,255,${a})`);
+    g.addColorStop(0.45, `rgba(235,235,235,${a * 0.7})`);
+    g.addColorStop(1.00, "rgba(0,0,0,0.0)");
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate((Math.random() - 0.5) * 1.2);
+    ctx.scale(rx / Math.max(rx, ry), ry / Math.max(rx, ry));
+    ctx.translate(-x, -y);
+
+    ctx.fillStyle = g;
+    ctx.fillRect(x - Math.max(rx, ry), y - Math.max(rx, ry), Math.max(rx, ry) * 2, Math.max(rx, ry) * 2);
+    ctx.restore();
+  }
+
+  // lightly erase the center so it doesn't look like a perfect puff stamp
+  for (let i = 0; i < 6; i++) {
+    const x = size * (0.35 + Math.random() * 0.30);
+    const y = size * (0.25 + Math.random() * 0.50);
+    const r = size * (0.05 + Math.random() * 0.08);
+
+    const cut = ctx.createRadialGradient(x, y, 0, x, y, r);
+    cut.addColorStop(0.00, "rgba(0,0,0,0.06)");
+    cut.addColorStop(1.00, "rgba(0,0,0,0.0)");
+
+    ctx.fillStyle = cut;
+    ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.flipY = false;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+const cigaretteSmokeTex = makeSmokeSpriteTexture();
+
+function getSafeRoomMaxDim() {
+  return Number.isFinite(roomMaxDim) && roomMaxDim > 0 ? roomMaxDim : 10;
+}
+
+function getSmokeScaleUnit() {
+  return Math.max(0.001, getSafeRoomMaxDim() * 0.01);
+}
+
+function getSmokeOffsetUnit() {
+  return Math.max(0.001, getSafeRoomMaxDim() * 0.003);
+}
+
+function ensureSmokeWorldRoot() {
+  if (smokeWorldRoot) return smokeWorldRoot;
+
+  smokeWorldRoot = new THREE.Group();
+  smokeWorldRoot.name = "SmokeWorldRoot";
+  scene.add(smokeWorldRoot);
+
+  return smokeWorldRoot;
+}
+
+function buildCigaretteSmoke(emitterParent) {
+  if (!emitterParent) {
+    console.warn("buildCigaretteSmoke: emitterParent missing");
+    return;
+  }
+
+  const worldRoot = ensureSmokeWorldRoot();
+
+  if (cigaretteSmokePoints) {
+    cigaretteSmokePoints.removeFromParent();
+    cigaretteSmokeGeo?.dispose?.();
+    cigaretteSmokeMat?.dispose?.();
+    cigaretteSmokeGeo = null;
+    cigaretteSmokeMat = null;
+    cigaretteSmokePoints = null;
+    cigaretteSmokeData.length = 0;
+  }
+
+  cigaretteSmokeGeo = new THREE.BufferGeometry();
+  const positions = new Float32Array(CIG_SMOKE_COUNT * 3);
+
+  cigaretteSmokeData.length = 0;
+
+  // IMPORTANT:
+  // particles now simulate in WORLD SPACE,
+  // so start them at 0 and position the whole Points object in world coords
+  for (let i = 0; i < CIG_SMOKE_COUNT; i++) {
+    const i3 = i * 3;
+
+    const x = 0;
+const y = 0;
+const z = 0;
+
+positions[i3 + 0] = x;
+positions[i3 + 1] = y;
+positions[i3 + 2] = z;
+
+cigaretteSmokeData.push({
+  x,
+  y,
+  z,
+  vx: (Math.random() - 0.5) * 0.03,
+  vy: 0.14 + Math.random() * 0.08,
+  vz: (Math.random() - 0.5) * 0.03,
+  age: 0, // ✅ start fresh
+  life: 3.0 + Math.random() * 2.0,
+  swirl: Math.random() * Math.PI * 2,
+});
+  }
+
+  cigaretteSmokeGeo.setAttribute(
+    "position",
+    new THREE.BufferAttribute(positions, 3)
+  );
+
+cigaretteSmokeMat = new THREE.PointsMaterial({
+  color: 0xf0f0f0,
+  map: cigaretteSmokeTex,
+  alphaMap: cigaretteSmokeTex,
+  transparent: true,
+  opacity: 0.39, // 🔥 increased
+  size: 0.50,    // 🔥 slightly bigger
+  sizeAttenuation: true,
+  depthTest: false,
+  depthWrite: false,
+  blending: THREE.NormalBlending,
+  fog: true
+});
+
+ cigaretteSmokePoints = new THREE.Points(cigaretteSmokeGeo, cigaretteSmokeMat);
+cigaretteSmokePoints.frustumCulled = false;
+cigaretteSmokePoints.renderOrder = 999;
+
+  // put smoke into WORLD space, not under the tilted mesh
+  worldRoot.add(cigaretteSmokePoints);
+
+  // initial world position from emitter
+  emitterParent.updateMatrixWorld(true);
+  emitterParent.getWorldPosition(smokeSourceWorld);
+  cigaretteSmokePoints.position.copy(smokeSourceWorld);
+
+  console.log("✅ cigarette smoke built in WORLD space at:", smokeSourceWorld);
+}
+
+function resetSmokeParticle(p) {
+  const U = Math.max(0.001, roomMaxDim * 0.01);
+
+  p.x = (Math.random() - 0.5) * U * 0.8;
+  p.y = Math.random() * U * 0.004;
+  p.z = (Math.random() - 0.5) * U * 0.8;
+
+  p.vx = (Math.random() - 0.5) * U * 0.4;
+  p.vy = U * (1.0 + Math.random() * 0.8);
+  p.vz = (Math.random() - 0.5) * U * 0.4;
+
+  p.age = 0;
+
+// ✅ longer life so smoke rises higher
+p.life = 5.5 + Math.random() * 3.5;
+
+p.swirl = Math.random() * Math.PI * 2;
+}
+
+function resetAllSmokeParticlesToEmitter() {
+  if (!cigaretteSmokeGeo) return;
+
+  const pos = cigaretteSmokeGeo.attributes.position.array;
+
+  for (let i = 0; i < CIG_SMOKE_COUNT; i++) {
+    const p = cigaretteSmokeData[i];
+    const i3 = i * 3;
+
+    p.x = 0;
+    p.y = 0;
+    p.z = 0;
+
+    p.vx = (Math.random() - 0.5) * 0.03;
+    p.vy = 0.14 + Math.random() * 0.08;
+    p.vz = (Math.random() - 0.5) * 0.03;
+
+    p.age = 0;
+    p.life = 3.0 + Math.random() * 2.0;
+    p.swirl = Math.random() * Math.PI * 2;
+
+    pos[i3 + 0] = 0;
+    pos[i3 + 1] = 0;
+    pos[i3 + 2] = 0;
+  }
+
+  cigaretteSmokeGeo.attributes.position.needsUpdate = true;
+}
+
+function updateCigaretteSmoke(dt) {
+    if (!smokeEmitterRef) return;
+
+  const now = performance.now() * 0.001;
+
+  // keep emitter world position fresh
+  smokeEmitterRef.updateMatrixWorld(true);
+  smokeEmitterRef.getWorldPosition(smokeSourceWorld);
+
+    if (!cigaretteSmokeBuilt) {
+    if ((now - cigaretteSmokeStartTime) < CIGARETTE_SMOKE_DELAY) {
+      return;
+    }
+
+    buildCigaretteSmoke(smokeEmitterRef);
+    cigaretteSmokeBuilt = true;
+    cigaretteSmokeStarted = true;
+
+    if (!cigaretteSmokeGeo || !cigaretteSmokePoints) return;
+
+    cigaretteSmokePoints.visible = true;
+  }
+
+  if (!cigaretteSmokeGeo || !cigaretteSmokePoints) return;
+
+  cigaretteSmokePoints.position.copy(smokeSourceWorld);
+
+  const pos = cigaretteSmokeGeo.attributes.position.array;
+  const t = performance.now() * 0.001;
+
+  for (let i = 0; i < CIG_SMOKE_COUNT; i++) {
+    const p = cigaretteSmokeData[i];
+    const i3 = i * 3;
+
+    p.age += dt;
+
+    if (p.age >= p.life) {
+        p.x = (Math.random() - 0.5) * 0.010;
+        p.y = Math.random() * 0.004;
+        p.z = (Math.random() - 0.5) * 0.010;
+
+        p.vx = (Math.random() - 0.5) * 0.020;
+        p.vy = 0.11 + Math.random() * 0.05;
+        p.vz = (Math.random() - 0.5) * 0.020;
+
+      p.age = 0;
+
+      // ✅ LONGER LIFE (linger)
+      p.life = 5.5 + Math.random() * 3.5;
+
+      p.swirl = Math.random() * Math.PI * 2;
+    }
+
+    const k = p.age / p.life;
+
+    // ✅ VERY SOFT MOTION
+        const curl = 0.020 + k * 0.032;
+const spread = 0.050 + k * 0.12;
+
+    // gentle curl + slow drift
+    p.x += p.vx * dt + Math.sin(t * 1.2 + p.swirl + k * 3.0) * curl * dt;
+    p.y += p.vy * dt * 0.95;
+    p.z += p.vz * dt + Math.cos(t * 1.1 + p.swirl + k * 3.0) * curl * dt;
+
+    // ✅ DRAG (this is key for realism)
+    p.vx *= 0.985;
+    p.vy *= 0.997;
+    p.vz *= 0.985;
+
+    // gentle outward bloom over time
+    p.x *= (1.0 + spread * dt * 0.45);
+    p.z *= (1.0 + spread * dt * 0.45);
+
+    pos[i3 + 0] = p.x;
+    pos[i3 + 1] = p.y;
+    pos[i3 + 2] = p.z;
+  }
+
+  cigaretteSmokeGeo.attributes.position.needsUpdate = true;
+
+  if (cigaretteSmokeMat) {
+    cigaretteSmokeMat.opacity = 0.26;
+  }
+}
 
 const cigaretteAshMat = (() => {
   const m = makePBR(
@@ -7331,8 +7652,8 @@ const cigaretteAshMat = (() => {
   m.color.multiplyScalar(0.22);
 
   // subtle built-in heat, not the main visible glow
-  m.emissive = new THREE.Color(0x9b1200);
-  m.emissiveIntensity = 2.2;
+  m.emissive = new THREE.Color(0x5a0500);
+m.emissiveIntensity = 1.25;
 
   // ✅ IMPORTANT: no emissiveMap here anymore
   m.emissiveMap = null;
@@ -7342,9 +7663,9 @@ const cigaretteAshMat = (() => {
 })();
 
 const cigaretteEmberMat = new THREE.MeshStandardMaterial({
-  color: 0x220400,
-  emissive: 0xff2a0a,
-  emissiveIntensity: 6.5,
+  color: 0x120100,
+  emissive: 0x6a0700,
+  emissiveIntensity: 3.2,
   roughness: 1.0,
   metalness: 0.0,
   side: THREE.DoubleSide,
@@ -7434,6 +7755,7 @@ let grimReaperRef = null;
 
 let cigaretteRoot = null;
 let cigaretteMeshRef = null;
+let cigaretteSmokeAnchor = null;
 let emberTipRef = null;
 let emberTipMatRef = null;
 let emberTipMatIndex = -1;
@@ -7445,6 +7767,31 @@ let hoveringCigarette = false;
 let emberHaloRef = null;
 let emberHaloMatRef = null;
 
+let smokeTipRoot = null;
+let smokeTipMeshRef = null;
+let smokeEmitterRef = null;
+let smokeEmitterAnchor = null;
+
+let smokeWorldRoot = null;
+let smokeSourceWorld = new THREE.Vector3();
+
+let cigaretteSmokePoints = null;
+let cigaretteSmokeGeo = null;
+let cigaretteSmokeMat = null;
+
+let cigaretteSmokeBuilt = false;
+let cigaretteSmokeStarted = false;
+let cigaretteSmokeStartTime = 0;
+const CIGARETTE_SMOKE_DELAY = 8.0;
+let cigaretteSmokeTimerArmed = false;
+
+let smokeDebugRoot = null;
+let smokeDebugBox = null;
+let smokeDebugSphere = null;
+
+const CIG_SMOKE_COUNT = 160;
+const cigaretteSmokeData = [];
+
 let emberCrackle = 0.72;
 let emberCrackleTarget = 0.72;
 let emberCrackleNextT = 0;
@@ -7452,9 +7799,16 @@ let emberCrackleNextT = 0;
 let cigaretteMixer = null;
 let cigaretteActions = [];
 
+let smokeTipMixer = null;
+let smokeTipActions = [];
+
 const CIG_START_FRAME = 200;
 const CIG_FPS = 24;
 const CIG_START_TIME = CIG_START_FRAME / CIG_FPS;
+
+const SMOKE_TIP_START_FRAME = 200;
+const SMOKE_TIP_FPS = 24;
+const SMOKE_TIP_START_TIME = SMOKE_TIP_START_FRAME / SMOKE_TIP_FPS;
 
 function playCigaretteAnimation() {
   if (!cigaretteActions.length) {
@@ -7473,6 +7827,28 @@ function playCigaretteAnimation() {
   }
 
   console.log("▶️ cigarette animation triggered", cigaretteActions.map(a => a.getClip().name));
+}
+
+function playSmokeTipAnimation() {
+  if (!smokeTipActions.length) {
+    console.warn("⚠️ smokeTipActions missing");
+    return;
+  }
+
+  for (const action of smokeTipActions) {
+    action.enabled = true;
+    action.paused = false;
+    action.reset();
+    action.time = SMOKE_TIP_START_TIME;
+    action.setLoop(THREE.LoopOnce, 1);
+    action.clampWhenFinished = true;
+    action.play();
+  }
+
+  console.log(
+    "💨 smoke tip animation triggered",
+    smokeTipActions.map(a => a.getClip().name)
+  );
 }
 
 function updateCigaretteEmber() {
@@ -7502,55 +7878,51 @@ function updateCigaretteEmber() {
 
   const heat = Math.max(0.35, emberCrackle + breathe);
 
-  // ember tip material
-  if (emberTipMatRef) {
-    emberTipMatRef.emissive.setRGB(
-      1.0,
-      0.03 + heat * 0.045,
-      0.0
-    );
-
-    emberTipMatRef.emissiveIntensity = 12.5 + heat * 7.5;
-
-    emberTipMatRef.color.setRGB(
-      0.22 + heat * 0.10,
-      0.02,
-      0.0
-    );
-
-    emberTipMatRef.needsUpdate = true;
-  }
-
-if (ashMatRef) {
-  ashMatRef.emissive.setRGB(
-    0.95,
-    0.02 + heat * 0.02,
-    0.005
-  );
-
-  ashMatRef.emissiveIntensity = 1.8 + heat * 1.0;
-  ashMatRef.needsUpdate = true;
-}
-
 if (emberTipMatRef) {
+  const flare =
+    Math.max(0, Math.sin(now * 8.0)) * 0.22 +
+    Math.max(0, Math.sin(now * 13.0)) * 0.10;
+
   emberTipMatRef.emissive.setRGB(
-    1.0,
-    0.05 + heat * 0.05,
+    0.42 + heat * 0.12,
+    0.008 + heat * 0.010 + flare * 0.010,
     0.0
   );
 
-  emberTipMatRef.emissiveIntensity = 7.5 + heat * 3.0;
+  emberTipMatRef.emissiveIntensity = 2.8 + heat * 1.0 + flare * 0.35;
+
+  emberTipMatRef.color.setRGB(
+    0.08 + heat * 0.03,
+    0.004,
+    0.0
+  );
+
   emberTipMatRef.needsUpdate = true;
 }
 
+if (ashMatRef) {
+  ashMatRef.emissive.setRGB(
+    0.16 + heat * 0.05,
+    0.002,
+    0.0
+  );
+
+  ashMatRef.emissiveIntensity = 0.34 + heat * 0.20;
+  ashMatRef.needsUpdate = true;
+}
+
 if (emberLightRef) {
- emberLightRef.intensity = 0.9 + heat * 0.7;
-emberLightRef.distance = 0.16 + heat * 0.04;
+  const flare =
+    Math.max(0, Math.sin(now * 8.0)) * 0.10 +
+    Math.max(0, Math.sin(now * 13.0)) * 0.04;
+
+  emberLightRef.intensity = 0.16 + heat * 0.10 + flare;
+  emberLightRef.distance = 0.07 + heat * 0.015;
 
   emberLightRef.color.setRGB(
-    1.0,
-    0.08 + heat * 0.05,
-    0.02
+    0.72,
+    0.025 + heat * 0.010,
+    0.004
   );
 }
 
@@ -8161,6 +8533,9 @@ const size2 = box2.getSize(new THREE.Vector3());
 const maxDim = Math.max(size2.x, size2.y, size2.z);
 roomMaxDim = maxDim;
 
+console.log("✅ roomMaxDim is now ready:", roomMaxDim);
+//setupWorldSmokeDebug();
+
 __roomMaxDimForCamera = roomMaxDim;
 
 if (isIOSDevice()) {
@@ -8315,6 +8690,9 @@ const interactiveLoader = new GLTFLoader();
 const newMaterialsLoader = new GLTFLoader();
 
 const cigaretteLoader = new GLTFLoader();
+
+const smokeTipLoader = new GLTFLoader();
+
 
 const __endUI = __beginAsset("Interactives GLB");
 
@@ -8843,10 +9221,10 @@ if (!grimReaperRef && (nn.includes("grim_reaper") || mm.includes("grim_reaper"))
 
 const __endCigaretteGLB = __beginAsset("Cigarette Smoke GLB");
 
-console.log("🚬 ABOUT TO START cigaretteLoader.load", "./assets/models/cigarette_smoke3.glb?v=4");
+console.log("🚬 ABOUT TO START cigaretteLoader.load", "./assets/models/cigarette_smoke4.glb?v=4");
 
 cigaretteLoader.load(
-  "./assets/models/cigarette_smoke3.glb?v=4",
+  "./assets/models/cigarette_smoke4.glb?v=4",
   (gltf) => {
     console.log("✅ cigarette GLB SUCCESS callback entered");
     __endCigaretteGLB();
@@ -8994,11 +9372,11 @@ if (emberTipRef && !emberLightRef) {
 }
 
 if (emberTipRef && !emberHaloRef) {
-  emberHaloMatRef = new THREE.SpriteMaterial({
+emberHaloMatRef = new THREE.SpriteMaterial({
   map: emberHaloTex,
-  color: 0xcc1a00,
+  color: 0x5a0500,
   transparent: true,
-  opacity: 0.18,
+  opacity: 0.06,
   depthWrite: false,
   depthTest: true,
   blending: THREE.AdditiveBlending,
@@ -9047,12 +9425,173 @@ if (gltf.animations && gltf.animations.length > 0) {
   console.warn("⚠️ No cigarette animations found in cigarette_smoke.glb");
 }
 
+
+//attachSmokeTipToCigarette();
     console.log("✅ cigarette_smoke.glb loaded");
   },
   undefined,
   (err) => {
     console.error("❌ cigarette_smoke.glb failed to load:", err);
     __endCigaretteGLB();
+  }
+);
+
+const __endSmokeTipGLB = __beginAsset("Smoke Tip GLB");
+
+console.log("💨 ABOUT TO START smokeTipLoader.load", "./assets/models/Smoke_tip2.glb");
+
+smokeTipLoader.load(
+  "./assets/models/Smoke_tip2.glb",
+  (gltf) => {
+    console.log("✅ Smoke_tip2.glb SUCCESS callback entered");
+    __endSmokeTipGLB();
+
+    smokeTipRoot = gltf.scene;
+    smokeTipRoot.name = "SmokeTipRoot";
+
+    // add it to the scene
+    anchor.add(smokeTipRoot);
+
+   // reset transform (we will position it relative to cigarette)
+smokeTipRoot.position.set(0, 0, 0);
+smokeTipRoot.rotation.set(0, 0, 0);
+smokeTipRoot.scale.set(1, 1, 1);
+    smokeTipRoot.updateMatrixWorld(true);
+
+    console.log("======== SMOKE TIP GLB DUMP ========");
+
+    smokeTipRoot.traverse((o) => {
+      if (!o.isMesh) return;
+
+      console.log("[SMOKE TIP MESH]", {
+        object: o.name,
+        material: o.material?.name || "(no material)",
+        parent: o.parent?.name || "(no parent)"
+      });
+
+      const objName = (o.name || "").toLowerCase();
+      const matName = (o.material?.name || "").toLowerCase();
+
+      o.castShadow = false;
+      o.receiveShadow = false;
+      o.frustumCulled = false;
+
+      if (
+        !smokeTipMeshRef &&
+        (
+          objName.includes("smoke_tip2") ||
+          objName.includes("smoketip2") ||
+          matName.includes("smoke_tip2") ||
+          matName.includes("smoketip2")
+        )
+      ) {
+        smokeTipMeshRef = o;
+        console.log("💨 smokeTipMeshRef CAPTURED:", {
+          object: o.name,
+          material: o.material?.name
+        });
+      }
+
+            // keep original Smoke_tip2 material
+      if (o.material) {
+        o.material.needsUpdate = true;
+      }
+    });
+
+    console.log("✅ Smoke_tip2.glb added to scene:", smokeTipRoot);
+
+if (!smokeTipMeshRef) {
+  console.warn("❌ smokeTipMeshRef missing, cannot place smoke emitter");
+} else {
+  if (!smokeEmitterAnchor) {
+    smokeEmitterAnchor = new THREE.Object3D();
+    smokeEmitterAnchor.name = "SmokeEmitterAnchor";
+
+    // ✅ parent to the Smoke_tip mesh
+    smokeTipMeshRef.add(smokeEmitterAnchor);
+  }
+
+  // ✅ MANUAL emitter placement relative to Smoke_tip mesh
+  // These numbers are now the ONLY thing you tweak
+ smokeEmitterAnchor.position.set(-0.080, 0.010, -0.2);
+
+ smokeEmitterAnchor.updateMatrixWorld(true);
+
+if (cigaretteSmokePoints) {
+  smokeEmitterAnchor.getWorldPosition(smokeSourceWorld);
+  cigaretteSmokePoints.position.copy(smokeSourceWorld);
+  resetAllSmokeParticlesToEmitter();
+}
+
+  smokeEmitterRef = smokeEmitterAnchor;
+
+  // debug sphere
+  const oldDbg = smokeEmitterAnchor.getObjectByName("SmokeEmitterDebug");
+  if (oldDbg) oldDbg.removeFromParent();
+
+  const smokeEmitterDebug = new THREE.Mesh(
+    new THREE.SphereGeometry(0.03, 16, 16),
+    new THREE.MeshBasicMaterial({
+      color: 0x00ffff,
+      depthTest: false,
+      depthWrite: false
+    })
+  );
+  smokeEmitterDebug.name = "SmokeEmitterDebug";
+  smokeEmitterAnchor.add(smokeEmitterDebug);
+  smokeEmitterDebug.position.set(0, 0, 0);
+  smokeEmitterDebug.renderOrder = 9999;
+
+  smokeEmitterAnchor.updateMatrixWorld(true);
+
+  const dbgWorld = new THREE.Vector3();
+  smokeEmitterAnchor.getWorldPosition(dbgWorld);
+  console.log("✅ smoke emitter placed manually on smokeTipMeshRef", dbgWorld);
+
+ cigaretteSmokeBuilt = false;
+cigaretteSmokeStarted = false;
+cigaretteSmokeTimerArmed = false;
+cigaretteSmokeStartTime = 0;
+}
+
+if (gltf.animations && gltf.animations.length > 0) {
+  smokeTipMixer = new THREE.AnimationMixer(smokeTipRoot);
+  smokeTipActions = [];
+
+  console.log("💨 all smoke tip clips:", gltf.animations.map(a => ({
+    name: a.name,
+    duration: a.duration
+  })));
+
+  for (const clip of gltf.animations) {
+    const action = smokeTipMixer.clipAction(clip);
+
+    action.enabled = true;
+    action.setLoop(THREE.LoopOnce, 1);
+    action.clampWhenFinished = true;
+
+    action.reset();
+    action.time = SMOKE_TIP_START_TIME;
+    action.paused = true;
+
+    smokeTipActions.push(action);
+  }
+
+  smokeTipMixer.update(0);
+
+  console.log(
+    "✅ smoke tip animation actions ready:",
+    smokeTipActions.map(a => a.getClip().name)
+  );
+} else {
+  console.warn("⚠️ No animations found in Smoke_tip2.glb");
+}
+
+  },
+  undefined,
+  (err) => {
+    console.error("❌ Smoke_tip2.glb failed to load:", err);
+    __endSmokeTipGLB();
   }
 );
 
@@ -9063,6 +9602,60 @@ const LOOK = {
   exposure: 0.9, // try 0.88–0.98
 };
 
+function setupWorldSmokeDebug() {
+  if (smokeDebugRoot) return;
+
+  if (!camera) {
+    console.warn("setupWorldSmokeDebug: camera missing");
+    return;
+  }
+
+  smokeDebugRoot = new THREE.Group();
+  smokeDebugRoot.name = "CameraSmokeDebugRoot";
+
+  // attach directly to camera so it is ALWAYS visible
+  camera.add(smokeDebugRoot);
+
+  // place it directly in front of the camera
+  smokeDebugRoot.position.set(0, 0, -2.0);
+
+  // big green box
+  smokeDebugBox = new THREE.Mesh(
+    new THREE.BoxGeometry(0.6, 0.6, 0.6),
+    new THREE.MeshBasicMaterial({
+      color: 0x00ff00,
+      depthTest: false,
+      depthWrite: false
+    })
+  );
+  smokeDebugRoot.add(smokeDebugBox);
+
+  // red sphere above it
+  smokeDebugSphere = new THREE.Mesh(
+    new THREE.SphereGeometry(0.18, 24, 24),
+    new THREE.MeshBasicMaterial({
+      color: 0xff0000,
+      depthTest: false,
+      depthWrite: false
+    })
+  );
+  smokeDebugSphere.position.set(0, 0.75, 0);
+  smokeDebugRoot.add(smokeDebugSphere);
+
+  buildCigaretteSmoke(smokeDebugRoot);
+
+  if (cigaretteSmokePoints) {
+    cigaretteSmokePoints.position.copy(smokeDebugSphere.position);
+  }
+
+  console.log("✅ CAMERA smoke debug rig created", {
+    smokeDebugRoot,
+    smokeDebugBox,
+    smokeDebugSphere,
+    cigaretteSmokePoints
+  });
+}
+
 //ANIMATE
 const clock = new THREE.Clock();
 function animate() {
@@ -9072,10 +9665,21 @@ function animate() {
 
   const blocked = isIOSPortraitBlocked();
 
-  // ✅ advance bug animations
 if (bugMixer) bugMixer.update(dt);
 
 if (cigaretteMixer) cigaretteMixer.update(dt);
+if (smokeTipMixer) smokeTipMixer.update(dt);
+
+if (
+  !blocked &&
+  smokeEmitterRef &&
+  !cigaretteSmokeTimerArmed
+) {
+  cigaretteSmokeStartTime = performance.now() * 0.001;
+  cigaretteSmokeTimerArmed = true;
+
+  console.log("🚬 smoke timer armed at scene entry");
+}
 
 if (!blocked) {
   updateTv();
@@ -9084,6 +9688,7 @@ if (!blocked) {
   updateGlow();
   updatePress();
   updateCigaretteEmber();
+  updateCigaretteSmoke(dt);
 }
 
  // ✅ Throttle TV redraw so it doesn't hammer performance
