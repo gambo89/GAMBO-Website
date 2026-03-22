@@ -7424,6 +7424,120 @@ function ensureSmokeWorldRoot() {
   return smokeWorldRoot;
 }
 
+function buildFrontWallDrawPlane() {
+  if (wallDrawPlaneRef) return wallDrawPlaneRef;
+
+  wallDrawCanvas = document.createElement("canvas");
+  wallDrawCanvas.width = WALL_DRAW_SIZE;
+  wallDrawCanvas.height = WALL_DRAW_SIZE;
+
+  wallDrawCtx = wallDrawCanvas.getContext("2d");
+  wallDrawCtx.clearRect(0, 0, WALL_DRAW_SIZE, WALL_DRAW_SIZE);
+  wallDrawCtx.fillStyle = "rgba(0,0,0,0)";
+wallDrawCtx.fillRect(0, 0, WALL_DRAW_SIZE, WALL_DRAW_SIZE);
+
+  wallDrawTex = new THREE.CanvasTexture(wallDrawCanvas);
+  wallDrawTex.colorSpace = THREE.SRGBColorSpace;
+  wallDrawTex.flipY = true;
+  wallDrawTex.needsUpdate = true;
+
+const wallDrawMat = new THREE.MeshBasicMaterial({
+  map: wallDrawTex,
+  transparent: true,
+  opacity: 1.0,
+  depthTest: true,
+  depthWrite: false,
+  side: THREE.DoubleSide
+});
+
+  const wallDrawGeo = new THREE.PlaneGeometry(1, 1);
+  wallDrawPlaneRef = new THREE.Mesh(wallDrawGeo, wallDrawMat);
+  wallDrawPlaneRef.name = "WallDrawPlane";
+  wallDrawPlaneRef.renderOrder = 0;
+
+  // start disabled so it does NOT block existing interactions
+  wallDrawPlaneRef.raycast = () => {};
+
+  scene.add(wallDrawPlaneRef);
+  return wallDrawPlaneRef;
+}
+
+function placeFrontWallDrawPlane(maxDim) {
+  if (!wallDrawPlaneRef) return;
+
+ wallDrawPlaneRef.position.set(
+  maxDim * 0.28,   // X
+  maxDim * -0.17,  // Y
+  maxDim * -0.482   // Z
+);
+
+  wallDrawPlaneRef.rotation.set(0, -0.015, 0);
+
+  wallDrawPlaneRef.scale.set(
+    maxDim * 0.38,    // width
+    maxDim * 0.77,    // height
+    1
+  );
+
+  wallDrawPlaneRef.updateMatrixWorld(true);
+}
+
+function setWallDrawMode(on) {
+  drawMode = on;
+
+  if (!wallDrawPlaneRef) return;
+
+  if (drawMode) {
+    delete wallDrawPlaneRef.raycast;
+  } else {
+    wallDrawPlaneRef.raycast = () => {};
+    isWallDrawing = false;
+    hasLastWallDrawUv = false;
+  }
+}
+
+function drawOnWallAtUV(uv) {
+  if (!wallDrawCtx || !wallDrawTex) return;
+
+  const x = uv.x * WALL_DRAW_SIZE;
+  const y = (1.0 - uv.y) * WALL_DRAW_SIZE;
+
+  wallDrawCtx.fillStyle = "#111111";
+  wallDrawCtx.beginPath();
+  wallDrawCtx.arc(x, y, 2.0, 0, Math.PI * 2);
+  wallDrawCtx.fill();
+
+  wallDrawTex.needsUpdate = true;
+}
+
+function drawWallLineUV(uvA, uvB) {
+  if (!wallDrawCtx || !wallDrawTex) return;
+
+  wallDrawCtx.strokeStyle = "#111111";
+  wallDrawCtx.lineWidth = 3;
+  wallDrawCtx.lineCap = "round";
+  wallDrawCtx.lineJoin = "round";
+
+  wallDrawCtx.beginPath();
+  wallDrawCtx.moveTo(
+    uvA.x * WALL_DRAW_SIZE,
+    (1.0 - uvA.y) * WALL_DRAW_SIZE
+  );
+  wallDrawCtx.lineTo(
+    uvB.x * WALL_DRAW_SIZE,
+    (1.0 - uvB.y) * WALL_DRAW_SIZE
+  );
+  wallDrawCtx.stroke();
+
+  wallDrawTex.needsUpdate = true;
+}
+
+function clearWallDrawing() {
+  if (!wallDrawCtx || !wallDrawTex) return;
+  wallDrawCtx.clearRect(0, 0, WALL_DRAW_SIZE, WALL_DRAW_SIZE);
+  wallDrawTex.needsUpdate = true;
+}
+
 function buildCigaretteSmoke(emitterParent) {
   if (!emitterParent) {
     console.warn("buildCigaretteSmoke: emitterParent missing");
@@ -7652,11 +7766,11 @@ const cigaretteAshMat = (() => {
   );
 
   // darker coal/ash base
-  m.color.multiplyScalar(0.70);
+  m.color.multiplyScalar(0.82);
 
   // subtle built-in heat, not the main visible glow
   m.emissive = new THREE.Color(0x5a0500);
-m.emissiveIntensity = 1.25;
+m.emissiveIntensity = 3.2;
 
   // ✅ IMPORTANT: no emissiveMap here anymore
   m.emissiveMap = null;
@@ -7666,9 +7780,9 @@ m.emissiveIntensity = 1.25;
 })();
 
 const cigaretteEmberMat = new THREE.MeshStandardMaterial({
-  color: 0x1b0200,
-  emissive: 0xc01800,
-  emissiveIntensity: 6.0,
+  color: 0x2a0500,
+  emissive: 0xff5a10,
+  emissiveIntensity: 11.0,
   roughness: 1.0,
   metalness: 0.0,
   side: THREE.DoubleSide,
@@ -7755,6 +7869,21 @@ const PICTURE1_TEXTURES = [
 let picture1TexIndex = 0;
 let picture1MeshRef = null; // will be captured from Main GLB
 let grimReaperRef = null;
+
+let wallDrawPlaneRef = null;
+let wallDrawCanvas = null;
+let wallDrawCtx = null;
+let wallDrawTex = null;
+
+let drawMode = false;
+let isWallDrawing = false;
+let hasLastWallDrawUv = false;
+
+const wallDrawUv = new THREE.Vector2();
+const lastWallDrawUv = new THREE.Vector2();
+const wallDrawRaycastHits = [];
+
+const WALL_DRAW_SIZE = 1024;
 
 let cigaretteRoot = null;
 let cigaretteMeshRef = null;
@@ -7938,59 +8067,6 @@ if (emberHaloMatRef && emberHaloRef) {
   const sy = 0.014 + heat * 0.006;
   emberHaloRef.scale.set(sx, sy, 1.0);
 }
-}
-
-// ============================================================
-// ✅ GRIM OPACITY CONTROL (simple transparency)
-// ============================================================
-
-const GRIM_OPACITY = 0.15; // change 0.15–0.6 to taste
-
-function applyGrimOpacity(alpha) {
-  if (!grimReaperRef) return;
-
-  grimReaperRef.traverse((x) => {
-    if (!x.isMesh || !x.material) return;
-
-    // handle multi-material meshes safely
-    const mats = Array.isArray(x.material) ? x.material : [x.material];
-
-    for (let i = 0; i < mats.length; i++) {
-      const original = mats[i];
-      if (!original) continue;
-
-      // clone once so we don't affect other meshes
-      if (!original.userData?.__grimCloned) {
-        const cloned = original.clone();
-        cloned.userData = { ...(original.userData || {}), __grimCloned: true };
-        mats[i] = cloned;
-      }
-    }
-
-    x.material = Array.isArray(x.material) ? mats : mats[0];
-
-    const finalMats = Array.isArray(x.material) ? x.material : [x.material];
-
-    for (const m of finalMats) {
-      m.transparent = true;
-      m.opacity = alpha;
-      m.depthWrite = false; // prevents visual cutouts
-      m.needsUpdate = true;
-    }
-  });
-}
-
-function setGrimVisible(on) {
-  if (!grimReaperRef) return;
-
-  // if it's a group, hide/show everything inside
-  if (grimReaperRef.traverse) {
-    grimReaperRef.traverse((x) => {
-      if (x && typeof x.visible === "boolean") x.visible = on;
-    });
-  } else {
-    grimReaperRef.visible = on;
-  }
 }
 
 function setPicture1Texture(index) {
@@ -8222,18 +8298,15 @@ if (
   o.material.needsUpdate = true;
 }
 
-      // ============================================================
-// ✅ CAPTURE + FORCE-HIDE Grim_reaper (Main GLB)
-// ============================================================
-const grimMatNameLower = (o.material?.name || "").toLowerCase();
-
-if (!grimReaperRef && (n.includes("grim_reaper") || grimMatNameLower.includes("grim_reaper"))) {
+if (!grimReaperRef && n === "grim_reaper") {
   grimReaperRef = o;
 
-  applyGrimOpacity(GRIM_OPACITY); // ✅ apply transparency
-  setGrimVisible(false);          // keep your existing visibility logic
+  grimReaperRef.visible = false;
+  grimReaperRef.castShadow = false;
+  grimReaperRef.receiveShadow = false;
+  grimReaperRef.raycast = () => null;
 
-  console.log("☠️ Grim_reaper captured:", o.name, "| material:", o.material?.name);
+  console.log("☠️ Grim_reaper permanently hidden:", o.name, "| material:", o.material?.name);
 }
 
       // ✅ Capture Picture1 mesh by name OR material name
@@ -8533,13 +8606,16 @@ anchor.position.sub(center);
 anchor.updateMatrixWorld(true);
 
 
-  const box2 = new THREE.Box3().setFromObject(model);
+const box2 = new THREE.Box3().setFromObject(model);
 const size2 = box2.getSize(new THREE.Vector3());
 const maxDim = Math.max(size2.x, size2.y, size2.z);
 roomMaxDim = maxDim;
 
+buildFrontWallDrawPlane();
+placeFrontWallDrawPlane(maxDim);
+setWallDrawMode(true);
+
 console.log("✅ roomMaxDim is now ready:", roomMaxDim);
-//setupWorldSmokeDebug();
 
 __roomMaxDimForCamera = roomMaxDim;
 
@@ -9162,13 +9238,15 @@ if (isFoodBowl) {
   console.log("🥣 Food_Bowl highlight reduced:", o.name);
 }
 
-if (!grimReaperRef && (nn.includes("grim_reaper") || mm.includes("grim_reaper"))) {
+if (!grimReaperRef && nn === "grim_reaper") {
   grimReaperRef = o;
 
-  applyGrimOpacity(GRIM_OPACITY); // ✅ apply transparency
-  setGrimVisible(false);
+  grimReaperRef.visible = false;
+  grimReaperRef.castShadow = false;
+  grimReaperRef.receiveShadow = false;
+  grimReaperRef.raycast = () => null;
 
-  console.log("☠️ Grim_reaper captured (New Materials):", o.name, "| material:", o.material?.name);
+  console.log("☠️ Grim_reaper permanently hidden (New Materials):", o.name, "| material:", o.material?.name);
 }
 
       // raycast layer
@@ -9665,6 +9743,69 @@ function setupWorldSmokeDebug() {
   });
 }
 
+function updatePointerNdcFromEvent(e) {
+  const rect = renderer.domElement.getBoundingClientRect();
+
+  pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+}
+
+function tryBeginWallDraw(e) {
+  if (!drawMode || !wallDrawPlaneRef) return false;
+
+  updatePointerNdcFromEvent(e);
+
+  raycaster.setFromCamera(pointer, camera);
+  wallDrawRaycastHits.length = 0;
+  raycaster.intersectObject(wallDrawPlaneRef, false, wallDrawRaycastHits);
+
+  if (!wallDrawRaycastHits.length) return false;
+
+  const hit = wallDrawRaycastHits[0];
+  if (!hit.uv) return false;
+
+  wallDrawUv.copy(hit.uv);
+  lastWallDrawUv.copy(hit.uv);
+  hasLastWallDrawUv = true;
+  isWallDrawing = true;
+
+  drawOnWallAtUV(hit.uv);
+  return true;
+}
+
+function continueWallDraw(e) {
+  if (!drawMode || !isWallDrawing || !wallDrawPlaneRef) return false;
+
+  updatePointerNdcFromEvent(e);
+
+  raycaster.setFromCamera(pointer, camera);
+  wallDrawRaycastHits.length = 0;
+  raycaster.intersectObject(wallDrawPlaneRef, false, wallDrawRaycastHits);
+
+  if (!wallDrawRaycastHits.length) return false;
+
+  const hit = wallDrawRaycastHits[0];
+  if (!hit.uv) return false;
+
+  wallDrawUv.copy(hit.uv);
+
+  if (hasLastWallDrawUv) {
+    drawWallLineUV(lastWallDrawUv, wallDrawUv);
+  } else {
+    drawOnWallAtUV(wallDrawUv);
+  }
+
+  lastWallDrawUv.copy(wallDrawUv);
+  hasLastWallDrawUv = true;
+
+  return true;
+}
+
+function endWallDraw() {
+  isWallDrawing = false;
+  hasLastWallDrawUv = false;
+}
+
 //ANIMATE
 const clock = new THREE.Clock();
 function animate() {
@@ -9829,6 +9970,19 @@ function scheduleResize() {
   });
 }
 
+ renderer.domElement.addEventListener("pointerdown", (e) => {
+  const usedWallDraw = tryBeginWallDraw(e);
+  if (usedWallDraw) return;
+});
+
+renderer.domElement.addEventListener("pointermove", (e) => {
+  const usedWallDraw = continueWallDraw(e);
+  if (usedWallDraw) return;
+});
+
+window.addEventListener("pointerup", () => {
+  endWallDraw();
+});
 
 window.addEventListener("resize", scheduleResize);
 window.addEventListener("orientationchange", scheduleResize);
