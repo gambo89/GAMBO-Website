@@ -6705,7 +6705,7 @@ Door4: (() => {
  Dunkeheit_Album: (() => {
   const m = makePBR(
     {
-      albedo: "./assets/Textures/Album/Album Albedo.jpg",
+      albedo: "./assets/Textures/Album/Album Albedo2.jpg",
     },
     { roughness: -0.2, metalness: 0.2 }
   );
@@ -7243,16 +7243,17 @@ function makeBurnBandTexture(size = 256) {
   const ctx = c.getContext("2d");
 
   // base horizontal band
-  const g = ctx.createLinearGradient(0, 0, size, 0);
+ const g = ctx.createLinearGradient(0, 0, size, 0);
 g.addColorStop(0.00, "rgba(0,0,0,0.0)");
-g.addColorStop(0.10, "rgba(25,0,0,0.06)");
-g.addColorStop(0.24, "rgba(70,0,0,0.18)");
-g.addColorStop(0.36, "rgba(120,0,0,0.38)");
-g.addColorStop(0.46, "rgba(185,18,0,0.72)");
-g.addColorStop(0.50, "rgba(255,95,18,0.92)");
-g.addColorStop(0.53, "rgba(255,170,60,0.42)");
-g.addColorStop(0.58, "rgba(160,10,0,0.62)");
-g.addColorStop(0.72, "rgba(65,0,0,0.20)");
+g.addColorStop(0.10, "rgba(20,0,0,0.05)");
+g.addColorStop(0.24, "rgba(60,0,0,0.16)");
+g.addColorStop(0.36, "rgba(110,0,0,0.34)");
+g.addColorStop(0.45, "rgba(165,10,0,0.62)");
+g.addColorStop(0.49, "rgba(235,70,12,0.88)");
+g.addColorStop(0.505, "rgba(255,150,45,0.78)");
+g.addColorStop(0.525, "rgba(255,210,120,0.22)");
+g.addColorStop(0.56, "rgba(150,8,0,0.58)");
+g.addColorStop(0.70, "rgba(55,0,0,0.18)");
 g.addColorStop(1.00, "rgba(0,0,0,0.0)");
 
   ctx.clearRect(0, 0, size, size);
@@ -7292,8 +7293,8 @@ for (let i = 0; i < 14; i++) {
   const isHot = Math.random() > 0.72;
 
   ctx.fillStyle = isHot
-    ? `rgba(255,210,120,${0.10 + Math.random() * 0.18})`
-    : `rgba(210,40,10,${0.06 + Math.random() * 0.12})`;
+  ? `rgba(255,190,90,${0.14 + Math.random() * 0.16})`
+  : `rgba(220,45,8,${0.08 + Math.random() * 0.10})`;
 
   ctx.fillRect(x, y, w, h);
 }
@@ -7502,7 +7503,8 @@ cigaretteSmokePoints.renderOrder = 999;
   // initial world position from emitter
   emitterParent.updateMatrixWorld(true);
   emitterParent.getWorldPosition(smokeSourceWorld);
-  cigaretteSmokePoints.position.copy(smokeSourceWorld);
+smokeSourceWorld.y += 0.15; // 🔥 same offset here
+cigaretteSmokePoints.position.copy(smokeSourceWorld);
 
   console.log("✅ cigarette smoke built in WORLD space at:", smokeSourceWorld);
 }
@@ -7563,6 +7565,7 @@ function updateCigaretteSmoke(dt) {
   // keep emitter world position fresh
   smokeEmitterRef.updateMatrixWorld(true);
   smokeEmitterRef.getWorldPosition(smokeSourceWorld);
+  smokeSourceWorld.y += 0.15; // 🔥 raise smoke here
 
     if (!cigaretteSmokeBuilt) {
     if ((now - cigaretteSmokeStartTime) < CIGARETTE_SMOKE_DELAY) {
@@ -7649,7 +7652,7 @@ const cigaretteAshMat = (() => {
   );
 
   // darker coal/ash base
-  m.color.multiplyScalar(0.22);
+  m.color.multiplyScalar(0.70);
 
   // subtle built-in heat, not the main visible glow
   m.emissive = new THREE.Color(0x5a0500);
@@ -7663,9 +7666,9 @@ m.emissiveIntensity = 1.25;
 })();
 
 const cigaretteEmberMat = new THREE.MeshStandardMaterial({
-  color: 0x120100,
-  emissive: 0x6a0700,
-  emissiveIntensity: 3.2,
+  color: 0x1b0200,
+  emissive: 0xc01800,
+  emissiveIntensity: 6.0,
   roughness: 1.0,
   metalness: 0.0,
   side: THREE.DoubleSide,
@@ -7771,6 +7774,8 @@ let smokeTipRoot = null;
 let smokeTipMeshRef = null;
 let smokeEmitterRef = null;
 let smokeEmitterAnchor = null;
+
+const SMOKE_EMITTER_LOCAL_OFFSET = new THREE.Vector3(-0.080, 0.09, -0.245);
 
 let smokeWorldRoot = null;
 let smokeSourceWorld = new THREE.Vector3();
@@ -7880,20 +7885,20 @@ function updateCigaretteEmber() {
 
 if (emberTipMatRef) {
   const flare =
-    Math.max(0, Math.sin(now * 8.0)) * 0.22 +
-    Math.max(0, Math.sin(now * 13.0)) * 0.10;
+    Math.max(0, Math.sin(now * 8.0)) * 0.28 +
+    Math.max(0, Math.sin(now * 13.0)) * 0.12;
 
   emberTipMatRef.emissive.setRGB(
-    0.42 + heat * 0.12,
-    0.008 + heat * 0.010 + flare * 0.010,
+    0.78 + heat * 0.16,
+    0.035 + heat * 0.030 + flare * 0.025,
     0.0
   );
 
-  emberTipMatRef.emissiveIntensity = 2.8 + heat * 1.0 + flare * 0.35;
+  emberTipMatRef.emissiveIntensity = 5.4 + heat * 2.0 + flare * 0.6;
 
   emberTipMatRef.color.setRGB(
-    0.08 + heat * 0.03,
-    0.004,
+    0.14 + heat * 0.05,
+    0.01,
     0.0
   );
 
@@ -7902,27 +7907,27 @@ if (emberTipMatRef) {
 
 if (ashMatRef) {
   ashMatRef.emissive.setRGB(
-    0.16 + heat * 0.05,
-    0.002,
+    0.22 + heat * 0.08,
+    0.003,
     0.0
   );
 
-  ashMatRef.emissiveIntensity = 0.34 + heat * 0.20;
+  ashMatRef.emissiveIntensity = 0.42 + heat * 0.22;
   ashMatRef.needsUpdate = true;
 }
 
 if (emberLightRef) {
   const flare =
-    Math.max(0, Math.sin(now * 8.0)) * 0.10 +
-    Math.max(0, Math.sin(now * 13.0)) * 0.04;
+    Math.max(0, Math.sin(now * 8.0)) * 0.12 +
+    Math.max(0, Math.sin(now * 13.0)) * 0.05;
 
-  emberLightRef.intensity = 0.16 + heat * 0.10 + flare;
-  emberLightRef.distance = 0.07 + heat * 0.015;
+  emberLightRef.intensity = 0.36 + heat * 0.20 + flare;
+  emberLightRef.distance = 0.10 + heat * 0.025;
 
   emberLightRef.color.setRGB(
-    0.72,
-    0.025 + heat * 0.010,
-    0.004
+    1.0,
+    0.10 + heat * 0.03,
+    0.02
   );
 }
 
@@ -9374,9 +9379,9 @@ if (emberTipRef && !emberLightRef) {
 if (emberTipRef && !emberHaloRef) {
 emberHaloMatRef = new THREE.SpriteMaterial({
   map: emberHaloTex,
-  color: 0x5a0500,
+  color: 0xb11800,
   transparent: true,
-  opacity: 0.06,
+  opacity: 0.13,
   depthWrite: false,
   depthTest: true,
   blending: THREE.AdditiveBlending,
@@ -9513,13 +9518,14 @@ if (!smokeTipMeshRef) {
 
   // ✅ MANUAL emitter placement relative to Smoke_tip mesh
   // These numbers are now the ONLY thing you tweak
- smokeEmitterAnchor.position.set(-0.080, 0.010, -0.2);
+smokeEmitterAnchor.position.copy(SMOKE_EMITTER_LOCAL_OFFSET);
 
  smokeEmitterAnchor.updateMatrixWorld(true);
 
 if (cigaretteSmokePoints) {
   smokeEmitterAnchor.getWorldPosition(smokeSourceWorld);
-  cigaretteSmokePoints.position.copy(smokeSourceWorld);
+smokeSourceWorld.y += 0.15; // 🔥 same offset
+cigaretteSmokePoints.position.copy(smokeSourceWorld);
   resetAllSmokeParticlesToEmitter();
 }
 
@@ -9539,8 +9545,11 @@ if (cigaretteSmokePoints) {
   );
   smokeEmitterDebug.name = "SmokeEmitterDebug";
   smokeEmitterAnchor.add(smokeEmitterDebug);
+  
   smokeEmitterDebug.position.set(0, 0, 0);
   smokeEmitterDebug.renderOrder = 9999;
+
+  smokeEmitterDebug.visible = false; // 🔥 hides the blue dot but keeps everything working
 
   smokeEmitterAnchor.updateMatrixWorld(true);
 
