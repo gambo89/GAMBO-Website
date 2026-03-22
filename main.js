@@ -7496,27 +7496,51 @@ function setWallDrawMode(on) {
   }
 }
 
+function toggleWallTool() {
+  wallTool = wallTool === "pen" ? "eraser" : "pen";
+  console.log(`Wall tool is now: ${wallTool}`);
+}
+
 function drawOnWallAtUV(uv) {
   if (!wallDrawCtx || !wallDrawTex) return;
 
   const x = uv.x * WALL_DRAW_SIZE;
   const y = (1.0 - uv.y) * WALL_DRAW_SIZE;
 
-  wallDrawCtx.fillStyle = "#111111";
-  wallDrawCtx.beginPath();
-  wallDrawCtx.arc(x, y, 2.0, 0, Math.PI * 2);
-  wallDrawCtx.fill();
+  wallDrawCtx.save();
 
+  if (wallTool === "eraser") {
+    wallDrawCtx.globalCompositeOperation = "destination-out";
+    wallDrawCtx.beginPath();
+    wallDrawCtx.arc(x, y, WALL_ERASER_RADIUS, 0, Math.PI * 2);
+    wallDrawCtx.fill();
+  } else {
+    wallDrawCtx.globalCompositeOperation = "source-over";
+    wallDrawCtx.fillStyle = "#111111";
+    wallDrawCtx.beginPath();
+    wallDrawCtx.arc(x, y, WALL_PEN_RADIUS, 0, Math.PI * 2);
+    wallDrawCtx.fill();
+  }
+
+  wallDrawCtx.restore();
   wallDrawTex.needsUpdate = true;
 }
 
 function drawWallLineUV(uvA, uvB) {
   if (!wallDrawCtx || !wallDrawTex) return;
 
-  wallDrawCtx.strokeStyle = "#111111";
-  wallDrawCtx.lineWidth = 3;
+  wallDrawCtx.save();
   wallDrawCtx.lineCap = "round";
   wallDrawCtx.lineJoin = "round";
+
+  if (wallTool === "eraser") {
+    wallDrawCtx.globalCompositeOperation = "destination-out";
+    wallDrawCtx.lineWidth = WALL_ERASER_LINE_WIDTH;
+  } else {
+    wallDrawCtx.globalCompositeOperation = "source-over";
+    wallDrawCtx.strokeStyle = "#111111";
+    wallDrawCtx.lineWidth = WALL_PEN_LINE_WIDTH;
+  }
 
   wallDrawCtx.beginPath();
   wallDrawCtx.moveTo(
@@ -7529,12 +7553,17 @@ function drawWallLineUV(uvA, uvB) {
   );
   wallDrawCtx.stroke();
 
+  wallDrawCtx.restore();
   wallDrawTex.needsUpdate = true;
 }
 
 function clearWallDrawing() {
   if (!wallDrawCtx || !wallDrawTex) return;
+
   wallDrawCtx.clearRect(0, 0, WALL_DRAW_SIZE, WALL_DRAW_SIZE);
+  wallDrawCtx.fillStyle = "rgba(0,0,0,0)";
+  wallDrawCtx.fillRect(0, 0, WALL_DRAW_SIZE, WALL_DRAW_SIZE);
+
   wallDrawTex.needsUpdate = true;
 }
 
@@ -7878,6 +7907,14 @@ let wallDrawTex = null;
 let drawMode = false;
 let isWallDrawing = false;
 let hasLastWallDrawUv = false;
+
+let wallTool = "pen"; // "pen" or "eraser"
+
+const WALL_PEN_RADIUS = 2.0;
+const WALL_PEN_LINE_WIDTH = 3;
+
+const WALL_ERASER_RADIUS = 14.0;
+const WALL_ERASER_LINE_WIDTH = 24;
 
 const wallDrawUv = new THREE.Vector2();
 const lastWallDrawUv = new THREE.Vector2();
@@ -9981,6 +10018,19 @@ renderer.domElement.addEventListener("pointermove", (e) => {
 });
 
 window.addEventListener("pointerup", () => {
+  endWallDraw();
+});
+
+window.addEventListener("keydown", (e) => {
+  if (e.repeat) return;
+
+  if (e.key === "e" || e.key === "E") {
+    toggleWallTool();
+  }
+});
+
+renderer.domElement.addEventListener("dblclick", () => {
+  clearWallDrawing();
   endWallDraw();
 });
 
