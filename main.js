@@ -3863,7 +3863,7 @@ function goBackToTvMenu() {
 // PHOTO GALLERY (draw images to the TV canvas)
 // ============================================================
 const PHOTO_PATHS = [
-  //"./assets/Photo/01-sweet.jpg",
+  "./assets/Photo/01-sweet.jpg",
   "./assets/Photo/02-carti.jpg",
   "./assets/Photo/03-james.jpg",
   "./assets/Photo/04-roof.jpg",
@@ -3989,8 +3989,6 @@ function nextPhoto(delta) {
 // ============================================================
 const VIDEO_PATHS = [
   "./assets/Video/01-sweet93-OG.mp4",
-  //"./assets/Video/02-sweet93-chopped.mp4",
-  //"./assets/Video/03-sweet93-snow.mp4",
 ];
 
 let videoIndex = 0;
