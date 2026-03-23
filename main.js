@@ -4647,7 +4647,7 @@ function currentAudio() {
 function ensureBackgroundAudio() {
   if (bgAudio) return bgAudio;
 
-  bgAudio = new Audio("./assets/Audio/Background sound11.m4a");
+  bgAudio = new Audio("./assets/Audio/Background-sound11.mp3");
   bgAudio.preload = "auto";
   bgAudio.crossOrigin = "anonymous";
   bgAudio.loop = true;
