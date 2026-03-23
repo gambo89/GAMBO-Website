@@ -2235,10 +2235,10 @@ function showPicture1Hint(show) {
 // ============================================================
 const wallHint = document.createElement("div");
 wallHint.innerHTML = `
-  <div>press to draw</div>
-  <div style="margin-top:4px;">C = change color</div>
-  <div style="margin-top:4px;">E = erase</div>
-  <div style="margin-top:4px;">double click = clear wall</div>
+  <div style="font-size:16px;">press to draw</div>
+  <div style="margin-top:4px; font-size:12px; opacity:0.85;">C = change color</div>
+  <div style="margin-top:2px; font-size:12px; opacity:0.85;">E = erase</div>
+  <div style="margin-top:2px; font-size:12px; opacity:0.85;">double click = clear wall</div>
 `;
 
 wallHint.style.position = "fixed";
@@ -7601,6 +7601,210 @@ function cycleWallMarkerColor() {
   console.log(`Wall marker color is now: ${wallMarkerColor}`);
 }
 
+function hexToRgba(hex, alpha) {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function hexToRgbObject(hex) {
+  const h = hex.replace("#", "");
+  return {
+    r: parseInt(h.substring(0, 2), 16),
+    g: parseInt(h.substring(2, 4), 16),
+    b: parseInt(h.substring(4, 6), 16),
+  };
+}
+
+function rgbaFromRgbObject(rgb, alpha) {
+  return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+}
+
+function getWallPaintRgb(hex) {
+  const h = hex.toUpperCase();
+
+  // white: make it wall-dirty, not digital white
+  if (h === "#FFFFFF") {
+    return { r: 198, g: 190, b: 178 };
+  }
+
+  // black: slightly warm charcoal
+  if (h === "#000000") {
+    return { r: 22, g: 18, b: 16 };
+  }
+
+  // red: darker, dried spray-paint red
+  if (h === "#6D120D") {
+    return { r: 90, g: 18, b: 16 };
+  }
+
+  // blue: much less neon / less clean
+  if (h === "#5D7A91") {
+    return { r: 86, g: 111, b: 126 };
+  }
+
+  // orange: less bright, more dusty
+  if (h === "#E57B36") {
+    return { r: 188, g: 112, b: 58 };
+  }
+
+  // pink: muted pastel, less synthetic
+  if (h === "#B396B7") {
+    return { r: 157, g: 132, b: 162 };
+  }
+
+  // green: darker, dirtier green
+  if (h === "#2A6231") {
+    return { r: 40, g: 84, b: 47 };
+  }
+
+  const rgb = hexToRgbObject(hex);
+
+  return {
+    r: Math.round(rgb.r * 0.82),
+    g: Math.round(rgb.g * 0.80),
+    b: Math.round(rgb.b * 0.78),
+  };
+}
+
+function wallHash2D(x, y) {
+  const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453123;
+  return s - Math.floor(s);
+}
+
+function wallNoise2D(x, y) {
+  const x0 = Math.floor(x);
+  const y0 = Math.floor(y);
+  const x1 = x0 + 1;
+  const y1 = y0 + 1;
+
+  const sx = x - x0;
+  const sy = y - y0;
+
+  const n00 = wallHash2D(x0, y0);
+  const n10 = wallHash2D(x1, y0);
+  const n01 = wallHash2D(x0, y1);
+  const n11 = wallHash2D(x1, y1);
+
+  const ix0 = n00 + (n10 - n00) * sx;
+  const ix1 = n01 + (n11 - n01) * sx;
+
+  return ix0 + (ix1 - ix0) * sy;
+}
+
+function getWallSurfaceAlpha(x, y) {
+  // small grain
+  const grain = wallNoise2D(x * 0.18, y * 0.18);
+
+  // bigger plaster breakup
+  const plaster = wallNoise2D(x * 0.045, y * 0.045);
+
+  // faint streaking / wall unevenness
+  const streak = wallNoise2D(x * 0.015, y * 0.09);
+
+  let a = 0.78 + grain * 0.16 + plaster * 0.12 + streak * 0.08;
+
+  // clamp
+  if (a < 0.58) a = 0.58;
+  if (a > 1.0) a = 1.0;
+
+  return a;
+}
+
+function sprayDot(x, y) {
+  if (!wallDrawCtx) return;
+
+  const paintRgb = getWallPaintRgb(wallMarkerColor);
+
+  wallDrawCtx.save();
+  wallDrawCtx.globalCompositeOperation = "source-over";
+
+  // --------------------------------------------------
+  // PASS 1: main body of paint
+  // --------------------------------------------------
+  for (let i = 0; i < WALL_SPRAY_CORE_DABS; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = Math.pow(Math.random(), 2.35) * WALL_SPRAY_JITTER;
+
+    const dx = Math.cos(angle) * dist;
+    const dy = Math.sin(angle) * dist;
+
+    const px = x + dx;
+    const py = y + dy;
+
+  const r =
+  (WALL_SPRAY_DOT_MIN +
+    Math.random() * (WALL_SPRAY_DOT_MAX - WALL_SPRAY_DOT_MIN)) *
+  (0.85 + Math.random() * 0.35);
+
+    const baseAlpha =
+      WALL_PAINT_ALPHA_MIN +
+      Math.random() * (WALL_PAINT_ALPHA_MAX - WALL_PAINT_ALPHA_MIN);
+
+    const wallAlpha = getWallSurfaceAlpha(px, py);
+    const alpha = baseAlpha * wallAlpha;
+
+    wallDrawCtx.fillStyle = rgbaFromRgbObject(paintRgb, alpha);
+    wallDrawCtx.beginPath();
+    wallDrawCtx.arc(px, py, r, 0, Math.PI * 2);
+    wallDrawCtx.fill();
+  }
+
+  // --------------------------------------------------
+  // PASS 2: subtle edge dust
+  // --------------------------------------------------
+  for (let i = 0; i < WALL_SPRAY_EDGE_DABS; i++) {
+    const angle = Math.random() * Math.PI * 2;
+
+    const dist =
+      WALL_SPRAY_JITTER +
+      Math.random() * (WALL_SPRAY_EDGE_JITTER - WALL_SPRAY_JITTER);
+
+    const dx = Math.cos(angle) * dist;
+    const dy = Math.sin(angle) * dist;
+
+    const px = x + dx;
+    const py = y + dy;
+
+    const r = 0.25 + Math.random() * 0.55;
+    const wallAlpha = getWallSurfaceAlpha(px, py);
+    const alpha = (0.008 + Math.random() * 0.012) * wallAlpha * 0.9;
+
+    wallDrawCtx.fillStyle = rgbaFromRgbObject(paintRgb, alpha);
+    wallDrawCtx.beginPath();
+    wallDrawCtx.arc(px, py, r, 0, Math.PI * 2);
+    wallDrawCtx.fill();
+  }
+
+  // --------------------------------------------------
+  // PASS 3: minimal distressed breakup
+  // --------------------------------------------------
+  for (let i = 0; i < 10; i++) {
+    if (Math.random() > WALL_SPRAY_HOLE_CHANCE) continue;
+
+    const angle = Math.random() * Math.PI * 2;
+    const dist = Math.pow(Math.random(), 2.2) * WALL_SPRAY_JITTER;
+
+    const dx = Math.cos(angle) * dist;
+    const dy = Math.sin(angle) * dist;
+
+    const px = x + dx;
+    const py = y + dy;
+
+    const r = 0.18 + Math.random() * 0.30;
+
+    wallDrawCtx.globalCompositeOperation = "destination-out";
+    wallDrawCtx.beginPath();
+    wallDrawCtx.arc(px, py, r, 0, Math.PI * 2);
+    wallDrawCtx.fill();
+    wallDrawCtx.globalCompositeOperation = "source-over";
+  }
+
+  wallDrawCtx.restore();
+}
+
 function drawOnWallAtUV(uv) {
   if (!wallDrawCtx || !wallDrawTex) return;
 
@@ -7614,12 +7818,8 @@ function drawOnWallAtUV(uv) {
     wallDrawCtx.beginPath();
     wallDrawCtx.arc(x, y, WALL_ERASER_RADIUS, 0, Math.PI * 2);
     wallDrawCtx.fill();
-   } else {
-    wallDrawCtx.globalCompositeOperation = "source-over";
-    wallDrawCtx.fillStyle = wallMarkerColor;
-    wallDrawCtx.beginPath();
-    wallDrawCtx.arc(x, y, WALL_PEN_RADIUS, 0, Math.PI * 2);
-    wallDrawCtx.fill();
+  } else {
+    sprayDot(x, y);
   }
 
   wallDrawCtx.restore();
@@ -7629,29 +7829,36 @@ function drawOnWallAtUV(uv) {
 function drawWallLineUV(uvA, uvB) {
   if (!wallDrawCtx || !wallDrawTex) return;
 
+  const x1 = uvA.x * WALL_DRAW_SIZE;
+  const y1 = (1.0 - uvA.y) * WALL_DRAW_SIZE;
+  const x2 = uvB.x * WALL_DRAW_SIZE;
+  const y2 = (1.0 - uvB.y) * WALL_DRAW_SIZE;
+
   wallDrawCtx.save();
-  wallDrawCtx.lineCap = "round";
-  wallDrawCtx.lineJoin = "round";
 
   if (wallTool === "eraser") {
     wallDrawCtx.globalCompositeOperation = "destination-out";
+    wallDrawCtx.lineCap = "round";
+    wallDrawCtx.lineJoin = "round";
     wallDrawCtx.lineWidth = WALL_ERASER_LINE_WIDTH;
-   } else {
-    wallDrawCtx.globalCompositeOperation = "source-over";
-    wallDrawCtx.strokeStyle = wallMarkerColor;
-    wallDrawCtx.lineWidth = WALL_PEN_LINE_WIDTH;
-  }
 
-  wallDrawCtx.beginPath();
-  wallDrawCtx.moveTo(
-    uvA.x * WALL_DRAW_SIZE,
-    (1.0 - uvA.y) * WALL_DRAW_SIZE
-  );
-  wallDrawCtx.lineTo(
-    uvB.x * WALL_DRAW_SIZE,
-    (1.0 - uvB.y) * WALL_DRAW_SIZE
-  );
-  wallDrawCtx.stroke();
+    wallDrawCtx.beginPath();
+    wallDrawCtx.moveTo(x1, y1);
+    wallDrawCtx.lineTo(x2, y2);
+    wallDrawCtx.stroke();
+  } else {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const dist = Math.hypot(dx, dy);
+    const steps = Math.max(1, Math.ceil(dist / (0.8 + Math.random() * 0.3)));
+
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const x = x1 + dx * t;
+      const y = y1 + dy * t;
+      sprayDot(x, y);
+    }
+  }
 
   wallDrawCtx.restore();
   wallDrawTex.needsUpdate = true;
@@ -8023,8 +8230,26 @@ const WALL_MARKER_COLORS = [
 let wallMarkerColorIndex = 0;
 let wallMarkerColor = WALL_MARKER_COLORS[wallMarkerColorIndex];
 
-const WALL_PEN_RADIUS = 2.0;
-const WALL_PEN_LINE_WIDTH = 3;
+const WALL_PEN_RADIUS = 8.0;
+const WALL_PEN_LINE_WIDTH = 10;
+
+const WALL_SPRAY_CORE_DABS = 34;
+const WALL_SPRAY_EDGE_DABS = 7;
+
+const WALL_SPRAY_JITTER = 6.0;
+const WALL_SPRAY_EDGE_JITTER = 9.5;
+
+const WALL_SPRAY_DOT_MIN = 0.45;
+const WALL_SPRAY_DOT_MAX = 1.2;
+
+const WALL_SPRAY_HOLE_CHANCE = 0.06;
+
+const WALL_PAINT_SHADOW_OFFSET_X = 0.85;
+const WALL_PAINT_SHADOW_OFFSET_Y = 0.55;
+const WALL_PAINT_SHADOW_ALPHA = 0.030;
+
+const WALL_PAINT_ALPHA_MIN = 0.04;
+const WALL_PAINT_ALPHA_MAX = 0.090;
 
 const WALL_ERASER_RADIUS = 14.0;
 const WALL_ERASER_LINE_WIDTH = 24;
