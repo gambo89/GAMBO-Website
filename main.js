@@ -694,7 +694,7 @@ let roomMaxDim = 1;
 
 const camera = new THREE.PerspectiveCamera(
   32.5,
-  window.innerWidth / window.innerHeight,
+  DESIGN_ASPECT,
   0.001,
   1000000
 );
@@ -2231,6 +2231,46 @@ function showPicture1Hint(show) {
 }
 
 // ============================================================
+// FRONT_WALL1 HOVER HINT (Draw on wall)
+// ============================================================
+const wallHint = document.createElement("div");
+wallHint.innerHTML = `
+  <div>press to draw</div>
+  <div style="margin-top:4px;">E = erase</div>
+  <div style="margin-top:4px;">double click = clear wall</div>
+`;
+
+wallHint.style.position = "fixed";
+wallHint.style.left = "50%";
+wallHint.style.bottom = "80px";
+wallHint.style.transform = "translateX(-50%)";
+
+wallHint.style.padding = "8px 16px";
+wallHint.style.borderRadius = "20px";
+
+wallHint.style.background = "rgba(0,0,0,0.6)";
+wallHint.style.color = "#fff";
+wallHint.style.fontSize = "14px";
+wallHint.style.fontFamily = "Arial, sans-serif";
+wallHint.style.textAlign = "center";
+
+wallHint.style.pointerEvents = "none";
+wallHint.style.opacity = "0";
+wallHint.style.transition = "opacity 0.25s ease";
+
+wallHint.style.zIndex = "9998";
+
+document.body.appendChild(wallHint);
+
+let wallHintVisible = false;
+
+function showWallHint(show) {
+  if (show === wallHintVisible) return;
+  wallHintVisible = show;
+  wallHint.style.opacity = show ? "1" : "0";
+}
+
+// ============================================================
 // CIGARETTE HOVER HINT (Smoke)
 // ============================================================
 const cigaretteHint = document.createElement("div");
@@ -2376,7 +2416,7 @@ function hideRemoteHints() {
 // ============================================================
 // ✅ AUTO-HIDE HINTS after 3.5s (must re-hover to show again)
 // ============================================================
-const HINT_AUTOHIDE_MS = 2000;
+const HINT_AUTOHIDE_MS = 3000;
 
 let currentHoverKey = null;     // "tv" | "speaker" | "power" | "ok" | "up" | "down" | "left" | "right" | null
 let hintTimeoutId = null;
@@ -2398,6 +2438,7 @@ const hintSuppressed = {
   dogtag1: false,
   door4: false,
   picture1: false,
+  wall: false,
 };
 
 function hideAllHintsImmediate() {
@@ -2412,6 +2453,7 @@ function hideAllHintsImmediate() {
   showDogTagHint(false);
   showDoor4Hint(false);
   showPicture1Hint(false);
+  showWallHint(false);
   hideRemoteHints();
 }
 
@@ -2479,6 +2521,11 @@ if (key === "picture1") {
   return;
 }
 
+if (key === "wall") {
+  showWallHint(true);
+  return;
+}
+
   if (key === "tv") {
 
   // ✅ iOS-specific TV hint text
@@ -2537,9 +2584,6 @@ function setHoverKey(nextKey) {
   }, HINT_AUTOHIDE_MS);
 }
 
-// ============================================================
-// SUBTLE ROOM GRAIN / NOISE OVERLAY (FIXED data-url) ✅
-// ============================================================
 // ============================================================
 // SUBTLE ROOM GRAIN / NOISE OVERLAY (FINAL) ✅
 // ============================================================
@@ -2771,36 +2815,68 @@ function applyVisibleViewportToRendererAndCamera() {
   const w = Math.round(vv?.width ?? window.innerWidth);
   const h = Math.round(vv?.height ?? window.innerHeight);
 
-  renderer.setSize(w, h, false);
+  // ✅ Keep iOS behavior as-is
+  if (isIOSDevice()) {
+    viewX = 0;
+    viewY = 0;
+    viewW = w;
+    viewH = h;
 
-  // keep css in sync (prevents iOS weird scaling)
+    renderer.setSize(w, h, false);
+    renderer.setViewport(0, 0, w, h);
+    renderer.setScissor(0, 0, w, h);
+    renderer.setScissorTest(true);
+
+    renderer.domElement.style.width = w + "px";
+    renderer.domElement.style.height = h + "px";
+
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+
+    if (composer) composer.setSize(w, h);
+
+    return { w, h };
+  }
+
+  // ✅ Desktop: lock framing to DESIGN_ASPECT
+  const screenAspect = w / h;
+
+  if (screenAspect > DESIGN_ASPECT) {
+    // browser is wider than design ratio → pillarbox
+    viewH = h;
+    viewW = Math.round(viewH * DESIGN_ASPECT);
+    viewX = Math.floor((w - viewW) / 2);
+    viewY = 0;
+  } else {
+    // browser is taller/narrower than design ratio → letterbox
+    viewW = w;
+    viewH = Math.round(viewW / DESIGN_ASPECT);
+    viewX = 0;
+    viewY = Math.floor((h - viewH) / 2);
+  }
+
+  renderer.setSize(w, h, false);
+  renderer.setViewport(viewX, viewY, viewW, viewH);
+  renderer.setScissor(viewX, viewY, viewW, viewH);
+  renderer.setScissorTest(true);
+  renderer.setClearColor(0x000000, 1);
+
   renderer.domElement.style.width = w + "px";
   renderer.domElement.style.height = h + "px";
 
-  camera.aspect = w / h;
+  camera.aspect = DESIGN_ASPECT;
   camera.updateProjectionMatrix();
+
+  if (composer) composer.setSize(viewW, viewH);
 
   return { w, h };
 }
 
 function applyIOSViewportFix() {
-  const { w, h } = getVisibleViewportSize();
+  applyVisibleViewportToRendererAndCamera();
 
-  // 1) Keep the canvas physically sized to the visible viewport
-  renderer.setSize(w, h, false);
-
-  // 2) Make sure CSS matches too (prevents weird scaling/cropping)
-  renderer.domElement.style.width = w + "px";
-  renderer.domElement.style.height = h + "px";
-
-  // 3) Keep camera projection correct
-  camera.aspect = w / h;
-  camera.updateProjectionMatrix();
-
-  // 4) If you use your own viewport/scissor math (viewX/viewY/viewW/viewH),
-  // recompute it here too (so raycasting matches the new viewport).
   if (typeof updateViewportRect === "function") {
-    updateViewportRect(); // <-- only if you have this function
+    updateViewportRect();
   }
 }
 
@@ -4480,25 +4556,25 @@ function applyTvTextureEnabled(enabled) {
 }
 
 const tracks = [
-  "./assets/Audio/01-Aftonvarldar.mp3",
-  "./assets/Audio/02-rip-fredo-notice-me-01.mp3",
-  "./assets/Audio/03-floor-555-01.mp3",
-  "./assets/Audio/04-12r-01.mp3",
-  "./assets/Audio/05-leave-everything-01.mp3",
-  "./assets/Audio/06-27-title-flight-01.mp3",
-  "./assets/Audio/07-nwo-ministry-01.mp3",
-  "./assets/Audio/08-bline-01.mp3",
-  "./assets/Audio/09-centaurella-44-01.mp3",
-  "./assets/Audio/10-under-the-same-name-01.mp3",
-  "./assets/Audio/11-a-sad-cartoon-01.mp3", 
-  "./assets/Audio/12-one-weak-01.mp3",
-  "./assets/Audio/13-xo-01.mp3",
-  "./assets/Audio/14-min-dag.mp3",
-  "./assets/Audio/15-frosting-01.mp3",
-  "./assets/Audio/16-relay-01.mp3",
-  "./assets/Audio/17-pistol-01.mp3",
-  "./assets/Audio/18-widowdusk-01.mp3",
-  "./assets/Audio/19-letters-to-frances_01.mp3",
+  "./assets/Audio/01-Aftonvarldar1.mp3",
+  "./assets/Audio/02-rip-fredo-notice-me-011.mp3",
+  "./assets/Audio/03-floor-555-011.mp3",
+  "./assets/Audio/04-12r-011.mp3",
+  "./assets/Audio/05-leave-everything-011.mp3",
+  "./assets/Audio/06-27-title-flight-011.mp3",
+  "./assets/Audio/07-nwo-ministry-011.mp3",
+  "./assets/Audio/08-bline-011.mp3",
+  "./assets/Audio/09-centaurella-44-011.mp3",
+  "./assets/Audio/10-under-the-same-name-011.mp3",
+  "./assets/Audio/11-a-sad-cartoon-011.mp3", 
+  "./assets/Audio/12-one-weak-011.mp3",
+  "./assets/Audio/13-xo-011.mp3",
+  "./assets/Audio/14-min-dag1.mp3",
+  "./assets/Audio/15-frosting-011.mp3",
+  "./assets/Audio/16-relay-011.mp3",
+  "./assets/Audio/17-pistol-011.mp3",
+  "./assets/Audio/18-widowdusk-011.mp3",
+  "./assets/Audio/19-letters-to-frances_011.mp3",
 ];
 
 let trackIndex = 0;
@@ -4573,7 +4649,7 @@ function currentAudio() {
 function ensureBackgroundAudio() {
   if (bgAudio) return bgAudio;
 
-  bgAudio = new Audio("./assets/Audio/Background sound1.m4a");
+  bgAudio = new Audio("./assets/Audio/Background sound11.m4a");
   bgAudio.preload = "auto";
   bgAudio.crossOrigin = "anonymous";
   bgAudio.loop = true;
@@ -5435,6 +5511,30 @@ function hitIsPicture1(obj) {
   return false;
 }
 
+function hitIsDrawWall(obj) {
+  let o = obj;
+  while (o) {
+    const n  = (o.name || "").toLowerCase();
+    const mn = (o.material?.name || "").toLowerCase();
+    const pn = (o.parent?.name || "").toLowerCase();
+
+    // replace these with your actual wall mesh / material / parent names
+    if (
+      n.includes("front_wall1") ||
+      mn.includes("front wall") ||
+      pn.includes("front_wall1") ||
+      n.includes("drawwall") ||
+      mn.includes("drawwall") ||
+      pn.includes("drawwall")
+    ) {
+      return true;
+    }
+
+    o = o.parent;
+  }
+  return false;
+}
+
 async function onPointerDown(e) {
   if (isIOSPortraitBlocked()) return;
   if (isIOSDevice()) nudgeIosRemotePulse();
@@ -6066,6 +6166,7 @@ let hoveringDunkeheitAlbum = false;
 let hoveringBoard2 = false;
 let hoveringDoor4 = false;
 let hoveringPicture1 = false;
+let hoveringWall = false; 
 
   if (hitIsLamp(hit)) hoveringLamp = true;
   if (hitIsAllDVD(hit)) hoveringAllDvd = true;
@@ -6074,6 +6175,7 @@ let hoveringPicture1 = false;
   if (hitIsDunkeheitAlbum(hit)) hoveringDunkeheitAlbum = true;
   if (hitIsDoor4(hit)) hoveringDoor4 = true;
   if (hoveringPicture1AllHits) hoveringPicture1 = true;
+  if (hitIsDrawWall(hit)) hoveringWall = true;
 
   // ✅ CRITICAL: TV hover must not allow remote glow at all
 if (hoveringTvScreen) {
@@ -6184,6 +6286,7 @@ if (cigaretteRoot && isInHierarchy(hit, cigaretteRoot)) {
   else if (hoveringDunkeheitAlbum) nextKey = "dogtag1";
   else if (hoveringDoor4) nextKey = "door4";
   else if (hoveringPicture1) nextKey = "picture1";
+  else if (hoveringWall) nextKey = "wall";
   else if (hoveringOk) nextKey = "ok";
   else if (hoveringUp) nextKey = "up";
   else if (hoveringDown) nextKey = "down";
@@ -6544,73 +6647,73 @@ TV_stand: makePBR({
 //Cigarettes
 
  Cig2: makePBR({
-    albedo: "./assets/Textures/Cigarettes/Cig2 Albeto.jpg",
+    albedo: "./assets/Textures/Cigarettes/Cig2 Albeto1.jpg",
     },
     { roughness: 1.0, metalness: 0.0}
 ),
 
  Cig3: makePBR({
-    albedo: "./assets/Textures/Cigarettes/Cig3 Albeto.jpg",
+    albedo: "./assets/Textures/Cigarettes/Cig3 Albeto1.jpg",
     },
     { roughness: 1.0, metalness: 0.0}
 ),
 
  Cig4: makePBR({
-    albedo: "./assets/Textures/Cigarettes/Cig4 Albeto.jpg",
+    albedo: "./assets/Textures/Cigarettes/Cig4 Albeto1.jpg",
     },
     { roughness: 1.0, metalness: 0.0}
 ),
 
  Cig5: makePBR({
-    albedo: "./assets/Textures/Cigarettes/Cig5 Albeto.jpg",
+    albedo: "./assets/Textures/Cigarettes/Cig5 Albeto1.jpg",
     },
     { roughness: 1.0, metalness: 0.0}
 ),
 
  Cig6: makePBR({
-    albedo: "./assets/Textures/Cigarettes/Cig6 Albeto.jpg",
+    albedo: "./assets/Textures/Cigarettes/Cig6 Albeto1.jpg",
     },
     { roughness: 1.0, metalness: 0.0}
 ),
 
  Cig7: makePBR({
-    albedo: "./assets/Textures/Cigarettes/Cig7 Albeto.jpg",
+    albedo: "./assets/Textures/Cigarettes/Cig7 Albeto1.jpg",
     },
     { roughness: 1.0, metalness: 0.0}
 ),
 
  Cig8: makePBR({
-    albedo: "./assets/Textures/Cigarettes/Cig8 Albeto.jpg",
+    albedo: "./assets/Textures/Cigarettes/Cig8 Albeto1.jpg",
     },
     { roughness: 1.0, metalness: 0.0}
 ),
 
  Cig9: makePBR({
-    albedo: "./assets/Textures/Cigarettes/Cig9 Albeto.jpg",
+    albedo: "./assets/Textures/Cigarettes/Cig9 Albeto1.jpg",
     },
     { roughness: 1.0, metalness: 0.0}
 ),
 
  Cig10: makePBR({
-    albedo: "./assets/Textures/Cigarettes/Cig10 Albeto.jpg",
+    albedo: "./assets/Textures/Cigarettes/Cig10 Albeto1.jpg",
     },
     { roughness: 1.0, metalness: 0.0}
 ),
 
  Cig11: makePBR({
-    albedo: "./assets/Textures/Cigarettes/Cig11 Albeto.jpg",
+    albedo: "./assets/Textures/Cigarettes/Cig11 Albeto1.jpg",
     },
     { roughness: 1.0, metalness: 0.0}
 ),
 
  Cig12: makePBR({
-    albedo: "./assets/Textures/Cigarettes/Cig12 Albeto.jpg",
+    albedo: "./assets/Textures/Cigarettes/Cig12 Albeto1.jpg",
     },
     { roughness: 1.0, metalness: 0.0}
 ),
 
  Cig13: makePBR({
-    albedo: "./assets/Textures/Cigarettes/Cig13 Albeto.jpg",
+    albedo: "./assets/Textures/Cigarettes/Cig13 Albeto1.jpg",
     },
     { roughness: 1.0, metalness: 0.0}
 ),
@@ -6619,8 +6722,6 @@ TV_stand: makePBR({
   front_wall1: makePBR(
     {
       albedo: "./assets/Textures/Walls/Front Wall/Front Wall10 Albedo.jpg",
-      //normal: "./assets/Textures/Walls/Front Wall/Front Wall Normal.jpg",
-      //ao: "./assets/Textures/Walls/Front Wall/Front Wall AO.jpg",
     },
     { metalness: 0.0, roughness: 2.0 }
   ),
@@ -6628,8 +6729,6 @@ TV_stand: makePBR({
   Left_wall1: makePBR(
     {
       albedo: "./assets/Textures/Walls/Left Wall/Left Wall Albeto.jpg",
-      normal: "./assets/Textures/Walls/Left Wall/Left Wall Normal.jpg",
-      ao: "./assets/Textures/Walls/Left Wall/Left Wall AO.jpg",
     },
     { metalness: 0.0, roughness: 0.0 }
   ),
@@ -6637,17 +6736,15 @@ TV_stand: makePBR({
   Floor1: makePBR(
     {
       albedo: "./assets/Textures/Floor/Floor Albedo2.jpg",
-      normal: "./assets/Textures/Floor/Floor Normal1.jpg",
-      ao: "./assets/Textures/Floor/Floor AO.jpg",
     },
-    { metalness: 0.0, roughness: 0.0 }
+    { metalness: 0.0, roughness: 1.0 }
   ),
 
 Door4: (() => {
   const m = makePBR(
     {
-      albedo: "./assets/Textures/new door/New Door Albedo.jpg",
-      normal: "./assets/Textures/new door/New Door Normal.jpg",
+      albedo: "./assets/Textures/new door/New Door Albedo1.jpg",
+      normal: "./assets/Textures/new door/New Door Normal1.jpg",
     },
     { roughness: 1.0, metalness: 0.0 }
   );
@@ -6670,34 +6767,33 @@ Door4: (() => {
 
   Mask1: makePBR(
     {
-      albedo: "./assets/Textures/Mask/Mask Albeto.jpg",
+      albedo: "./assets/Textures/Mask/Mask Albeto1.jpg",
     },
     { metalness: 0.0, roughness: 1.0 }
   ),
 
   Book4: makePBR(
     {
-      albedo: "./assets/Textures/Books/Book2 Albeto.jpg",
+      albedo: "./assets/Textures/Books/Book2 Albeto1.jpg",
     },
     { metalness: 0.0, roughness: 1.0 }
   ),
 
   Book3: makePBR(
     {
-      albedo: "./assets/Textures/Books/Book1 Albeto.jpg",
+      albedo: "./assets/Textures/Books/Book1 Albeto1.jpg",
     },
     { metalness: 0.0, roughness: 1.0 }
   ),
 
  AXE3: makePBR({
-    albedo: "./assets/Textures/AXE/AXE Albeto.jpg",
-    normal: "./assets/Textures/AXE/AXE Normal.jpg",
+    albedo: "./assets/Textures/AXE/AXE Albeto2.jpg",
     },
-    { roughness: 0.05, metalness: 0.0}
+    { roughness: 1.0, metalness: 0.0}
 ),
 
  Digi_Cam2: makePBR({
-    albedo: "./assets/Textures/Digi Cam/Digi Cam Albeto.jpg",
+    albedo: "./assets/Textures/Digi Cam/Digi Cam Albeto1.jpg",
     },
     { roughness: 0.0, metalness: 0.0}
 ),
@@ -6724,13 +6820,13 @@ Door4: (() => {
 })(),
 
  Sony_Handicam1: makePBR({
-    albedo: "./assets/Textures/Sony Handicam/Sony Handicam Albeto.jpg",
+    albedo: "./assets/Textures/Sony Handicam/Sony Handicam Albeto2.jpg",
     },
     { roughness: 0.0, metalness: 0.0}
 ),
 
  Thailand_Box1: makePBR({
-    albedo: "./assets/Textures/Thailand Box/Thailand Box Albeto.jpg",
+    albedo: "./assets/Textures/Thailand Box/Thailand Box Albeto2.jpg",
     },
     { roughness: 0.0, metalness: 0.0}
 ),
@@ -6808,13 +6904,13 @@ Cabnet_Laches: makePBR({
 ),
 
 Dog_Tag1: makePBR({
-    albedo: "./assets/Textures/Dog Tag Necklace/Dog Tag Albeto.jpg",
+    albedo: "./assets/Textures/Dog Tag Necklace/Dog Tag Albeto1.jpg",
     },
     { roughness: 0.2, metalness: 0.0}
 ),
 
 Washer: makePBR({
-    albedo: "./assets/Textures/Dog Tag Necklace/Washer Albeto.jpg",
+    albedo: "./assets/Textures/Dog Tag Necklace/Washer Albeto1.jpg",
     },
     { roughness: 0.0, metalness: 0.0}
 ),
@@ -6827,9 +6923,8 @@ Chain: makePBR({
 
 All_Cartridges: makePBR({
     albedo: "./assets/Textures/Cartridges/Cartridges Albedo.jpg",
-    normal: "./assets/Textures/Cartridges/Cartridges Normal.jpg",
     },
-    { roughness: 1.0, metalness: 0.5}
+    { roughness: 0.8, metalness: 0.0}
 ),
 
 Bed1: makePBR({
@@ -6839,7 +6934,7 @@ Bed1: makePBR({
 ),
 
 Frame: makePBR({
-    albedo: "./assets/Textures/Frame/Frame Albedo.jpg",
+    albedo: "./assets/Textures/Frame/Frame Albedo1.jpg",
  
     },
     { roughness: 1.0, metalness: 0.5}
@@ -6906,7 +7001,7 @@ cabnet_hinge3: (() => {
   // 1️⃣ Create the material
   const m = makePBR(
     {
-      albedo: "./assets/Textures/Hinge/Hinge Albeto.jpg",
+      albedo: "./assets/Textures/Hinge/Hinge Albeto1.jpg",
     },
     { roughness: 0.9, metalness: 0.2}
   );
@@ -6927,7 +7022,7 @@ cabnet_hinge4: (() => {
   // 1️⃣ Create the material
   const m = makePBR(
     {
-      albedo: "./assets/Textures/Hinge/Hinge Albeto.jpg",
+      albedo: "./assets/Textures/Hinge/Hinge Albeto1.jpg",
     },
     { roughness: 0.9, metalness: 0.2 }
   );
@@ -6948,7 +7043,7 @@ cabnet_hinge5: (() => {
   // 1️⃣ Create the material
   const m = makePBR(
     {
-      albedo: "./assets/Textures/Hinge/Hinge Albeto.jpg",
+      albedo: "./assets/Textures/Hinge/Hinge Albeto1.jpg",
     },
     { roughness: 0.9, metalness: 0.2 }
   );
@@ -6996,7 +7091,7 @@ Black_VCR_Cable: makePBR({
 ),
 
 Blade: makePBR({
-    albedo: "./assets/Textures/Knife/Knife Albeto.jpg",
+    albedo: "./assets/Textures/Knife/Knife Albeto1.jpg",
     },
     { roughness: 0.3, metalness: 0.1}
 ),
@@ -7008,55 +7103,55 @@ Handle: makePBR({
 ),
 
 Board2: makePBR({
-    albedo: "./assets/Textures/Skateboard/Board Albeto.jpg",
+    albedo: "./assets/Textures/Skateboard/Board Albeto1.jpg",
     },
     { roughness: 1.0, metalness: 0.2}
 ),
 
 Grinding_Treck2: makePBR({
-    albedo: "./assets/Textures/Skateboard/Treck Grinder Albeto.jpg",
+    albedo: "./assets/Textures/Skateboard/Treck Grinder Albeto2.jpg",
     },
     { roughness: 1.0, metalness: 0.5}
 ),
 
 Grinding_Teck1: makePBR({
-    albedo: "./assets/Textures/Skateboard/Treck Grinder Albeto.jpg",
+    albedo: "./assets/Textures/Skateboard/Treck Grinder Albeto2.jpg",
     },
     { roughness: 1.0, metalness: 0.5}
 ),
 
 Right_Wheel2: makePBR({
-    albedo: "./assets/Textures/Skateboard/Right Wheel Albeto.jpg",
+    albedo: "./assets/Textures/Skateboard/Right Wheel Albeto1.jpg",
     },
     { roughness: 1.0, metalness: 0.0}
 ),
 
 Right_Wheel1: makePBR({
-    albedo: "./assets/Textures/Skateboard/Right Wheel Albeto.jpg",
+    albedo: "./assets/Textures/Skateboard/Right Wheel Albeto1.jpg",
     },
     { roughness: 1.0, metalness: 0.0}
 ),
 
 Left_Wheel: makePBR({
-    albedo: "./assets/Textures/Skateboard/Left Wheel Albeto.jpg",
+    albedo: "./assets/Textures/Skateboard/Left Wheel Albeto1.jpg",
     },
     { roughness: 1.0, metalness: 0.0}
 ),
 
 Left_Wheel1: makePBR({
-    albedo: "./assets/Textures/Skateboard/Left Wheel Albeto.jpg",
+    albedo: "./assets/Textures/Skateboard/Left Wheel Albeto1.jpg",
     },
     { roughness: 1.0, metalness: 0.0}
 ),
 
 Top_of_Treck: makePBR({
-    albedo: "./assets/Textures/Skateboard/Top of Treck Albeto.jpg",
+    albedo: "./assets/Textures/Skateboard/Top of Treck Albeto1.jpg",
     },
     { roughness: 1.0, metalness: 0.5}
 ),
 
 Top_of_Treck1: makePBR({
-    albedo: "./assets/Textures/Skateboard/Top of Treck Albeto.jpg",
+    albedo: "./assets/Textures/Skateboard/Top of Treck Albeto1.jpg",
     },
     { roughness: 1.0, metalness: 0.5}
 ),
@@ -7172,7 +7267,7 @@ BluetoothSpeaker: makePBR(
 
      Food_Bowl: makePBR(
 {
-      albedo: "./assets/Textures/Food/Food albedo.jpg",
+      albedo: "./assets/Textures/Food/Food albedo1.jpg",
     },
     { roughness: 0.2, metalness: 0.0 }
   ),
@@ -7193,7 +7288,7 @@ BluetoothSpeaker: makePBR(
   
        Garbage_Bag: makePBR(
 {
-      albedo: "./assets/Textures/Garbage/Garbage albedo.jpg",
+      albedo: "./assets/Textures/Garbage/Garbage albedo1.jpg",
     },
     { roughness: 0.0, metalness: 0.0 }
   ),
@@ -7208,9 +7303,9 @@ BluetoothSpeaker: makePBR(
   
        Rag1: makePBR(
 {
-      albedo: "./assets/Textures/Rag/Dirty Rag Albedo.jpg",
+      albedo: "./assets/Textures/Rag/Dirty Rag Albedo2.jpg",
     },
-    { roughness: 0.0, metalness: 0.0 }
+    { roughness: 0.3, metalness: 0.0 }
   ),
 
        Underwear2: makePBR(
@@ -7882,16 +7977,16 @@ if (materials.Picture1) {
 // ✅ Picture1 interchangeable textures (01–06)
 // ============================================================
 const PICTURE1_TEXTURES = [
-  "./assets/Textures/Picture/01_Picture1.jpg",
-  "./assets/Textures/Picture/02_Picture2.jpg",
-  "./assets/Textures/Picture/03_Picture3.jpg",
-  "./assets/Textures/Picture/04_Picture4.jpg",
-  "./assets/Textures/Picture/05_Picture5.jpg",
-  "./assets/Textures/Picture/06_Picture6.jpg",
-  "./assets/Textures/Picture/07_Picture7.jpg",
-  "./assets/Textures/Picture/08_Picture8.jpg",
-  "./assets/Textures/Picture/09_Picture9.jpg",
-  "./assets/Textures/Picture/10_Picture10.jpg",
+  "./assets/Textures/Picture/01_Picture11.jpg",
+  "./assets/Textures/Picture/02_Picture21.jpg",
+  "./assets/Textures/Picture/03_Picture31.jpg",
+  "./assets/Textures/Picture/04_Picture41.jpg",
+  "./assets/Textures/Picture/05_Picture51.jpg",
+  "./assets/Textures/Picture/06_Picture61.jpg",
+  "./assets/Textures/Picture/07_Picture71.jpg",
+  "./assets/Textures/Picture/08_Picture81.jpg",
+  "./assets/Textures/Picture/09_Picture91.jpg",
+  "./assets/Textures/Picture/10_Picture101.jpg",
   
 ];
 
