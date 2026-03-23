@@ -694,7 +694,7 @@ let roomMaxDim = 1;
 
 const camera = new THREE.PerspectiveCamera(
   32.5,
-  DESIGN_ASPECT,
+  window.innerWidth / window.innerHeight,
   0.001,
   1000000
 );
@@ -2816,66 +2816,34 @@ function applyVisibleViewportToRendererAndCamera() {
   const w = Math.round(vv?.width ?? window.innerWidth);
   const h = Math.round(vv?.height ?? window.innerHeight);
 
-  // ✅ Keep iOS behavior as-is
-  if (isIOSDevice()) {
-    viewX = 0;
-    viewY = 0;
-    viewW = w;
-    viewH = h;
-
-    renderer.setSize(w, h, false);
-    renderer.setViewport(0, 0, w, h);
-    renderer.setScissor(0, 0, w, h);
-    renderer.setScissorTest(true);
-
-    renderer.domElement.style.width = w + "px";
-    renderer.domElement.style.height = h + "px";
-
-    camera.aspect = w / h;
-    camera.updateProjectionMatrix();
-
-    if (composer) composer.setSize(w, h);
-
-    return { w, h };
-  }
-
-  // ✅ Desktop: lock framing to DESIGN_ASPECT
-  const screenAspect = w / h;
-
-  if (screenAspect > DESIGN_ASPECT) {
-    // browser is wider than design ratio → pillarbox
-    viewH = h;
-    viewW = Math.round(viewH * DESIGN_ASPECT);
-    viewX = Math.floor((w - viewW) / 2);
-    viewY = 0;
-  } else {
-    // browser is taller/narrower than design ratio → letterbox
-    viewW = w;
-    viewH = Math.round(viewW / DESIGN_ASPECT);
-    viewX = 0;
-    viewY = Math.floor((h - viewH) / 2);
-  }
-
   renderer.setSize(w, h, false);
-  renderer.setViewport(viewX, viewY, viewW, viewH);
-  renderer.setScissor(viewX, viewY, viewW, viewH);
-  renderer.setScissorTest(true);
-  renderer.setClearColor(0x000000, 1);
 
+  // keep css in sync (prevents iOS weird scaling)
   renderer.domElement.style.width = w + "px";
   renderer.domElement.style.height = h + "px";
 
-  camera.aspect = DESIGN_ASPECT;
+  camera.aspect = w / h;
   camera.updateProjectionMatrix();
-
-  if (composer) composer.setSize(viewW, viewH);
 
   return { w, h };
 }
 
 function applyIOSViewportFix() {
-  applyVisibleViewportToRendererAndCamera();
+  const { w, h } = getVisibleViewportSize();
 
+  // 1) Keep the canvas physically sized to the visible viewport
+  renderer.setSize(w, h, false);
+
+  // 2) Make sure CSS matches too (prevents weird scaling/cropping)
+  renderer.domElement.style.width = w + "px";
+  renderer.domElement.style.height = h + "px";
+
+  // 3) Keep camera projection correct
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+
+  // 4) If you use your own viewport/scissor math (viewX/viewY/viewW/viewH),
+  // recompute it here too (so raycasting matches the new viewport).
   if (typeof updateViewportRect === "function") {
     updateViewportRect();
   }
