@@ -17,11 +17,13 @@
 
     :root { --vh: 1vh; }
 
-    #c {
-      display: block;
-      width: 100vw;
-      height: calc(var(--vh) * 100);
-    }
+   #c {
+  position: fixed;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
 
     /* ✅ LOADING SCREEN */
     #loader {

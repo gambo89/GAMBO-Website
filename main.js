@@ -694,7 +694,7 @@ let roomMaxDim = 1;
 
 const camera = new THREE.PerspectiveCamera(
   32.5,
-  window.innerWidth / window.innerHeight,
+  1,
   0.001,
   1000000
 );
@@ -2811,17 +2811,19 @@ function getVisibleViewportSize() {
   };
 }
 
+function getCanvasDisplaySize() {
+  const rect = renderer.domElement.getBoundingClientRect();
+
+  return {
+    w: Math.max(1, Math.round(rect.width)),
+    h: Math.max(1, Math.round(rect.height)),
+  };
+}
+
 function applyVisibleViewportToRendererAndCamera() {
-  const vv = window.visualViewport;
-  const w = Math.round(vv?.width ?? window.innerWidth);
-  const h = Math.round(vv?.height ?? window.innerHeight);
+  const { w, h } = getCanvasDisplaySize();
 
   renderer.setSize(w, h, false);
-
-  // keep css in sync (prevents iOS weird scaling)
-  renderer.domElement.style.width = w + "px";
-  renderer.domElement.style.height = h + "px";
-
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
 
@@ -2831,19 +2833,16 @@ function applyVisibleViewportToRendererAndCamera() {
 function applyIOSViewportFix() {
   const { w, h } = getVisibleViewportSize();
 
-  // 1) Keep the canvas physically sized to the visible viewport
-  renderer.setSize(w, h, false);
-
-  // 2) Make sure CSS matches too (prevents weird scaling/cropping)
+  // keep CSS canvas synced to visible iOS viewport
   renderer.domElement.style.width = w + "px";
   renderer.domElement.style.height = h + "px";
 
-  // 3) Keep camera projection correct
-  camera.aspect = w / h;
+  // now size renderer/camera from actual canvas rect
+  const size = getCanvasDisplaySize();
+  renderer.setSize(size.w, size.h, false);
+  camera.aspect = size.w / size.h;
   camera.updateProjectionMatrix();
 
-  // 4) If you use your own viewport/scissor math (viewX/viewY/viewW/viewH),
-  // recompute it here too (so raycasting matches the new viewport).
   if (typeof updateViewportRect === "function") {
     updateViewportRect();
   }
