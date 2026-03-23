@@ -2236,6 +2236,7 @@ function showPicture1Hint(show) {
 const wallHint = document.createElement("div");
 wallHint.innerHTML = `
   <div>press to draw</div>
+  <div style="margin-top:4px;">C = change color</div>
   <div style="margin-top:4px;">E = erase</div>
   <div style="margin-top:4px;">double click = clear wall</div>
 `;
@@ -7594,6 +7595,12 @@ function toggleWallTool() {
   console.log(`Wall tool is now: ${wallTool}`);
 }
 
+function cycleWallMarkerColor() {
+  wallMarkerColorIndex = (wallMarkerColorIndex + 1) % WALL_MARKER_COLORS.length;
+  wallMarkerColor = WALL_MARKER_COLORS[wallMarkerColorIndex];
+  console.log(`Wall marker color is now: ${wallMarkerColor}`);
+}
+
 function drawOnWallAtUV(uv) {
   if (!wallDrawCtx || !wallDrawTex) return;
 
@@ -7607,9 +7614,9 @@ function drawOnWallAtUV(uv) {
     wallDrawCtx.beginPath();
     wallDrawCtx.arc(x, y, WALL_ERASER_RADIUS, 0, Math.PI * 2);
     wallDrawCtx.fill();
-  } else {
+   } else {
     wallDrawCtx.globalCompositeOperation = "source-over";
-    wallDrawCtx.fillStyle = "#111111";
+    wallDrawCtx.fillStyle = wallMarkerColor;
     wallDrawCtx.beginPath();
     wallDrawCtx.arc(x, y, WALL_PEN_RADIUS, 0, Math.PI * 2);
     wallDrawCtx.fill();
@@ -7629,9 +7636,9 @@ function drawWallLineUV(uvA, uvB) {
   if (wallTool === "eraser") {
     wallDrawCtx.globalCompositeOperation = "destination-out";
     wallDrawCtx.lineWidth = WALL_ERASER_LINE_WIDTH;
-  } else {
+   } else {
     wallDrawCtx.globalCompositeOperation = "source-over";
-    wallDrawCtx.strokeStyle = "#111111";
+    wallDrawCtx.strokeStyle = wallMarkerColor;
     wallDrawCtx.lineWidth = WALL_PEN_LINE_WIDTH;
   }
 
@@ -8002,6 +8009,19 @@ let isWallDrawing = false;
 let hasLastWallDrawUv = false;
 
 let wallTool = "pen"; // "pen" or "eraser"
+
+const WALL_MARKER_COLORS = [
+  "#000000", // black
+  "#FFFFFF", // white
+  "#6D120D", // red
+  "#5D7A91", // blue
+  "#E57B36", // orange
+  "#B396B7", // pink
+  "#2A6231", // green
+];
+
+let wallMarkerColorIndex = 0;
+let wallMarkerColor = WALL_MARKER_COLORS[wallMarkerColorIndex];
 
 const WALL_PEN_RADIUS = 2.0;
 const WALL_PEN_LINE_WIDTH = 3;
@@ -10119,6 +10139,12 @@ window.addEventListener("keydown", (e) => {
 
   if (e.key === "e" || e.key === "E") {
     toggleWallTool();
+    return;
+  }
+
+  if (e.key === "c" || e.key === "C") {
+    cycleWallMarkerColor();
+    return;
   }
 });
 
