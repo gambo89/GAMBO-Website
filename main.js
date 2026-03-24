@@ -2234,24 +2234,47 @@ function showPicture1Hint(show) {
 // FRONT_WALL1 HOVER HINT (Draw on wall)
 // ============================================================
 const wallHint = document.createElement("div");
-wallHint.innerHTML = `
-  <div style="font-size:16px;">press to draw</div>
-  <div style="margin-top:4px; font-size:12px; opacity:0.85;">C = change color</div>
-  <div style="margin-top:2px; font-size:12px; opacity:0.85;">E = erase</div>
-  <div style="margin-top:2px; font-size:12px; opacity:0.85;">double click = clear wall</div>
-`;
+
+// main line
+const wallHintMain = document.createElement("div");
+wallHintMain.style.fontSize = "14px";
+wallHintMain.style.fontWeight = "600";
+wallHintMain.style.marginBottom = "2px";
+wallHintMain.innerText = "press to draw";
+
+// sub lines
+const wallHintSub1 = document.createElement("div");
+wallHintSub1.style.fontSize = "12px";
+wallHintSub1.style.opacity = "0.85";
+wallHintSub1.innerText = "C = change color";
+
+const wallHintSub2 = document.createElement("div");
+wallHintSub2.style.fontSize = "12px";
+wallHintSub2.style.opacity = "0.85";
+wallHintSub2.style.marginTop = "2px";
+wallHintSub2.innerText = "E = erase";
+
+const wallHintSub3 = document.createElement("div");
+wallHintSub3.style.fontSize = "12px";
+wallHintSub3.style.opacity = "0.85";
+wallHintSub3.style.marginTop = "2px";
+wallHintSub3.innerText = "double click = clear wall";
+
+wallHint.appendChild(wallHintMain);
+wallHint.appendChild(wallHintSub1);
+wallHint.appendChild(wallHintSub2);
+wallHint.appendChild(wallHintSub3);
 
 wallHint.style.position = "fixed";
 wallHint.style.left = "50%";
 wallHint.style.bottom = "80px";
 wallHint.style.transform = "translateX(-50%)";
 
-wallHint.style.padding = "8px 16px";
+wallHint.style.padding = "10px 16px";
 wallHint.style.borderRadius = "20px";
 
 wallHint.style.background = "rgba(0,0,0,0.6)";
 wallHint.style.color = "#fff";
-wallHint.style.fontSize = "14px";
 wallHint.style.fontFamily = "Arial, sans-serif";
 wallHint.style.textAlign = "center";
 
@@ -4522,8 +4545,8 @@ function applyTvTextureEnabled(enabled) {
 }
 
 const tracks = [
-  "./assets/Audio/01-Aftonvarldar1.mp3",
-  "./assets/Audio/02-rip-fredo-notice-me-011.mp3",
+  "./assets/Audio/01-rip-fredo-notice-me-011.mp3",
+  "./assets/Audio/02-I-Serve-the-Base.mp3",
   "./assets/Audio/03-floor-555-011.mp3",
   "./assets/Audio/04-12r-011.mp3",
   "./assets/Audio/05-leave-everything-011.mp3",
@@ -4626,6 +4649,103 @@ function ensureBackgroundAudio() {
   return bgAudio;
 }
 
+let lampAudio = null;
+
+function ensureLampAudio() {
+  if (lampAudio) return lampAudio;
+
+  lampAudio = new Audio("./assets/Audio/Light Flicker Sound.mp3");
+  lampAudio.preload = "auto";
+  lampAudio.crossOrigin = "anonymous";
+  lampAudio.loop = true;
+  lampAudio.volume = 0.10;
+  lampAudio.playsInline = true;
+  lampAudio.setAttribute?.("webkit-playsinline", "");
+  lampAudio.load();
+
+  return lampAudio;
+}
+
+let tvOnSound = null;
+
+function ensureTvOnSound() {
+  if (tvOnSound) return tvOnSound;
+
+  tvOnSound = new Audio("./assets/Audio/Tv On Sound1-01.mp3");
+  tvOnSound.preload = "auto";
+  tvOnSound.crossOrigin = "anonymous";
+  tvOnSound.playsInline = true;
+  tvOnSound.setAttribute?.("webkit-playsinline", "");
+  tvOnSound.load();
+
+  return tvOnSound;
+}
+
+function playTvOnSound() {
+  const base = ensureTvOnSound();
+
+  try {
+    const s = base.cloneNode(true);
+    s.preload = "auto";
+    s.crossOrigin = "anonymous";
+    s.playsInline = true;
+    s.setAttribute?.("webkit-playsinline", "");
+    s.volume = 0.45; // TV ON volume
+    s.currentTime = 0;
+
+    const p = s.play();
+    if (p?.catch) {
+      p.catch((err) => {
+        console.warn("TV on sound play blocked:", err);
+      });
+    }
+
+    console.log("🔊 TV on sound played");
+  } catch (err) {
+    console.warn("TV on sound play failed:", err);
+  }
+}
+
+let tvOffSound = null;
+
+function ensureTvOffSound() {
+  if (tvOffSound) return tvOffSound;
+
+  tvOffSound = new Audio("./assets/Audio/Tv Off Sound-01.mp3");
+  tvOffSound.preload = "auto";
+  tvOffSound.crossOrigin = "anonymous";
+  tvOffSound.playsInline = true;
+  tvOffSound.setAttribute?.("webkit-playsinline", "");
+  tvOffSound.load();
+
+  return tvOffSound;
+}
+
+function playTvOffSound() {
+  const base = ensureTvOffSound();
+
+  try {
+    const s = base.cloneNode(true);
+    s.preload = "auto";
+    s.crossOrigin = "anonymous";
+    s.playsInline = true;
+    s.setAttribute?.("webkit-playsinline", "");
+    s.volume = 0.35; // TV OFF volume
+    s.currentTime = 0;
+
+    const p = s.play();
+    if (p?.catch) {
+      p.catch((err) => {
+        console.warn("TV off sound play blocked:", err);
+      });
+    }
+
+    console.log("🔉 TV off sound played");
+  } catch (err) {
+    console.warn("TV off sound play failed:", err);
+  }
+}
+
 function stopMusicBecauseUserLeft() {
   // stop speaker music
   for (const a of audioEls) {
@@ -4643,6 +4763,14 @@ function stopMusicBecauseUserLeft() {
     } catch {}
   }
 
+  // stop lamp ambience
+if (lampAudio) {
+  try {
+    lampAudio.pause();
+    lampAudio.currentTime = 0;
+  } catch {}
+}
+
   isPlaying = false;
   updateSpeakerHintText?.();
 }
@@ -4659,6 +4787,7 @@ async function playBackgroundAudio() {
   if (!bgAudioEnabled) return;
 
   const bg = ensureBackgroundAudio();
+  const lamp = ensureLampAudio();
 
   try {
     if (bg.paused) {
@@ -4668,21 +4797,59 @@ async function playBackgroundAudio() {
   } catch (err) {
     console.warn("Background ambience play blocked:", err);
   }
+
+  try {
+    if (lamp.paused) {
+      await lamp.play();
+      console.log("💡 Lamp ambience playing");
+    }
+  } catch (err) {
+    console.warn("Lamp ambience play blocked:", err);
+  }
+}
+
+function playLampAudio() {
+  const a = ensureLampAudio();
+
+  if (!a) return;
+
+  try {
+    const p = a.play();
+    if (p?.catch) {
+      p.catch(() => {});
+    }
+  } catch {}
 }
 
 async function tryAutoStartBackgroundAudio() {
   if (!bgAudioEnabled) return;
 
   const bg = ensureBackgroundAudio();
+  const lamp = ensureLampAudio();
+
+  let startedAnything = false;
 
   try {
-    await bg.play();
-    console.log("🌫️ Background ambience autoplay started");
-    return true;
+    if (bg.paused) {
+      await bg.play();
+      console.log("🌫️ Background ambience autoplay started");
+      startedAnything = true;
+    }
   } catch (err) {
     console.warn("Background ambience autoplay blocked:", err);
-    return false;
   }
+
+  try {
+    if (lamp.paused) {
+      await lamp.play();
+      console.log("💡 Lamp ambience autoplay started");
+      startedAnything = true;
+    }
+  } catch (err) {
+    console.warn("Lamp ambience autoplay blocked:", err);
+  }
+
+  return startedAnything;
 }
 
 function pauseBackgroundAudio() {
@@ -4711,13 +4878,32 @@ async function startBackgroundAudioFromUserGesture() {
   if (!bgAudioEnabled) return;
 
   const bg = ensureBackgroundAudio();
+  const lamp = ensureLampAudio();
+
+  let startedAnything = false;
 
   try {
-    await bg.play();
-    bgAudioStartedOnce = true;
-    console.log("🌫️ Background ambience started from early gesture");
+    if (bg.paused) {
+      await bg.play();
+      console.log("🌫️ Background ambience started from early gesture");
+      startedAnything = true;
+    }
   } catch (err) {
     console.warn("Background ambience early gesture start blocked:", err);
+  }
+
+  try {
+    if (lamp.paused) {
+      await lamp.play();
+      console.log("💡 Lamp ambience started from early gesture");
+      startedAnything = true;
+    }
+  } catch (err) {
+    console.warn("Lamp ambience early gesture start blocked:", err);
+  }
+
+  if (startedAnything) {
+    bgAudioStartedOnce = true;
   }
 }
 
@@ -4930,6 +5116,7 @@ function handleIOSTvTap(uv) {
   
 // ✅ If TV is OFF, any tap on the screen turns it ON and shows MENU
 if (!tvOn) {
+  playTvOnSound();
   setTvPower(true);
 
   // ✅ iOS onboarding hint (4 seconds)
@@ -5102,7 +5289,7 @@ function setTvPower(nextOn) {
   const to = nextOn ? 1 : 0;
   if (from === to) return;
 
-tvOn = nextOn;
+  tvOn = nextOn;
 
 if (!tvOn) {
   tvTouchActive = false;
@@ -5613,7 +5800,10 @@ if (typeof stopIosRemotePulse === "function") stopIosRemotePulse();
     handleIOSTvTap(uv);
   } else {
     // fallback if uv missing
-    if (!tvOn) setTvPower(true);
+    if (!tvOn) {
+      playTvOnSound();
+      setTvPower(true);
+    }
   }
 
   return; // 🔒 CRITICAL: nothing below runs
@@ -5747,11 +5937,17 @@ if (powerButtonMeshRef && isInHierarchy(hit, powerButtonMeshRef)) {
 
   const turningOn = !tvOn;
 
+  if (turningOn) {
+    // 🔊 TV ON
+    playTvOnSound();
+  } else {
+    // 🔉 TV OFF
+    playTvOffSound();
+  }
+
   setTvPower(turningOn);
 
-  // ✅ iOS: show the MENU controls hint when turning ON via remote power button
   if (turningOn) {
-    // optional: ensure it's only shown on iOS (your function already checks)
     showIosMenuControlsHintOnce();
   }
 
