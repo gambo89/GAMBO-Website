@@ -4746,6 +4746,156 @@ function playTvOffSound() {
   }
 }
 
+let smokerCoughSound = null;
+let smokerCoughTimeout = null;
+let smokerCoughUnlocked = false;
+
+function ensureSmokerCoughSound() {
+  if (smokerCoughSound) return smokerCoughSound;
+
+  smokerCoughSound = new Audio("./assets/Audio/Smokers cough.mp3");
+  smokerCoughSound.preload = "auto";
+  smokerCoughSound.crossOrigin = "anonymous";
+  smokerCoughSound.playsInline = true;
+  smokerCoughSound.setAttribute?.("webkit-playsinline", "");
+  smokerCoughSound.load();
+
+  return smokerCoughSound;
+}
+
+async function unlockSmokerCoughOnce() {
+  if (smokerCoughUnlocked) return;
+
+  ensureSmokerCoughSound();
+  smokerCoughUnlocked = true;
+  console.log("🔓 smoker cough prepared");
+}
+
+function playSmokerCoughSound() {
+  const base = ensureSmokerCoughSound();
+
+  try {
+    const s = base.cloneNode(true);
+    s.preload = "auto";
+    s.crossOrigin = "anonymous";
+    s.playsInline = true;
+    s.setAttribute?.("webkit-playsinline", "");
+    s.volume = 0.45;
+    s.currentTime = 0;
+
+    const p = s.play();
+    if (p?.catch) {
+      p.catch((err) => {
+        console.warn("Smoker cough play blocked:", err);
+      });
+    }
+
+    console.log("😮‍💨 smoker cough played");
+  } catch (err) {
+    console.warn("Smoker cough play failed:", err);
+  }
+}
+
+function queueSmokerCough() {
+  if (smokerCoughTimeout) {
+    clearTimeout(smokerCoughTimeout);
+  }
+
+  smokerCoughTimeout = setTimeout(() => {
+    playSmokerCoughSound();
+    smokerCoughTimeout = null;
+  }, 9000);
+}
+
+let smokeBreatheSound = null;
+let smokeBreatheUnlocked = false;
+
+function ensureSmokeBreatheSound() {
+  if (smokeBreatheSound) return smokeBreatheSound;
+
+  smokeBreatheSound = new Audio("./assets/Audio/Smoke Breathe.m4a");
+  smokeBreatheSound.preload = "auto";
+  smokeBreatheSound.crossOrigin = "anonymous";
+  smokeBreatheSound.playsInline = true;
+  smokeBreatheSound.setAttribute?.("webkit-playsinline", "");
+  smokeBreatheSound.load();
+
+  return smokeBreatheSound;
+}
+
+async function unlockSmokeBreatheOnce() {
+  if (smokeBreatheUnlocked) return;
+
+  ensureSmokeBreatheSound();
+  smokeBreatheUnlocked = true;
+  console.log("🔓 smoke breathe prepared");
+}
+
+function playSmokeBreatheSound() {
+  const base = ensureSmokeBreatheSound();
+
+  try {
+    const s = base.cloneNode(true);
+    s.preload = "auto";
+    s.crossOrigin = "anonymous";
+    s.playsInline = true;
+    s.setAttribute?.("webkit-playsinline", "");
+    s.volume = 0.90;
+    s.currentTime = 0;
+
+    const p = s.play();
+    if (p?.catch) {
+      p.catch((err) => {
+        console.warn("Smoke breathe play blocked:", err);
+      });
+    }
+
+    console.log("💨 smoke breathe played");
+  } catch (err) {
+    console.warn("Smoke breathe play failed:", err);
+  }
+}
+
+let remoteButtonSound = null;
+
+function ensureRemoteButtonSound() {
+  if (remoteButtonSound) return remoteButtonSound;
+
+  remoteButtonSound = new Audio("./assets/Audio/Button sound.mp3");
+  remoteButtonSound.preload = "auto";
+  remoteButtonSound.crossOrigin = "anonymous";
+  remoteButtonSound.playsInline = true;
+  remoteButtonSound.setAttribute?.("webkit-playsinline", "");
+  remoteButtonSound.load();
+
+  return remoteButtonSound;
+}
+
+function playRemoteButtonSound() {
+  const base = ensureRemoteButtonSound();
+
+  try {
+    const s = base.cloneNode(true);
+    s.preload = "auto";
+    s.crossOrigin = "anonymous";
+    s.playsInline = true;
+    s.setAttribute?.("webkit-playsinline", "");
+    s.volume = 0.45; // adjust if needed
+    s.currentTime = 0;
+
+    const p = s.play();
+    if (p?.catch) {
+      p.catch((err) => {
+        console.warn("Button sound play blocked:", err);
+      });
+    }
+
+    console.log("🔘 remote button sound");
+  } catch (err) {
+    console.warn("Button sound failed:", err);
+  }
+}
+
 function stopMusicBecauseUserLeft() {
   // stop speaker music
   for (const a of audioEls) {
@@ -5725,12 +5875,18 @@ const tvHitInfo =
 const hitInfo = tvHitInfo ?? hits[0];
 const hit = hitInfo.object;
 
-// ✅ cigarette click (check ALL hits, not just closest)
 const cigaretteHit = hits.find(h => cigaretteRoot && isInHierarchy(h.object, cigaretteRoot));
 if (cigaretteHit) {
   console.log("🚬 cigarette hit:", cigaretteHit.object.name);
+
+  await unlockSmokeBreatheOnce();
+  await unlockSmokerCoughOnce();
+
   playCigaretteAnimation();
   playSmokeTipAnimation();
+  playSmokeBreatheSound();
+  queueSmokerCough();
+
   return;
 }
 
@@ -5954,23 +6110,26 @@ if (powerButtonMeshRef && isInHierarchy(hit, powerButtonMeshRef)) {
   return;
 }
 
-  // --------------------------------------------------
+// --------------------------------------------------
 // REMOTE MENU BUTTONS (UP / DOWN / OK)
 // --------------------------------------------------
 if (tvOn && tvUiState === "MENU") {
   if (downArrowMeshRef && isInHierarchy(hit, downArrowMeshRef)) {
+    playRemoteButtonSound();
     console.log("⬇️ Down arrow pressed");
     moveMenuSelection(+1);
     return;
   }
 
   if (upArrowMeshRef && isInHierarchy(hit, upArrowMeshRef)) {
+    playRemoteButtonSound();
     console.log("⬆️ Up/Top arrow pressed");
     moveMenuSelection(-1);
     return;
   }
 
   if (okButtonMeshRef && isInHierarchy(hit, okButtonMeshRef)) {
+    playRemoteButtonSound();
     console.log("🆗 OK pressed");
     confirmMenuSelection();
     return;
@@ -5981,12 +6140,14 @@ if (tvOn && tvUiState === "MENU") {
 // --------------------------------------------------
 if (tvOn && tvUiState === "PHOTO") {
   if (rightArrowMeshRef && isInHierarchy(hit, rightArrowMeshRef)) {
+    playRemoteButtonSound();
     console.log("➡️ Right arrow pressed → next photo");
     nextPhoto(+1);
     return;
   }
 
   if (leftArrowMeshRef && isInHierarchy(hit, leftArrowMeshRef)) {
+    playRemoteButtonSound();
     console.log("⬅️ Left arrow pressed → previous photo");
     nextPhoto(-1);
     return;
@@ -5997,6 +6158,7 @@ if (tvOn && tvUiState === "PHOTO") {
 // --------------------------------------------------
 if (tvOn && tvUiState === "VIDEO") {
   if (okButtonMeshRef && isInHierarchy(hit, okButtonMeshRef)) {
+    playRemoteButtonSound();
     console.log("🆗 OK pressed → toggle play/pause");
     toggleVideoPlayPause();
     drawVideoFrameToTv(); // ✅ refresh overlay text immediately
@@ -6004,12 +6166,14 @@ if (tvOn && tvUiState === "VIDEO") {
   }
 
   if (rightArrowMeshRef && isInHierarchy(hit, rightArrowMeshRef)) {
+    playRemoteButtonSound();
     console.log("➡️ Right arrow pressed → next video");
     nextVideo(+1);
     return;
   }
 
   if (leftArrowMeshRef && isInHierarchy(hit, leftArrowMeshRef)) {
+    playRemoteButtonSound();
     console.log("⬅️ Left arrow pressed → previous video");
     nextVideo(-1);
     return;
@@ -6020,6 +6184,7 @@ if (tvOn && tvUiState === "VIDEO") {
 // --------------------------------------------------
 if (tvOn && tvUiState === "3D MODEL") {
   if (okButtonMeshRef && isInHierarchy(hit, okButtonMeshRef)) {
+    playRemoteButtonSound();
     console.log("🆗 OK pressed → toggle model play/pause");
     toggleModelPlayPause();
     drawModelFrameToTv(); // refresh paused overlay text immediately
@@ -6027,12 +6192,14 @@ if (tvOn && tvUiState === "3D MODEL") {
   }
 
   if (rightArrowMeshRef && isInHierarchy(hit, rightArrowMeshRef)) {
+    playRemoteButtonSound();
     console.log("➡️ Right arrow pressed → next 3D model mp4");
     nextModel(+1);
     return;
   }
 
   if (leftArrowMeshRef && isInHierarchy(hit, leftArrowMeshRef)) {
+    playRemoteButtonSound();
     console.log("⬅️ Left arrow pressed → previous 3D model mp4");
     nextModel(-1);
     return;
