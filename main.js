@@ -79,7 +79,7 @@ const renderer = new THREE.WebGLRenderer({
 });
 
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.92; // subtle cinematic darkening (try 0.88–0.98)
+renderer.toneMappingExposure = 0.85; // subtle cinematic darkening (try 0.88–0.98)
 
 // ============================================================
 // ✅ Color pipeline consistency (desktop + iOS)
@@ -5459,9 +5459,19 @@ if (!tvOn) {
   clearTvScreen();
   applyTvTextureEnabled(false);
 
+  if (tvScreenMatRef) {
+    tvScreenMatRef.emissiveIntensity = 0.0;
+    tvScreenMatRef.needsUpdate = true;
+  }
+
   grainOverlay.style.opacity = "0.02"; // softer grain when TV is off
 } else {
   applyTvTextureEnabled(true);
+
+  if (tvScreenMatRef) {
+    tvScreenMatRef.emissiveIntensity = 0.12;
+    tvScreenMatRef.needsUpdate = true;
+  }
 
   grainOverlay.style.opacity = "0.03"; // normal grain when TV is on
 }
