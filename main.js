@@ -1416,6 +1416,10 @@ let downArrowMeshRef = null;
 let okButtonMeshRef = null;
 let leftArrowMeshRef = null;
 let rightArrowMeshRef = null;
+let socialTikTokMeshRef = null;
+let socialContactMeshRef = null;
+let socialYoutubeMeshRef = null;
+let socialInstagramMeshRef = null;
 
 // ============================================================
 // ✅ BUTTON PRESS (push down while pressed) — robust direction
@@ -1591,7 +1595,6 @@ function setGlowTarget(mesh, targetOn, glowColor) {
   }
 }
 
-// ✅ NEW: force all button glows OFF (resets timers/forcedOff)
 function clearAllButtonGlows() {
   setGlowTarget(powerButtonMeshRef, false, POWER_GLOW_COLOR);
 
@@ -1600,6 +1603,11 @@ function clearAllButtonGlows() {
   setGlowTarget(downArrowMeshRef,   false, REMOTE_GLOW_COLOR);
   setGlowTarget(leftArrowMeshRef,   false, REMOTE_GLOW_COLOR);
   setGlowTarget(rightArrowMeshRef,  false, REMOTE_GLOW_COLOR);
+
+  setGlowTarget(socialTikTokMeshRef,    false, REMOTE_GLOW_COLOR);
+  setGlowTarget(socialInstagramMeshRef, false, REMOTE_GLOW_COLOR);
+  setGlowTarget(socialContactMeshRef,   false, REMOTE_GLOW_COLOR);
+  setGlowTarget(socialYoutubeMeshRef,   false, REMOTE_GLOW_COLOR);
 }
 
 // ============================================================
@@ -2372,6 +2380,10 @@ const upHint    = makeMiniHint("up");
 const downHint  = makeMiniHint("down");
 const leftHint  = makeMiniHint("left");
 const rightHint = makeMiniHint("right");
+const tiktokHint = makeMiniHint("go to tiktok");
+const contactHint = makeMiniHint("go to instagram");
+const youtubeHint = makeMiniHint("go to youtube");
+const instagramHint = makeMiniHint("email gambo");
 
 // ============================================================
 // ✅ iOS MENU CONTROLS HINT (shows for 4s when TV turns ON from TV tap)
@@ -2435,6 +2447,10 @@ function hideRemoteHints() {
   downHint.show(false);
   leftHint.show(false);
   rightHint.show(false);
+  tiktokHint.show(false);
+  contactHint.show(false);
+  youtubeHint.show(false);
+  instagramHint.show(false);
 }
 
 // ============================================================
@@ -2463,6 +2479,10 @@ const hintSuppressed = {
   door4: false,
   picture1: false,
   wall: false,
+  tiktok: false,
+  contact: false,
+  youtube: false,
+  instagram: false,
 };
 
 function hideAllHintsImmediate() {
@@ -2570,6 +2590,10 @@ if (key === "wall") {
   else if (key === "down") downHint.show(true);
   else if (key === "left") leftHint.show(true);
   else if (key === "right") rightHint.show(true);
+  else if (key === "tiktok") tiktokHint.show(true);
+  else if (key === "contact") contactHint.show(true);
+  else if (key === "youtube") youtubeHint.show(true);
+  else if (key === "instagram") instagramHint.show(true);
 }
 
 function setHoverKey(nextKey) {
@@ -5403,6 +5427,30 @@ if (tvUiState === "PHOTO") {
   return false;
 }
 
+const TIKTOK_PROFILE_URL = "https://www.tiktok.com/@___gambo___";
+
+function getTikTokProfileUrl() {
+  return TIKTOK_PROFILE_URL;
+}
+
+const INSTAGRAM_PROFILE_URL = "https://www.instagram.com/g_a_m_b_o/";
+
+function getContactProfileUrl() {
+  return INSTAGRAM_PROFILE_URL;
+}
+
+const YOUTUBE_PROFILE_URL = "https://www.youtube.com/@G.A.M.B.O";
+
+function getYoutubeProfileUrl() {
+  return YOUTUBE_PROFILE_URL;
+}
+
+const CONTACT_EMAIL = "gamboproductions@gmail.com";
+
+function getContactMailtoUrl() {
+  return `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("Inquiry from website")}&body=${encodeURIComponent("Hi Gambo,\n\nI'm reaching out about...")}`;
+}
+
 function openExternal(url) {
   if (!url) return false;
 
@@ -5905,6 +5953,62 @@ const picHit = hits.find(h => hitIsPicture1(h.object));
 if (picHit) {
   console.log("🖼 Picture1 hit:", picHit.object.name);
   setPicture1Texture(picture1TexIndex + 1);
+  return;
+}
+
+const socialTikTokHit = hits.find(
+  h => socialTikTokMeshRef && isInHierarchy(h.object, socialTikTokMeshRef)
+);
+
+if (socialTikTokHit) {
+  console.log("🎵 TikTok button hit:", socialTikTokHit.object.name);
+
+  setPressAxisFromHit(socialTikTokMeshRef, socialTikTokHit);
+  setPressTarget(socialTikTokMeshRef, true);
+
+  pendingExternalUrl = getTikTokProfileUrl();
+  return;
+}
+
+const socialContactHit = hits.find(
+  h => socialContactMeshRef && isInHierarchy(h.object, socialContactMeshRef)
+);
+
+if (socialContactHit) {
+  console.log("📇 Contact button hit:", socialContactHit.object.name);
+
+  setPressAxisFromHit(socialContactMeshRef, socialContactHit);
+  setPressTarget(socialContactMeshRef, true);
+
+  pendingExternalUrl = getContactProfileUrl();
+  return;
+}
+
+const socialYoutubeHit = hits.find(
+  h => socialYoutubeMeshRef && isInHierarchy(h.object, socialYoutubeMeshRef)
+);
+
+if (socialYoutubeHit) {
+  console.log("▶️ Youtube button hit:", socialYoutubeHit.object.name);
+
+  setPressAxisFromHit(socialYoutubeMeshRef, socialYoutubeHit);
+  setPressTarget(socialYoutubeMeshRef, true);
+
+  pendingExternalUrl = getYoutubeProfileUrl();
+  return;
+}
+
+const socialInstagramHit = hits.find(
+  h => socialInstagramMeshRef && isInHierarchy(h.object, socialInstagramMeshRef)
+);
+
+if (socialInstagramHit) {
+  console.log("📸 Instagram button hit:", socialInstagramHit.object.name);
+
+  setPressAxisFromHit(socialInstagramMeshRef, socialInstagramHit);
+  setPressTarget(socialInstagramMeshRef, true);
+
+  pendingExternalUrl = getContactMailtoUrl();
   return;
 }
 
@@ -6428,6 +6532,54 @@ const tvHoverHit =
 
 const hit = (tvHoverHit ?? hits[0]).object;
 
+const socialTikTokHoverHit = hits.find(
+  h => socialTikTokMeshRef && isInHierarchy(h.object, socialTikTokMeshRef)
+);
+
+if (socialTikTokHoverHit) {
+  setHoverKey("tiktok");
+  clearAllButtonGlows();
+  clearAllButtonPresses();
+  setGlowTarget(socialTikTokMeshRef, true, REMOTE_GLOW_COLOR);
+  return;
+}
+
+const socialContactHoverHit = hits.find(
+  h => socialContactMeshRef && isInHierarchy(h.object, socialContactMeshRef)
+);
+
+if (socialContactHoverHit) {
+  setHoverKey("contact");
+  clearAllButtonGlows();
+  clearAllButtonPresses();
+  setGlowTarget(socialContactMeshRef, true, REMOTE_GLOW_COLOR);
+  return;
+}
+
+const socialYoutubeHoverHit = hits.find(
+  h => socialYoutubeMeshRef && isInHierarchy(h.object, socialYoutubeMeshRef)
+);
+
+if (socialYoutubeHoverHit) {
+  setHoverKey("youtube");
+  clearAllButtonGlows();
+  clearAllButtonPresses();
+  setGlowTarget(socialYoutubeMeshRef, true, REMOTE_GLOW_COLOR);
+  return;
+}
+
+const socialInstagramHoverHit = hits.find(
+  h => socialInstagramMeshRef && isInHierarchy(h.object, socialInstagramMeshRef)
+);
+
+if (socialInstagramHoverHit) {
+  setHoverKey("instagram");
+  clearAllButtonGlows();
+  clearAllButtonPresses();
+  setGlowTarget(socialInstagramMeshRef, true, REMOTE_GLOW_COLOR);
+  return;
+}
+
 // ============================================================
 // ✅ DESKTOP: hover over MENU rows to change selection (flawless)
 // Only runs for mouse, only while tvUiState === "MENU"
@@ -6941,7 +7093,7 @@ const materials = {
   ),
 
   //MAIN OBJECTS
-  pasted__remote: makePBR({
+  pasted_remote: makePBR({
     albedo: "./assets/Textures/Remote/Main object/Remote Albeto.jpg",
     },
     { roughness: 1.0, metalness: 0.2}
@@ -7654,6 +7806,7 @@ BluetoothSpeaker: makePBR(
     { roughness: 0.2, metalness: 0.0 }
   ),
 
+  
 };
 
 const cigaretteFilterMat = makePBR(
@@ -8484,6 +8637,46 @@ darkenMaterial(cigaretteAshMat, {
   colorMul: 0.7,
 });
 
+materials.Contact = makePBR(
+  {
+    albedo: "./assets/Textures/Remote/Social Buttons/Instagram Albedo1.jpg",
+  },
+  {
+    roughness: 1.0,
+    metalness: 0.0,
+  }
+);
+
+materials.Instagram = makePBR(
+  {
+    albedo: "./assets/Textures/Remote/Social Buttons/Contact Albedo1.jpg",
+  },
+  {
+    roughness: 1.0,
+    metalness: 0.0,
+  }
+);
+
+materials.TikTok = makePBR(
+  {
+    albedo: "./assets/Textures/Remote/Social Buttons/TikTok Albedo.jpg",
+  },
+  {
+    roughness: 1.0,
+    metalness: 0.0,
+  }
+);
+
+materials.Youtube = makePBR(
+  {
+    albedo: "./assets/Textures/Remote/Social Buttons/Youtube Albedo.jpg",
+  },
+  {
+    roughness: 1.0,
+    metalness: 0.0,
+  }
+);
+
 // ============================================================
 // ✅ WALL DETAIL BOOST (micro-contrast without "brightening")
 // Paste directly under: const materials = { ... };
@@ -9026,6 +9219,19 @@ if (!grimReaperRef && n === "grim_reaper") {
   console.log("☠️ Grim_reaper permanently hidden:", o.name, "| material:", o.material?.name);
 }
 
+if (
+  n === "pasted__remote" ||
+  (o.material?.name || "").toLowerCase() === "pasted__remote" ||
+  (o.parent?.name || "").toLowerCase() === "pasted__remote"
+) {
+  o.visible = false;
+  o.castShadow = false;
+  o.receiveShadow = false;
+  o.raycast = () => null;
+
+  console.log("📺 pasted__remote permanently hidden:", o.name, "| material:", o.material?.name);
+}
+
       // ✅ Capture Picture1 mesh by name OR material name
       const mnLower = (o.material?.name || "").toLowerCase();
       if (!picture1MeshRef && (n.includes("picture1") || mnLower.includes("picture1"))) {
@@ -9482,15 +9688,17 @@ setTimeout(() => {
   }
 );
 
-
 const interactiveLoader = new GLTFLoader();
 
 const newMaterialsLoader = new GLTFLoader();
 
+const newRemoteLoader = new GLTFLoader();
+
+const socialButtonsLoader = new GLTFLoader();
+
 const cigaretteLoader = new GLTFLoader();
 
 const smokeTipLoader = new GLTFLoader();
-
 
 const __endUI = __beginAsset("Interactives GLB");
 
@@ -10016,6 +10224,276 @@ if (!grimReaperRef && nn === "grim_reaper") {
   (err) => {
     console.error("New Materials GLB failed to load ❌", err);
     __endNewMaterials(); // ✅ don't hang loader
+  }
+);
+
+const __endSocialButtons = __beginAsset("Social Buttons GLB");
+
+socialButtonsLoader.load(
+  "./assets/models/Social Buttons.glb",
+  (gltf) => {
+    __endSocialButtons();
+
+    const socialButtons = gltf.scene;
+
+    // same parent as your other extra scene loads
+    anchor.add(socialButtons);
+
+    // STARTING TEST TRANSFORM
+    socialButtons.position.set(0, 0, 0);
+    socialButtons.scale.set(1, 1, 1);
+    socialButtons.rotation.set(0, 0, 0);
+
+    console.log("======== SOCIAL BUTTONS GLB MESH LIST ========");
+
+ socialButtons.traverse((o) => {
+  if (!o.isMesh) return;
+
+  console.log(
+    "[SOCIAL BUTTONS GLB MESH]",
+    "name:", o.name,
+    "| material:", o.material?.name,
+    "| parent:", o.parent?.name,
+    "| grandparent:", o.parent?.parent?.name
+  );
+
+  // keep behavior consistent with your other loaded meshes
+  if (o.geometry && o.geometry.attributes.uv && !o.geometry.attributes.uv2) {
+    o.geometry.setAttribute("uv2", o.geometry.attributes.uv);
+  }
+
+  o.castShadow = true;
+  o.receiveShadow = true;
+  o.frustumCulled = true;
+  o.layers.enable(LAYER_WORLD);
+
+  const originalMatName = o.material?.name;
+
+  // IMPORTANT:
+  // Blender path looked like: TikTok / Mesh.002 / pasted_Remote
+  // so try grandparent first, then parent, then object, then material
+  const keysToTry = [
+    o.parent?.parent?.name,
+    o.parent?.name,
+    o.name,
+    originalMatName,
+  ].filter(Boolean);
+
+  let mat = null;
+  for (const k of keysToTry) {
+    if (materials[k]) {
+      mat = materials[k];
+      break;
+    }
+  }
+
+  if (mat) {
+    o.material = mat;
+  }
+
+  // texture filtering safety
+  if (o.material?.map) {
+    const tex = o.material.map;
+    tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.generateMipmaps = true;
+    tex.needsUpdate = true;
+  }
+
+  if (o.material && "envMapIntensity" in o.material) {
+    o.material.envMapIntensity = 0.02;
+  }
+
+  if (o.material) {
+    o.material.needsUpdate = true;
+  }
+
+  // ------------------------------------------------------------
+  // SOCIAL BUTTON REFS
+  // ------------------------------------------------------------
+  const socialKey = [
+    o.parent?.parent?.name,
+    o.parent?.name,
+    o.name,
+    originalMatName,
+  ].find((k) => k === "TikTok");
+
+if (socialKey === "TikTok") {
+  socialTikTokMeshRef = o;
+  ensurePressState(o);
+
+  if (o.material) {
+    o.material = o.material.clone();
+    o.material.needsUpdate = true;
+  }
+
+  console.log("🎵 TikTok button mesh set:", o.name);
+}
+
+const contactKey = [
+  o.parent?.parent?.name,
+  o.parent?.name,
+  o.name,
+  originalMatName,
+].find((k) => k === "Contact");
+
+if (contactKey === "Contact") {
+  socialContactMeshRef = o;
+  ensurePressState(o);
+
+  if (o.material) {
+    o.material = o.material.clone();
+    o.material.needsUpdate = true;
+  }
+
+  console.log("📇 Contact button mesh set:", o.name);
+}
+
+const youtubeKey = [
+  o.parent?.parent?.name,
+  o.parent?.name,
+  o.name,
+  originalMatName,
+].find((k) => k === "Youtube");
+
+if (youtubeKey === "Youtube") {
+  socialYoutubeMeshRef = o;
+  ensurePressState(o);
+
+  if (o.material) {
+    o.material = o.material.clone();
+    o.material.needsUpdate = true;
+  }
+
+  console.log("▶️ Youtube button mesh set:", o.name);
+}
+
+const instagramKey = [
+  o.parent?.parent?.name,
+  o.parent?.name,
+  o.name,
+  originalMatName,
+].find((k) => k === "Instagram");
+
+if (instagramKey === "Instagram") {
+  socialInstagramMeshRef = o;
+  ensurePressState(o);
+
+  if (o.material) {
+    o.material = o.material.clone();
+    o.material.needsUpdate = true;
+  }
+
+  console.log("📸 Instagram button mesh set:", o.name);
+}
+
+});
+
+    socialButtons.updateMatrixWorld(true);
+    console.log("✅ Social Buttons loaded:", socialButtons);
+  },
+  undefined,
+  (err) => {
+    console.error("Social Buttons GLB failed to load ❌", err);
+    __endSocialButtons();
+  }
+);
+
+const __endNewRemote = __beginAsset("New Remote GLB");
+
+newRemoteLoader.load(
+  "./assets/models/New remote.glb",
+  (gltf) => {
+    __endNewRemote();
+
+    const remote = gltf.scene;
+
+    // add it to the same parent as your other extra model loads
+    anchor.add(remote);
+
+ remote.traverse((o) => {
+  if (!o.isMesh) return;
+
+  // same behavior as your working scene meshes
+  if (o.geometry && o.geometry.attributes.uv && !o.geometry.attributes.uv2) {
+    o.geometry.setAttribute("uv2", o.geometry.attributes.uv);
+  }
+
+  const keysToTry = [
+    o.material?.name,
+    o.name,
+    o.parent?.name,
+    o.parent?.parent?.name,
+  ].filter(Boolean);
+
+  let mat = null;
+  for (const key of keysToTry) {
+    if (materials[key]) {
+      mat = materials[key];
+      break;
+    }
+  }
+
+  if (mat) {
+    o.material = mat;
+
+    if (o.material && "envMapIntensity" in o.material) {
+      o.material.envMapIntensity = 0.02;
+    }
+
+    o.material.needsUpdate = true;
+  } else {
+    // fallback if no exact material match exists
+    if (o.material) {
+      o.material = o.material.clone();
+
+      if ("envMapIntensity" in o.material) o.material.envMapIntensity = 0.02;
+      if ("metalness" in o.material) o.material.metalness = 0.0;
+      if ("roughness" in o.material) o.material.roughness = 1.0;
+
+      o.material.needsUpdate = true;
+    }
+  }
+
+  o.castShadow = true;
+  o.receiveShadow = true;
+  o.frustumCulled = true;
+});
+
+    // STARTING TEST POSITION
+    remote.position.set(0, 0, 0);
+
+    // STARTING TEST SCALE
+    remote.scale.set(1, 1, 1);
+
+    // OPTIONAL: inspect mesh names in console
+    remote.traverse((o) => {
+      if (!o.isMesh) return;
+
+      console.log(
+        "[NEW REMOTE GLB MESH]",
+        "name:", o.name,
+        "| material:", o.material?.name,
+        "| parent:", o.parent?.name
+      );
+
+      o.castShadow = true;
+      o.receiveShadow = true;
+
+      if (o.geometry && o.geometry.attributes.uv && !o.geometry.attributes.uv2) {
+        o.geometry.setAttribute("uv2", o.geometry.attributes.uv);
+      }
+    });
+
+    remote.updateMatrixWorld(true);
+
+    console.log("🎮 New remote loaded:", remote);
+  },
+  undefined,
+  (err) => {
+    console.error("New remote GLB failed to load ❌", err);
+    __endNewRemote();
   }
 );
 
