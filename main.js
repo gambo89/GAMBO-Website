@@ -3706,16 +3706,16 @@ function getTvMenuBtn() {
   if (isIOSDevice()) {
     return {
       pad: 48,
-      w: 320,
-      h: 120,
+      w: 420,
+      h: 150,
     };
   }
 
-  // Desktop size (unchanged)
+  // Desktop size
   return {
     pad: 36,
-    w: 220,
-    h: 86,
+    w: 300,
+    h: 110,
   };
 }
 
@@ -3925,7 +3925,7 @@ function drawPhotoToTv(img) {
 
 if (tvOn && (tvUiState === "PHOTO" || tvUiState === "3D MODEL")) {
   const BTN = getTvMenuBtn();
-  const bx = w - BTN.pad - BTN.w;
+  const bx = w - BTN.pad - BTN.w + 8;
   const by = BTN.pad;
 
   tvCtx.save();
@@ -8299,6 +8299,7 @@ cigaretteSmokePoints.position.copy(smokeSourceWorld);
   console.log("✅ cigarette smoke built in WORLD space at:", smokeSourceWorld);
 }
 
+
 function resetSmokeParticle(p) {
   const U = Math.max(0.001, roomMaxDim * 0.01);
 
@@ -8640,6 +8641,7 @@ let smokeDebugSphere = null;
 
 const CIG_SMOKE_COUNT = 160;
 const cigaretteSmokeData = [];
+
 
 let emberCrackle = 0.72;
 let emberCrackleTarget = 0.72;
