@@ -1869,7 +1869,13 @@ const isRemoteNav =
   mesh === upArrowMeshRef ||
   mesh === downArrowMeshRef ||
   mesh === leftArrowMeshRef ||
-  mesh === rightArrowMeshRef;
+  mesh === rightArrowMeshRef ||
+
+  // ✅ social buttons should use the SAME timing
+  mesh === socialTikTokMeshRef ||
+  mesh === socialInstagramMeshRef ||
+  mesh === socialContactMeshRef ||
+  mesh === socialYoutubeMeshRef;
 
 let lerpSpeed;
 
@@ -1942,6 +1948,17 @@ function showTvHint(show) {
   tvHintVisible = show;
   tvHint.style.opacity = show ? "1" : "0";
 }
+
+function updateTvHintText() {
+  if (!tvOn) {
+    tvHint.innerText = "turn tv on";
+    return true; // allow the hint to show
+  }
+
+  tvHint.innerText = "";
+  return false; // do not show the hint when TV is on
+}
+
 
 // ============================================================
 // POWER BUTTON HOVER HINT (Click to turn TV on/off)
@@ -2570,14 +2587,11 @@ if (key === "wall") {
   return;
 }
 
-  if (key === "tv") {
-
-  // ✅ iOS-specific TV hint text
-  if (isIOSDevice()) {
-    const text = getIosTvHintText();
-    if (text && typeof updateTvHintText === "function") {
-      updateTvHintText(text);
-    }
+if (key === "tv") {
+  if (!tvOn) {
+    tvHint.innerText = "turn tv on";
+  } else {
+    tvHint.innerText = "double click to view fullscreen";
   }
 
   showTvHint(true);
@@ -6422,6 +6436,9 @@ if (isTap) {
 // ============================================================
 function onPointerCancel() {
   tvTouchActive = false;
+  setHoverKey(null);
+  clearAllButtonGlows();
+  clearAllButtonPresses();
 }
 
 const startBgOnce = async () => {
@@ -6544,6 +6561,18 @@ if (socialTikTokHoverHit) {
   return;
 }
 
+const socialInstagramHoverHit = hits.find(
+  h => socialInstagramMeshRef && isInHierarchy(h.object, socialInstagramMeshRef)
+);
+
+if (socialInstagramHoverHit) {
+  setHoverKey("instagram");
+  clearAllButtonGlows();
+  clearAllButtonPresses();
+  setGlowTarget(socialInstagramMeshRef, true, REMOTE_GLOW_COLOR);
+  return;
+}
+
 const socialContactHoverHit = hits.find(
   h => socialContactMeshRef && isInHierarchy(h.object, socialContactMeshRef)
 );
@@ -6568,17 +6597,11 @@ if (socialYoutubeHoverHit) {
   return;
 }
 
-const socialInstagramHoverHit = hits.find(
-  h => socialInstagramMeshRef && isInHierarchy(h.object, socialInstagramMeshRef)
-);
-
-if (socialInstagramHoverHit) {
-  setHoverKey("instagram");
-  clearAllButtonGlows();
-  clearAllButtonPresses();
-  setGlowTarget(socialInstagramMeshRef, true, REMOTE_GLOW_COLOR);
-  return;
-}
+// ✅ if we are no longer hovering a social button, force their glow OFF immediately
+setGlowTarget(socialTikTokMeshRef, false, REMOTE_GLOW_COLOR);
+setGlowTarget(socialInstagramMeshRef, false, REMOTE_GLOW_COLOR);
+setGlowTarget(socialContactMeshRef, false, REMOTE_GLOW_COLOR);
+setGlowTarget(socialYoutubeMeshRef, false, REMOTE_GLOW_COLOR);
 
 // ============================================================
 // ✅ DESKTOP: hover over MENU rows to change selection (flawless)
@@ -6682,7 +6705,7 @@ if (hoveringTvScreen) {
   clearAllButtonPresses();
 }
 
-if (tvOn && (tvUiState === "PHOTO" || tvUiState === "VIDEO" || tvUiState === "3D MODEL") && tvScreenMeshRef && isInHierarchy(hit, tvScreenMeshRef)) {
+if (tvScreenMeshRef && isInHierarchy(hit, tvScreenMeshRef)) {
   hoveringTv = true;
 }
 
@@ -10088,27 +10111,24 @@ extra.traverse((o) => {
 const nn = (o.name || "").toLowerCase();
 const mm = (o.material?.name || "").toLowerCase();
 
-// ✅ FOOD in New Materials GLB — stop blowout here too
 if (
-  (nn.includes("food") || nn.includes("popcorn") || nn.includes("bowl") ||
-   mm.includes("food") || mm.includes("popcorn") || mm.includes("bowl")) &&
-  o.material
+  nn.includes("food") ||
+  nn.includes("popcorn") ||
+  nn.includes("bowl") ||
+  mm.includes("food") ||
+  mm.includes("popcorn") ||
+  mm.includes("bowl")
 ) {
-  o.material = o.material.clone();
+  console.log("🍿 Hiding food mesh:", {
+    meshName: o.name,
+    materialName: o.material?.name,
+    parentName: o.parent?.name,
+  });
 
-  if (o.material.color) {
-    o.material.color.setHex(0xffffff);
-    o.material.color.multiplyScalar(0.2); // ✅ try 0.45–0.70
-  }
-
-  if ("envMapIntensity" in o.material) {
-    o.material.envMapIntensity = 0.0;
-  }
-
-  if ("roughness" in o.material) o.material.roughness = 1.0;
-  if ("metalness" in o.material) o.material.metalness = 0.0;
-
-  o.material.needsUpdate = true;
+  o.visible = false;
+  o.castShadow = false;
+  o.receiveShadow = false;
+  return;
 }
 
 // ======================================================
