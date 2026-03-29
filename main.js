@@ -7474,6 +7474,21 @@ Bed1: makePBR({
     { roughness: 1.0, metalness: 0.0}
 ),
 
+  // SKETCHBOOK
+  Sheets_Spine: makePBR(
+    {
+      albedo: "./assets/Textures/Sketchbook/Everything else.jpg",
+    },
+    { roughness: 0.0, metalness: 0.0 }
+  ),
+
+  Top_Sheet: makePBR(
+    {
+      albedo: "./assets/Textures/Sketchbook/Top Page.jpg",
+    },
+    { roughness: 1.0, metalness: 0.0 }
+  ),
+
 Frame: makePBR({
     albedo: "./assets/Textures/Frame/Frame Albedo1.jpg",
  
@@ -9750,6 +9765,8 @@ const cigaretteLoader = new GLTFLoader();
 
 const smokeTipLoader = new GLTFLoader();
 
+const sketchbookLoader = new GLTFLoader();
+
 const __endUI = __beginAsset("Interactives GLB");
 
 interactiveLoader.load(
@@ -10271,6 +10288,87 @@ if (!grimReaperRef && nn === "grim_reaper") {
   (err) => {
     console.error("New Materials GLB failed to load ❌", err);
     __endNewMaterials(); // ✅ don't hang loader
+  }
+);
+
+const __endSketchbook = __beginAsset("Sketchbook GLB");
+
+sketchbookLoader.load(
+  "./assets/models/sketchbook4.glb",
+  (gltf) => {
+    __endSketchbook();
+
+    const sketchbook = gltf.scene;
+    anchor.add(sketchbook);
+
+    // optional default transform — currently no offset applied
+    sketchbook.position.set(25.0, 2.9, -2.5);
+    sketchbook.scale.set(0.6, 0.6, 0.6);
+    sketchbook.rotation.set(0, 0, 0);
+
+    console.log("======== SKETCHBOOK GLB MESH LIST ========");
+
+    sketchbook.traverse((o) => {
+      if (!o.isMesh) return;
+
+      console.log(
+        "[SKETCHBOOK GLB MESH]",
+        "name:", o.name,
+        "| material:", o.material?.name,
+        "| parent:", o.parent?.name,
+        "| grandparent:", o.parent?.parent?.name
+      );
+
+      // keep behavior consistent with your other loaded meshes
+      o.layers.enable(LAYER_WORLD);
+
+      if (o.geometry && o.geometry.attributes.uv && !o.geometry.attributes.uv2) {
+        o.geometry.setAttribute("uv2", o.geometry.attributes.uv);
+      }
+
+      const originalMatName = o.material?.name;
+      const keysToTry = [
+        o.name,
+        o.parent?.name,
+        originalMatName,
+        o.parent?.parent?.name,
+      ].filter(Boolean);
+
+      let mat = null;
+      for (const k of keysToTry) {
+        if (k === "Sheets_Spine" && materials.Sheets_Spine) {
+          mat = materials.Sheets_Spine;
+          break;
+        }
+        if (k === "Top_Sheet" && materials.Top_Sheet) {
+          mat = materials.Top_Sheet;
+          break;
+        }
+      }
+
+      if (mat) {
+        o.material = mat;
+      }
+
+      o.castShadow = true;
+      o.receiveShadow = true;
+
+      if (o.material && "envMapIntensity" in o.material) {
+        o.material.envMapIntensity = 0.02;
+      }
+
+      if (o.material) {
+        o.material.needsUpdate = true;
+      }
+    });
+
+    sketchbook.updateMatrixWorld(true);
+    console.log("✅ Sketchbook GLB loaded:", sketchbook);
+  },
+  undefined,
+  (err) => {
+    console.error("Sketchbook GLB failed to load ❌", err);
+    __endSketchbook(); // ✅ don't hang loader
   }
 );
 
