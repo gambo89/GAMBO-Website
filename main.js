@@ -10294,7 +10294,7 @@ if (!grimReaperRef && nn === "grim_reaper") {
 const __endSketchbook = __beginAsset("Sketchbook GLB");
 
 sketchbookLoader.load(
-  "./assets/models/sketchbook4.glb",
+  "./assets/models/sketchbook6.glb",
   (gltf) => {
     __endSketchbook();
 
@@ -10302,8 +10302,8 @@ sketchbookLoader.load(
     anchor.add(sketchbook);
 
     // optional default transform — currently no offset applied
-    sketchbook.position.set(25.0, 2.9, -2.5);
-    sketchbook.scale.set(0.6, 0.6, 0.6);
+    sketchbook.position.set(21.0, 2.7, -2.5);
+    sketchbook.scale.set(0.65, 0.65, 0.65);
     sketchbook.rotation.set(0, 0, 0);
 
     console.log("======== SKETCHBOOK GLB MESH LIST ========");
