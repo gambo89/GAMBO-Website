@@ -54,15 +54,33 @@ if (!canvas) throw new Error('Canvas "#c" not found. Check your HTML id="c".');
 // ✅ LOADING UI (matches your index.html #loader / #loader-text)
 // ============================================================
 const loaderEl = document.getElementById("loader");
-const loaderTextEl = document.getElementById("loader-text");
+const loaderStatusEl = document.getElementById("loader-status");
+let loaderReadyToEnter = false;
 
-// If loader isn't in the DOM for some reason, don't crash.
 function setLoaderPct(p) {
-  if (!loaderTextEl) return;
-  const pct = Math.max(0, Math.min(100, Math.floor(p)));
+  const rawPct = Math.max(0, Math.min(100, Number(p) || 0));
+  const displayPct = Math.floor(rawPct);
 
-  // ✅ Only show number + %
-  loaderTextEl.textContent = `${pct}%`;
+  const fillMaskEl = document.querySelector(".logo-fill-mask");
+  const whiteLogoEl = document.querySelector(".loader-logo-white");
+
+  if (fillMaskEl) {
+    const topInset = 100 - displayPct;
+    fillMaskEl.style.clipPath = `inset(${topInset}% 0 0 0)`;
+    fillMaskEl.style.webkitClipPath = `inset(${topInset}% 0 0 0)`;
+  }
+
+  if (whiteLogoEl) {
+    whiteLogoEl.style.opacity = displayPct >= 100 ? "0" : "1";
+  }
+
+  if (loaderStatusEl) {
+    if (displayPct >= 100) {
+      loaderStatusEl.textContent = "click to enter";
+    } else {
+      loaderStatusEl.textContent = `${displayPct}%`;
+    }
+  }
 }
 
 function hideLoader() {
@@ -71,6 +89,14 @@ function hideLoader() {
   // optional: fully remove after fade
   setTimeout(() => loaderEl.remove(), 900);
 }
+
+function enterSceneFromLoader() {
+  if (!loaderReadyToEnter) return;
+  hideLoader();
+}
+
+loaderEl?.addEventListener("pointerdown", enterSceneFromLoader);
+loaderEl?.addEventListener("click", enterSceneFromLoader);
 
 const renderer = new THREE.WebGLRenderer({
   canvas,
@@ -137,33 +163,36 @@ scene.background = new THREE.Color(0x000000);
 // - We count assets we request (GLBs, textures, images, audio)
 // - We mark them "done" when they load (or error)
 // ============================================================
-let __loadTotal = 0;
-let __loadDone = 0;
+let __loadTotalWeight = 0;
+let __loadDoneWeight = 0;
 let __loaderFinished = false;
 
-function __beginAsset(label) {
-  __loadTotal++;
+function __beginAsset(label, weight = 1) {
+  const w = Math.max(0.001, Number(weight) || 1);
+
+  __loadTotalWeight += w;
   __updateLoader(label);
-  // return a function you call when that asset finishes
+
   let finished = false;
+
   return function __endAsset() {
     if (finished) return;
     finished = true;
-    __loadDone++;
+
+    __loadDoneWeight += w;
     __updateLoader(label);
     __maybeFinishLoader();
   };
 }
 
 function __updateLoader(label = "") {
+  if (__loadTotalWeight <= 0) {
+    setLoaderPct(0);
+    return;
+  }
 
-  if (__loadTotal === 0) {
-  setLoaderPct(0);
-  return;
-}
-const pct = (__loadDone / __loadTotal) * 100;
-setLoaderPct(pct);
-
+  const pct = (__loadDoneWeight / __loadTotalWeight) * 100;
+  setLoaderPct(pct);
 }
 
 const __loaderStartTime = performance.now();
@@ -171,12 +200,10 @@ const __loaderStartTime = performance.now();
 function __maybeFinishLoader() {
   if (__loaderFinished) return;
 
-  if (__loadDone >= __loadTotal && __loadTotal > 0) {
+  if (__loadDoneWeight >= __loadTotalWeight && __loadTotalWeight > 0) {
     const elapsed = performance.now() - __loaderStartTime;
 
-    // Ensure loader is visible at least 700ms (prevents flash)
     const MIN_TIME = 700;
-
     const delay = Math.max(0, MIN_TIME - elapsed);
 
     __loaderFinished = true;
@@ -184,7 +211,7 @@ function __maybeFinishLoader() {
     setLoaderPct(100);
 
     setTimeout(() => {
-      hideLoader();
+      loaderReadyToEnter = true;
     }, delay + 250);
   }
 }
@@ -1052,7 +1079,7 @@ const S = dt * 60;
 
 // ENVIRONMENT (IBL)
 // ============================================================
-const __endEnv = __beginAsset("Environment");
+const __endEnv = __beginAsset("Environment", 2);
 
 const pmrem = new THREE.PMREMGenerator(renderer);
 
