@@ -7482,12 +7482,17 @@ Bed1: makePBR({
     { roughness: 0.0, metalness: 0.0 }
   ),
 
-  Top_Sheet: makePBR(
-    {
-      albedo: "./assets/Textures/Sketchbook/Top Page.jpg",
-    },
-    { roughness: 1.0, metalness: 0.0 }
-  ),
+Top_Sheet: makePBR(
+  {
+    albedo: "./assets/Textures/Sketchbook/Top Page.jpg",
+  },
+  {
+    roughness: 1.0,        // already good (max matte)
+    metalness: 0.0,
+    color: 0xb0b0b0,       // keep your darker tone
+    envMapIntensity: 0.04  // 🔥 THIS is the big one
+  }
+),
 
 Frame: makePBR({
     albedo: "./assets/Textures/Frame/Frame Albedo1.jpg",
@@ -10294,7 +10299,7 @@ if (!grimReaperRef && nn === "grim_reaper") {
 const __endSketchbook = __beginAsset("Sketchbook GLB");
 
 sketchbookLoader.load(
-  "./assets/models/sketchbook6.glb",
+  "./assets/models/sketchbook8.glb",
   (gltf) => {
     __endSketchbook();
 
@@ -10302,7 +10307,7 @@ sketchbookLoader.load(
     anchor.add(sketchbook);
 
     // optional default transform — currently no offset applied
-    sketchbook.position.set(21.0, 2.7, -2.5);
+    sketchbook.position.set(21.5, 2.88, -0.55);
     sketchbook.scale.set(0.65, 0.65, 0.65);
     sketchbook.rotation.set(0, 0, 0);
 
@@ -10349,6 +10354,14 @@ sketchbookLoader.load(
       if (mat) {
         o.material = mat;
       }
+
+      if (o.material?.name === "Top_Sheet" && o.material.map) {
+  o.material.map.encoding = THREE.sRGBEncoding; // ensure correct color space
+  o.material.map.colorSpace = THREE.SRGBColorSpace; // modern three.js
+
+  // 🔥 DARKEN TEXTURE
+  o.material.color.setScalar(1.0); // try 0.7 → 0.5
+}
 
       o.castShadow = true;
       o.receiveShadow = true;
