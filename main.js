@@ -7484,7 +7484,7 @@ Bed1: makePBR({
 
 Top_Sheet: makePBR(
   {
-    albedo: "./assets/Textures/Sketchbook/Top Page.jpg",
+    albedo: "./assets/Textures/Sketchbook/Top Page11.jpg",
   },
   {
     roughness: 1.0,        // already good (max matte)
