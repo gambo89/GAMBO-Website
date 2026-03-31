@@ -10299,7 +10299,7 @@ if (!grimReaperRef && nn === "grim_reaper") {
 const __endSketchbook = __beginAsset("Sketchbook GLB");
 
 sketchbookLoader.load(
-  "./assets/models/sketchbook8.glb",
+  "./assets/models/Sketchbook8.glb",
   (gltf) => {
     __endSketchbook();
 
