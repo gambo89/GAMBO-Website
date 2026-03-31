@@ -2617,11 +2617,22 @@ if (key === "wall") {
 if (key === "tv") {
   if (!tvOn) {
     tvHint.innerText = "turn tv on";
-  } else {
-    tvHint.innerText = "double click to view fullscreen";
+    showTvHint(true);
+    return;
   }
 
-  showTvHint(true);
+  const canShowFullscreenHint =
+    tvUiState === "PHOTO" ||
+    tvUiState === "VIDEO" ||
+    tvUiState === "3D MODEL";
+
+  if (canShowFullscreenHint) {
+    tvHint.innerText = "double click to view fullscreen";
+    showTvHint(true);
+  } else {
+    showTvHint(false);
+  }
+
   return;
 }
 
