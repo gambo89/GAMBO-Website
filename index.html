@@ -72,14 +72,25 @@
   letter-spacing: 0.04em;
 }
 
+body.ios #loader-status {
+  margin-top: 6px;            /* moves it closer to logo */
+  transform: translateY(-8px); /* pushes it up slightly */
+}
+
 .loader-logo-wrap {
   position: relative;
-  width: min(60vw, 600px);
+  width: min(60vw, 600px); /* desktop */
   transform: translateX(-23px);
   aspect-ratio: 1 / 1;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* iOS only */
+body.ios .loader-logo-wrap {
+  width: min(38vw, 320px);   /* change these numbers */
+  transform: translate(-6px, 0px);
 }
 
 .loader-logo {
@@ -212,6 +223,10 @@
 
     updateIOSRotateLock();
 
+    if (isIOS()) {
+  document.body.classList.add("ios");
+}
+
     window.addEventListener("orientationchange", () => {
       setTimeout(updateIOSRotateLock, 150);
     });
@@ -245,6 +260,6 @@
     setTimeout(setVH, 600);
   </script>
 
-  <script type="module" src="./main.js?v=DEV123"></script>
+  <script type="module" src="./main.js?v=DEV124"></script>
 </body>
 </html>

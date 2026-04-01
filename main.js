@@ -24,11 +24,11 @@ const isIOS =
 const SAFE_MOBILE = isIOS; // flip to true to test on desktop
 
 const MOBILE_PROFILE = {
-  maxDpr: SAFE_MOBILE ? 1.0 : 2.0,                 // ✅ huge win
-  shadows: SAFE_MOBILE ? false : true,             // ✅ biggest win (try false first)
-  maxAniso: SAFE_MOBILE ? 1 : null,                // ✅ reduce texture cost
-  shadowMapSize: SAFE_MOBILE ? 1024 : 4096,        // if you re-enable shadows later
-  postFX: SAFE_MOBILE ? false : true,              // disable composer on iPhone
+  maxDpr: SAFE_MOBILE ? 1.3 : 2.0,   // iOS only
+  shadows: SAFE_MOBILE ? false : true,
+  maxAniso: SAFE_MOBILE ? 2 : null,  // helps angled textures look less blurry
+  shadowMapSize: SAFE_MOBILE ? 1024 : 4096,
+  postFX: SAFE_MOBILE ? false : true,
 };
 
 const LAYER_WORLD = 0;
@@ -90,8 +90,15 @@ function hideLoader() {
   setTimeout(() => loaderEl.remove(), 900);
 }
 
-function enterSceneFromLoader() {
+async function enterSceneFromLoader() {
   if (!loaderReadyToEnter) return;
+
+  try {
+    await startBackgroundAudioFromUserGesture();
+  } catch (e) {
+    console.warn("Background audio did not start on enter:", e);
+  }
+
   hideLoader();
 }
 
@@ -327,7 +334,7 @@ function updateNightVisionAutoGain(dt) {
 }
 
 function initPostFX() {
-  composer = new EffectComposer(renderer);
+  if (!composer) composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
 
 const nightVisionShader = {
@@ -4718,25 +4725,36 @@ function ensureBackgroundAudio() {
   bgAudio.preload = "auto";
   bgAudio.crossOrigin = "anonymous";
   bgAudio.loop = true;
-  bgAudio.volume = 0.60;
+  bgAudio.volume = isIOS ? 0.28 : 0.60; // ✅ lower on iOS only
   bgAudio.playsInline = true;
   bgAudio.setAttribute?.("webkit-playsinline", "");
 
   return bgAudio;
 }
 
+const IOS_LAMP_VOLUME = 0.00015;   // iOS: BARELY noticeable
+const DESKTOP_LAMP_VOLUME = 0.05;  // desktop unchanged
+
 let lampAudio = null;
 
+function applyLampAudioVolume(a) {
+  if (!a) return;
+  a.volume = isIOS ? IOS_LAMP_VOLUME : DESKTOP_LAMP_VOLUME;
+}
+
 function ensureLampAudio() {
-  if (lampAudio) return lampAudio;
+  if (lampAudio) {
+    applyLampAudioVolume(lampAudio);
+    return lampAudio;
+  }
 
   lampAudio = new Audio("./assets/Audio/Light Flicker Sound.mp3");
   lampAudio.preload = "auto";
   lampAudio.crossOrigin = "anonymous";
   lampAudio.loop = true;
-  lampAudio.volume = 0.10;
   lampAudio.playsInline = true;
   lampAudio.setAttribute?.("webkit-playsinline", "");
+  applyLampAudioVolume(lampAudio);
   lampAudio.load();
 
   return lampAudio;
@@ -5025,6 +5043,7 @@ async function playBackgroundAudio() {
   }
 
   try {
+    applyLampAudioVolume(lamp);
     if (lamp.paused) {
       await lamp.play();
       console.log("💡 Lamp ambience playing");
@@ -5040,6 +5059,7 @@ function playLampAudio() {
   if (!a) return;
 
   try {
+    applyLampAudioVolume(a);
     const p = a.play();
     if (p?.catch) {
       p.catch(() => {});
@@ -5066,6 +5086,7 @@ async function tryAutoStartBackgroundAudio() {
   }
 
   try {
+    applyLampAudioVolume(lamp);
     if (lamp.paused) {
       await lamp.play();
       console.log("💡 Lamp ambience autoplay started");
@@ -5119,6 +5140,7 @@ async function startBackgroundAudioFromUserGesture() {
   }
 
   try {
+    applyLampAudioVolume(lamp);
     if (lamp.paused) {
       await lamp.play();
       console.log("💡 Lamp ambience started from early gesture");
@@ -6478,15 +6500,6 @@ function onPointerCancel() {
   clearAllButtonGlows();
   clearAllButtonPresses();
 }
-
-const startBgOnce = async () => {
-  await startBackgroundAudioFromUserGesture();
-};
-
-window.addEventListener("pointerdown", startBgOnce, { passive: true, once: true });
-window.addEventListener("touchstart", startBgOnce, { passive: true, once: true });
-window.addEventListener("mousedown", startBgOnce, { passive: true, once: true });
-window.addEventListener("pointerenter", startBgOnce, { passive: true, once: true });
 
 // ============================================================
 // ✅ POINTER EVENTS (EDIT 2): hook down/up/cancel to canvas
@@ -11297,9 +11310,8 @@ function handleResize() {
 
   const aspect = w / h;
 
-  const dpr = window.devicePixelRatio || 1;
-  const maxDpr = isIOS ? 2.0 : 2.0;
-  renderer.setPixelRatio(Math.min(dpr, maxDpr));
+ const dpr = window.devicePixelRatio || 1;
+renderer.setPixelRatio(Math.min(dpr, MOBILE_PROFILE.maxDpr));
   renderer.setSize(w, h, true);
 
   viewX = 0;
