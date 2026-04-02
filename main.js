@@ -24,9 +24,9 @@ const isIOS =
 const SAFE_MOBILE = isIOS; // flip to true to test on desktop
 
 const MOBILE_PROFILE = {
-  maxDpr: SAFE_MOBILE ? 1.3 : 2.0,   // iOS only
+  maxDpr: SAFE_MOBILE ? 1.3 : 1.5,   // desktop only reduced
   shadows: SAFE_MOBILE ? false : true,
-  maxAniso: SAFE_MOBILE ? 2 : null,  // helps angled textures look less blurry
+  maxAniso: SAFE_MOBILE ? 2 : null,
   shadowMapSize: SAFE_MOBILE ? 1024 : 4096,
   postFX: SAFE_MOBILE ? false : true,
 };
@@ -1093,6 +1093,8 @@ const pmrem = new THREE.PMREMGenerator(renderer);
 const envRT = pmrem.fromScene(new RoomEnvironment(), 0.0);
 
 scene.environment = envRT.texture;
+
+pmrem.dispose();
 
 // Give GPU one frame to finish
 requestAnimationFrame(() => {
