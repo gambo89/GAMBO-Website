@@ -24,7 +24,7 @@ const isIOS =
 const SAFE_MOBILE = isIOS; // flip to true to test on desktop
 
 const MOBILE_PROFILE = {
-  maxDpr: SAFE_MOBILE ? 1.3 : 1.5,   // desktop only reduced
+  maxDpr: SAFE_MOBILE ? 1.3 : 1.8,   // desktop lower resolution
   shadows: SAFE_MOBILE ? false : true,
   maxAniso: SAFE_MOBILE ? 2 : null,
   shadowMapSize: SAFE_MOBILE ? 1024 : 4096,
@@ -4634,7 +4634,7 @@ function applyTvTextureEnabled(enabled) {
 }
 
 const tracks = [
-  "./assets/Audio/01-rip-fredo-notice-me-011.mp3",
+  "./assets/Audio/01-rip-fredo-notice-me-011-optimized.mp3",
   "./assets/Audio/02-I-Serve-the-Base.mp3",
   "./assets/Audio/03-floor-555-011.mp3",
   "./assets/Audio/04-12r-011.mp3",
@@ -5528,7 +5528,7 @@ function getYoutubeProfileUrl() {
 const CONTACT_EMAIL = "gamboproductions@gmail.com";
 
 function getContactMailtoUrl() {
-  return `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("Inquiry from website")}&body=${encodeURIComponent("Hi Gambo,\n\nI'm reaching out about...")}`;
+  return `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("inquiry")}&body=${encodeURIComponent("yo GAMBO,\n\nim reaching out about...")}`;
 }
 
 function openExternal(url) {
@@ -10160,7 +10160,7 @@ undefined,
 const __endNewMaterials = __beginAsset("New Materials GLB");
 
 newMaterialsLoader.load(
-  "./assets/models/New Materials5.glb",
+  "./assets/models/New Materials5-optimized.glb",
   (gltf) => {
     __endNewMaterials();
 
@@ -10919,9 +10919,9 @@ smokeTipLoader.load(
     anchor.add(smokeTipRoot);
 
    // reset transform (we will position it relative to cigarette)
-smokeTipRoot.position.set(0, 0, 0);
-smokeTipRoot.rotation.set(0, 0, 0);
-smokeTipRoot.scale.set(1, 1, 1);
+    smokeTipRoot.position.set(0, 0, 0);
+    smokeTipRoot.rotation.set(0, 0, 0);
+    smokeTipRoot.scale.set(1, 1, 1);
     smokeTipRoot.updateMatrixWorld(true);
 
     console.log("======== SMOKE TIP GLB DUMP ========");
@@ -11069,7 +11069,7 @@ if (gltf.animations && gltf.animations.length > 0) {
 // ✅ GLOBAL LOOK CONTROL (mood / overall darkness)
 // ============================================================
 const LOOK = {
-  exposure: 0.9, // try 0.88–0.98
+  exposure: 1.2,
 };
 
 function setupWorldSmokeDebug() {
