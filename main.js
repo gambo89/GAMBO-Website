@@ -62,7 +62,7 @@ function setLoaderPct(p) {
   const displayPct = Math.floor(rawPct);
 
   const fillMaskEl = document.querySelector(".logo-fill-mask");
-  const whiteLogoEl = document.querySelector(".loader-logo-white");
+  const whiteLogoEl = document.querySelector(".loader-logo-black");
 
   if (fillMaskEl) {
     const topInset = 100 - displayPct;
@@ -74,13 +74,17 @@ function setLoaderPct(p) {
     whiteLogoEl.style.opacity = displayPct >= 100 ? "0" : "1";
   }
 
-  if (loaderStatusEl) {
-    if (displayPct >= 100) {
-      loaderStatusEl.textContent = "click to enter";
-    } else {
-      loaderStatusEl.textContent = `${displayPct}%`;
-    }
+if (loaderStatusEl) {
+  if (displayPct >= 100) {
+    loaderStatusEl.textContent = "click to enter";
+    loaderStatusEl.classList.remove("is-enter-ready");
+    void loaderStatusEl.offsetWidth; // force reflow so animation always starts
+    loaderStatusEl.classList.add("is-enter-ready");
+  } else {
+    loaderStatusEl.textContent = `${displayPct}%`;
+    loaderStatusEl.classList.remove("is-enter-ready");
   }
+}
 }
 
 function hideLoader() {

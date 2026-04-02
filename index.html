@@ -72,9 +72,72 @@
   letter-spacing: 0.04em;
 }
 
+#loader-status.is-enter-ready {
+  display: inline-block;
+  animation: loaderEnterPulse 2.2s ease-in-out infinite;
+  -webkit-animation: loaderEnterPulse 2.2s ease-in-out infinite;
+  color: #ffffff;
+  text-shadow:
+    0 0 4px rgba(255,255,255,0.18),
+    0 0 10px rgba(255,255,255,0.08);
+  letter-spacing: 0.06em;
+  will-change: transform, opacity, text-shadow;
+}
+
+@keyframes loaderEnterPulse {
+  0% {
+    opacity: 0.78;
+    transform: translateY(0) scale(1);
+    text-shadow:
+      0 0 3px rgba(255,255,255,0.10),
+      0 0 8px rgba(255,255,255,0.04);
+  }
+
+  50% {
+    opacity: 1;
+    transform: translateY(-1px) scale(1.025);
+    text-shadow:
+      0 0 6px rgba(255,255,255,0.22),
+      0 0 14px rgba(255,255,255,0.10);
+  }
+
+  100% {
+    opacity: 0.78;
+    transform: translateY(0) scale(1);
+    text-shadow:
+      0 0 3px rgba(255,255,255,0.10),
+      0 0 8px rgba(255,255,255,0.04);
+  }
+}
+
+@-webkit-keyframes loaderEnterPulse {
+  0% {
+    opacity: 0.78;
+    transform: translateY(0) scale(1);
+    text-shadow:
+      0 0 3px rgba(255,255,255,0.10),
+      0 0 8px rgba(255,255,255,0.04);
+  }
+
+  50% {
+    opacity: 1;
+    transform: translateY(-1px) scale(1.025);
+    text-shadow:
+      0 0 6px rgba(255,255,255,0.22),
+      0 0 14px rgba(255,255,255,0.10);
+  }
+
+  100% {
+    opacity: 0.78;
+    transform: translateY(0) scale(1);
+    text-shadow:
+      0 0 3px rgba(255,255,255,0.10),
+      0 0 8px rgba(255,255,255,0.04);
+  }
+}
+
 body.ios #loader-status {
-  margin-top: 6px;            /* moves it closer to logo */
-  transform: translateY(-8px); /* pushes it up slightly */
+  margin-top: -2px;
 }
 
 .loader-logo-wrap {
@@ -260,6 +323,6 @@ body.ios .loader-logo-wrap {
     setTimeout(setVH, 600);
   </script>
 
-  <script type="module" src="./main.js?v=DEV124"></script>
+  <script type="module" src="./main.js?v=DEV125"></script>
 </body>
 </html>
