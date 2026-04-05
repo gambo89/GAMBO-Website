@@ -9838,6 +9838,11 @@ interactiveLoader.load(
 
 applyIOSLampTransform();
 
+if (lampMeshRef) {
+  lampMeshRef.position.x += -1.05;
+  lampMeshRef.position.z += 3.;
+}
+
 
 if (lampMeshRef) {
   lampMeshRef.traverse((o) => {
