@@ -7430,13 +7430,11 @@ const materials = {
 
   cabnet: makePBR(
     {
-      albedo: "./assets/Textures/Main Cabnet/Main Cabnet Albeto copy.jpg",
+      albedo: "./assets/Textures/TV Stand/TV Stand Albeto3.jpg",
       normal: "./assets/Textures/Main Cabnet/Main Cabnet Normal.jpg",
-      //roughness: "./assets/Textures/Main Cabnet/Main Cabnet Roughness.jpg",
-      //metalness: "./assets/Textures/Main Cabnet/Main Cabnet Metallic.jpg",
-      ao:"./assets/Textures/Main Cabnet/Main Cabnet AO.jpg",
+      //ao:"./assets/Textures/Main Cabnet/Main Cabnet AO.jpg",
     },
-    { roughness: 0.85, metalness: 0.0 }
+    { roughness: 1.0, metalness: 0.0 }
   ),
 
   //MAIN OBJECTS
@@ -7453,7 +7451,7 @@ const materials = {
 ),
 
 TV_stand: makePBR({
-    albedo: "./assets/Textures/TV Stand/TV Stand Albeto.jpg",
+    albedo: "./assets/Textures/TV Stand/TV Stand Albeto3.jpg",
     ao: "./assets/Textures/TV Stand/TV Stand AO.jpg",
     },
     { roughness: 1.0, metalness: 0.0}
@@ -8188,6 +8186,9 @@ BluetoothSpeaker: makePBR(
 
   
 };
+
+materials.cabnet.color.setScalar(0.65);
+materials.TV_stand.color.setScalar(0.75);
 
 const cigaretteFilterMat = makePBR(
   {
@@ -9437,15 +9438,6 @@ for (let i = 1; i <= 13; i++) {
 
 if (materials.Foot && materials.Foot.color) {
   materials.Foot.color.multiplyScalar(0.65); // 0.7 darker, 0.9 subtle
-}
-
-// Darken cabinet / shelves
-if (materials.cabnet) {
-  darkenMaterial(materials.cabnet, {
-    env: 0.0,
-    rough: 0.75,
-    colorMul: 0.25,
-  });
 }
 
 const loader = new GLTFLoader();
