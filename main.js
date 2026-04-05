@@ -4630,7 +4630,7 @@ function applyTvTextureEnabled(enabled) {
 }
 
 const tracks = [
-  "./assets/Audio/01-rip-fredo-notice-me-011-optimized.mp3",
+  "./assets/Audio/01-rip-fredo-notice-me-011.mp3",
   "./assets/Audio/02-I-Serve-the-Base.mp3",
   "./assets/Audio/03-floor-555-011.mp3",
   "./assets/Audio/04-12r-011.mp3",
