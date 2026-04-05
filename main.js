@@ -780,27 +780,23 @@ let baseCamFov0 = null;
 let baseCamTarget0 = null; 
 
 // Desktop Camera Values
-function setInitialCameraFraming(maxDim) {
-  // keep your original FOV
-  const fov = camera.fov * (Math.PI / 180);
-  const baseDist = maxDim / (2 * Math.tan(fov / 2));
+function setInitialCameraFraming() {
+  camera.fov = 31.5;
+  camera.updateProjectionMatrix();
 
-  // your original framing values
-  const camX = maxDim * 0.030;
-  const camY = maxDim * -0.146;
-  const camZ = baseDist * 0.282;
+  // SIMPLE VALUES (easy to tweak)
+  const camX = 1.63;
+  const camY = -4.68;
+  const camZ = 27.8;
 
-  const targetX = 1.18;
-  const targetY = maxDim * -0.186;
+  const targetX = 0.68;
+  const targetY = -6.95;
   const targetZ = 0;
 
   camera.position.set(camX, camY, camZ);
   camera.lookAt(targetX, targetY, targetZ);
 
-  // store the exact target used
   baseCamTarget0 = new THREE.Vector3(targetX, targetY, targetZ);
-
-  // store base camera position for breathing
   baseCamPos = camera.position.clone();
 }
 
@@ -6908,7 +6904,7 @@ function setupNightLights(maxDim) {
 lampKey.color.setHex(0xffe2c6);
 lampKey.color.offsetHSL(0, -0.15, 0);
 
-  lampKey.position.set(maxDim * 0.30, maxDim * 0.02, maxDim * 0.18);
+  lampKey.position.set(maxDim * 0.27, maxDim * 0.03, maxDim * 0.14);
   lampKey.lookAt(maxDim * 0.05, maxDim * -0.10, 0);
   scene.add(lampKey);
 
@@ -6942,7 +6938,7 @@ lampKey.color.offsetHSL(0, -0.15, 0);
   );
 
 // NEW: keep rightPush tight so it doesn't wash the whole room
-rightPush.intensity = 80;
+rightPush.intensity = 0;
 rightPush.distance = maxDim * 1.2;
 rightPush.angle = Math.PI / 14;
 rightPush.penumbra = 0.8;
@@ -7396,19 +7392,25 @@ Door4: (() => {
     { roughness: 0.0, metalness: 0.0}
 ),
 
- Thailand_Box1: makePBR({
+ Top_of_thailand_box: makePBR({
     albedo: "./assets/Textures/Thailand Box/Thailand Box Albeto2.jpg",
     },
-    { roughness: 0.0, metalness: 0.0}
+    { roughness: 1.0, metalness: 0.0}
+),
+
+ Thailand_box: makePBR({
+    albedo: "./assets/Textures/Thailand Box/Thailand Box Albeto2.jpg",
+    },
+    { roughness: 1.0, metalness: 0.0}
 ),
 
  Headphones1: makePBR({
     albedo: "./assets/Textures/Headphones/Headphones Albeto.jpg",
     },
-    { roughness: 0.5, metalness: 0.0}
+    { roughness: 1.0, metalness: 0.0}
 ),
 
- Tank1: makePBR({
+ Tank4: makePBR({
     albedo: "./assets/Textures/Tank/Tank Albeto.jpg",
     },
     { roughness: 1.0, metalness: 0.5}
@@ -9173,7 +9175,7 @@ const loader = new GLTFLoader();
 const __endMainGLB = __beginAsset("Main GLB");
 
 loader.load(
-  "./assets/models/Final Static Materials3.glb",
+  "./assets/models/Final Static Materials4.glb",
   (gltf) => {
     __endMainGLB();
 
@@ -9646,9 +9648,8 @@ if (isIOSDevice()) {
   applyVisibleViewportToRendererAndCamera();
   setIOSCameraFraming(roomMaxDim);
 } else {
-  // ✅ Desktop stays EXACTLY the same
   applyVisibleViewportToRendererAndCamera();
-  setInitialCameraFraming(roomMaxDim);
+  setInitialCameraFraming();
 }
 
     // Setup lights
@@ -9835,12 +9836,43 @@ interactiveLoader.load(
     console.log("💡 FINAL interactive lampMeshRef:", lampMeshRef?.name);
     console.log("💡 FINAL interactive lampGroupRef:", lampGroupRef?.name);
 
-    applyIOSLampTransform();
+applyIOSLampTransform();
 
-    if (lampMeshRef && lampMeshRef.material) {
-  lampMeshRef.material = lampMeshRef.material.clone();
-  lampMeshRef.material.emissiveIntensity = 1.6;
-  lampMeshRef.material.needsUpdate = true;
+
+if (lampMeshRef) {
+  lampMeshRef.traverse((o) => {
+    if (!o.isMesh || !o.material) return;
+
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+
+    o.material = mats.map((m) => {
+      const mat = m.clone();
+
+      if ("color" in mat) mat.color.setHex(0xffe2c6);
+      if ("emissive" in mat) mat.emissive.setHex(0xffd9b8);
+      if ("emissiveIntensity" in mat) mat.emissiveIntensity = 1.3;
+
+      if ("metalness" in mat) mat.metalness = 0.0;
+      if ("roughness" in mat) mat.roughness = 1.0;
+      if ("envMapIntensity" in mat) mat.envMapIntensity = 0.0;
+
+      mat.needsUpdate = true;
+      return mat;
+    });
+
+    if (!Array.isArray(o.material)) {
+      o.material = o.material[0];
+    }
+  });
+}
+
+if (lampMeshRef) {
+  lampMeshRef.traverse?.((o) => {
+    if (!o.isMesh) return;
+
+    o.castShadow = false;
+    o.receiveShadow = false;
+  });
 }
 
   ui.traverse((o) => {
