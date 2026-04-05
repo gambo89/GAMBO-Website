@@ -811,7 +811,7 @@ function setInitialCameraFraming() {
   // SIMPLE VALUES (easy to tweak)
   const camX = 1.63;
   const camY = -4.68;
-  const camZ = 27.9;
+  const camZ = 27.75;
 
   const targetX = 0.68;
   const targetY = -6.90;
@@ -4792,7 +4792,7 @@ function ensureSmokeChirpAudio() {
   smokeChirpAudio.loop = false;
   smokeChirpAudio.playsInline = true;
   smokeChirpAudio.setAttribute?.("webkit-playsinline", "");
-  smokeChirpAudio.volume = isIOS ? 0.009 : 0.01;
+  smokeChirpAudio.volume = isIOS ? 0.005 : 0.009;
   smokeChirpAudio.load();
 
   return smokeChirpAudio;
@@ -4847,7 +4847,7 @@ function startSmokeChirpCycle() {
     // then every 30s forever
     smokeChirpInterval = setInterval(() => {
       playSmokeChirp();
-    }, 30000);
+    }, 45000);
   }, 15000);
 }
 
