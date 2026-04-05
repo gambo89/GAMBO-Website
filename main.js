@@ -9379,7 +9379,7 @@ const loader = new GLTFLoader();
 const __endMainGLB = __beginAsset("Main GLB");
 
 loader.load(
-  "./assets/models/Final Static Materials7.glb",
+  "./assets/models/Final Static Materials8.glb",
   (gltf) => {
     __endMainGLB();
 
