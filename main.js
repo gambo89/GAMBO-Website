@@ -6111,6 +6111,13 @@ if (cigaretteHit) {
 // ✅ Picture1 click/tap (check ALL hits, not just closest)
 const picHit = hits.find(h => hitIsPicture1(h.object));
 if (picHit) {
+  trackSceneClick("picture1_change_click", {
+    object_name: picHit.object.name || "unknown",
+    interaction_type: "picture_cycle",
+    picture_index_before: picture1TexIndex,
+    picture_index_after: picture1TexIndex + 1,
+  });
+
   console.log("🖼 Picture1 hit:", picHit.object.name);
   setPicture1Texture(picture1TexIndex + 1);
   return;
@@ -6275,6 +6282,13 @@ if (hitIsLamp(hit)) {
 // ✅ Dunkeheit Album click -> open playlist (Safari-safe: open on pointerup)
 if (hitIsDunkeheitAlbum(hit)) {
   const url = "https://open.spotify.com/playlist/29St0Hbsl7aWEyq7LBV4O6";
+
+  trackSceneClick("dunkeheit_album_click", {
+    object_name: hit.name || "unknown",
+    target_label: "dunkeheit_album",
+    target_type: "external_link",
+  });
+
   console.log("💿 Dunkeheit_Album hit — queued for pointerup:", url);
   pendingExternalUrl = url;
   return;
@@ -6283,6 +6297,13 @@ if (hitIsDunkeheitAlbum(hit)) {
 // ✅ ALL DVD click -> open Gummo link (Safari-safe: open on pointerup)
 if (hitIsAllDVD(hit)) {
   const url = "https://tapemotion.com/en/watch/18415?gummo=";
+
+  trackSceneClick("all_dvd_click", {
+    object_name: hit.name || "unknown",
+    target_label: "all_dvd",
+    target_type: "external_link",
+  });
+
   console.log("📀 All_DVD hit — queued for pointerup:", url);
   pendingExternalUrl = url;
   return;
@@ -6291,6 +6312,13 @@ if (hitIsAllDVD(hit)) {
 // ✅ DVD on Player 1 click -> open Decline of Western Civilization (Safari-safe: open on pointerup)
 if (hitIsDVDOnPlayer1(hit)) {
   const url = "https://tapemotion.com/en/watch/21137?the-decline-of-western-civilization=";
+
+  trackSceneClick("dvd_on_player1_click", {
+    object_name: hit.name || "unknown",
+    target_label: "dvd_on_player1",
+    target_type: "external_link",
+  });
+
   console.log("💿 DVD_on_Player1 hit — queued for pointerup:", url);
   pendingExternalUrl = url;
   return;
@@ -6299,6 +6327,14 @@ if (hitIsDVDOnPlayer1(hit)) {
 // ✅ Book4 click -> open book link (Safari-safe: open on pointerup)
 if (hitIsBook4(hit)) {
   const url = "https://welib.org/md5/0516e985137dba6cae48c7e5a0eeb57d";
+
+  trackSceneClick("book4_click", {
+    object_name: hit.name || "unknown",
+    target_type: "external_link",
+    target_label: "book4",
+    target_url: url,
+  });
+
   console.log("📖 Book4 hit — queued for pointerup:", url);
   pendingExternalUrl = url;
   return;
@@ -6410,11 +6446,15 @@ if (powerButtonMeshRef && isInHierarchy(hit, powerButtonMeshRef)) {
   return;
 }
 
-// --------------------------------------------------
 // REMOTE MENU BUTTONS (UP / DOWN / OK)
 // --------------------------------------------------
 if (tvOn && tvUiState === "MENU") {
   if (downArrowMeshRef && isInHierarchy(hit, downArrowMeshRef)) {
+    trackSceneClick("remote_down_click", {
+      tv_ui_state: tvUiState,
+      object_name: hit.name || "unknown",
+    });
+
     playRemoteButtonSound();
     console.log("⬇️ Down arrow pressed");
     moveMenuSelection(+1);
@@ -6422,6 +6462,11 @@ if (tvOn && tvUiState === "MENU") {
   }
 
   if (upArrowMeshRef && isInHierarchy(hit, upArrowMeshRef)) {
+    trackSceneClick("remote_up_click", {
+      tv_ui_state: tvUiState,
+      object_name: hit.name || "unknown",
+    });
+
     playRemoteButtonSound();
     console.log("⬆️ Up/Top arrow pressed");
     moveMenuSelection(-1);
@@ -6429,17 +6474,26 @@ if (tvOn && tvUiState === "MENU") {
   }
 
   if (okButtonMeshRef && isInHierarchy(hit, okButtonMeshRef)) {
+    trackSceneClick("remote_ok_click", {
+      tv_ui_state: tvUiState,
+      object_name: hit.name || "unknown",
+    });
+
     playRemoteButtonSound();
     console.log("🆗 OK pressed");
     confirmMenuSelection();
     return;
   }
 }
-
 // PHOTO MODE (LEFT / RIGHT to change photos)
 // --------------------------------------------------
 if (tvOn && tvUiState === "PHOTO") {
   if (rightArrowMeshRef && isInHierarchy(hit, rightArrowMeshRef)) {
+    trackSceneClick("remote_right_click", {
+      tv_ui_state: tvUiState,
+      object_name: hit.name || "unknown",
+    });
+
     playRemoteButtonSound();
     console.log("➡️ Right arrow pressed → next photo");
     nextPhoto(+1);
@@ -6447,6 +6501,11 @@ if (tvOn && tvUiState === "PHOTO") {
   }
 
   if (leftArrowMeshRef && isInHierarchy(hit, leftArrowMeshRef)) {
+    trackSceneClick("remote_left_click", {
+      tv_ui_state: tvUiState,
+      object_name: hit.name || "unknown",
+    });
+
     playRemoteButtonSound();
     console.log("⬅️ Left arrow pressed → previous photo");
     nextPhoto(-1);
@@ -6458,6 +6517,11 @@ if (tvOn && tvUiState === "PHOTO") {
 // --------------------------------------------------
 if (tvOn && tvUiState === "VIDEO") {
   if (okButtonMeshRef && isInHierarchy(hit, okButtonMeshRef)) {
+    trackSceneClick("remote_ok_click", {
+      tv_ui_state: tvUiState,
+      object_name: hit.name || "unknown",
+    });
+
     playRemoteButtonSound();
     console.log("🆗 OK pressed → toggle play/pause");
     toggleVideoPlayPause();
@@ -6466,6 +6530,11 @@ if (tvOn && tvUiState === "VIDEO") {
   }
 
   if (rightArrowMeshRef && isInHierarchy(hit, rightArrowMeshRef)) {
+    trackSceneClick("remote_right_click", {
+      tv_ui_state: tvUiState,
+      object_name: hit.name || "unknown",
+    });
+
     playRemoteButtonSound();
     console.log("➡️ Right arrow pressed → next video");
     nextVideo(+1);
@@ -6473,6 +6542,11 @@ if (tvOn && tvUiState === "VIDEO") {
   }
 
   if (leftArrowMeshRef && isInHierarchy(hit, leftArrowMeshRef)) {
+    trackSceneClick("remote_left_click", {
+      tv_ui_state: tvUiState,
+      object_name: hit.name || "unknown",
+    });
+
     playRemoteButtonSound();
     console.log("⬅️ Left arrow pressed → previous video");
     nextVideo(-1);
@@ -11446,6 +11520,14 @@ function tryBeginWallDraw(e) {
   hasLastWallDrawUv = true;
   isWallDrawing = true;
 
+  trackSceneClick("front_wall_draw_start", {
+    object_name: wallDrawPlaneRef?.name || "WallDrawPlane",
+    wall_tool: wallTool,
+    wall_color: wallMarkerColor,
+    uv_x: Number(hit.uv.x.toFixed(3)),
+    uv_y: Number(hit.uv.y.toFixed(3)),
+  });
+
   drawOnWallAtUV(hit.uv);
   return true;
 }
@@ -11674,7 +11756,19 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
-renderer.domElement.addEventListener("dblclick", () => {
+renderer.domElement.addEventListener("dblclick", (e) => {
+  if (!wallDrawPlaneRef) return;
+  if (!drawMode) return;
+
+  if (!setPointerFromEvent(e)) return;
+
+  raycaster.setFromCamera(pointer, camera);
+
+  const wallHits = [];
+  raycaster.intersectObject(wallDrawPlaneRef, false, wallHits);
+
+  if (!wallHits.length) return;
+
   clearWallDrawing();
   endWallDraw();
 });
