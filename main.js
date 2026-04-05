@@ -14,6 +14,17 @@ const log  = (...args) => DEBUG && console.log(...args);
 const warn = (...args) => DEBUG && console.warn(...args);
 const err  = (...args) => DEBUG && console.error(...args);
 
+function trackSceneClick(action, extra = {}) {
+  if (typeof window.gtag !== "function") return;
+
+  window.gtag("event", "scene_interaction", {
+    event_category: "scene",
+    event_label: action,
+    interaction_name: action,
+    ...extra,
+  });
+}
+
 // ============================================================
 // iOS / MOBILE SAFE MODE (prevents 99% crash)
 // ============================================================
@@ -24,7 +35,7 @@ const isIOS =
 const SAFE_MOBILE = isIOS; // flip to true to test on desktop
 
 const MOBILE_PROFILE = {
-  maxDpr: SAFE_MOBILE ? 1.3 : 1.8,   // desktop lower resolution
+  maxDpr: SAFE_MOBILE ? 1.3 : 2.0,   // desktop lower resolution
   shadows: SAFE_MOBILE ? false : true,
   maxAniso: SAFE_MOBILE ? 2 : null,
   shadowMapSize: SAFE_MOBILE ? 1024 : 4096,
@@ -104,6 +115,16 @@ async function enterSceneFromLoader() {
   }
 
   hideLoader();
+
+  // start smoke alarm chirp schedule
+  startSmokeChirpCycle();
+
+  // ✅ lazy load playlist AFTER first entry
+  startLazyPlaylistLoad();
+
+  setTimeout(() => {
+    initPostFXLazy();
+  }, 600);
 }
 
 loaderEl?.addEventListener("pointerdown", enterSceneFromLoader);
@@ -129,7 +150,7 @@ renderer.toneMappingExposure = renderer.toneMappingExposure ?? 1.3;
 // renderer settings...
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = isIOS ? 1.1 : 1.0;
+renderer.toneMappingExposure = isIOS ? 1.1 : 0.92;
 renderer.physicallyCorrectLights = true;
 
 renderer.shadowMap.enabled = MOBILE_PROFILE.shadows;
@@ -765,12 +786,15 @@ function makeComposerRT() {
   return rt;
 }
 
-if (MOBILE_PROFILE.postFX || isIOSDevice()) {
+composer = null;
+nightVisionPass = null;
+
+function initPostFXLazy() {
+  if (composer || (!MOBILE_PROFILE.postFX && !isIOSDevice())) return;
+
   composer = new EffectComposer(renderer, makeComposerRT());
   initPostFX();
-} else {
-  composer = null;
-  nightVisionPass = null;
+  console.log("🎥 PostFX initialized lazily");
 }
 
 let baseCamPos = null; 
@@ -787,10 +811,10 @@ function setInitialCameraFraming() {
   // SIMPLE VALUES (easy to tweak)
   const camX = 1.63;
   const camY = -4.68;
-  const camZ = 27.8;
+  const camZ = 27.9;
 
   const targetX = 0.68;
-  const targetY = -6.95;
+  const targetY = -6.90;
   const targetZ = 0;
 
   camera.position.set(camX, camY, camZ);
@@ -1093,6 +1117,7 @@ const pmrem = new THREE.PMREMGenerator(renderer);
 const envRT = pmrem.fromScene(new RoomEnvironment(), 0.0);
 
 scene.environment = envRT.texture;
+scene.environmentIntensity = 0.75;
 
 pmrem.dispose();
 
@@ -1105,9 +1130,8 @@ buildDust();
 // ============================================================
 // SOFT FILL (prevents black crush, very subtle)
 // ============================================================
-const hemi = new THREE.HemisphereLight(0x2b3140, 0x0b0b0b, 0.0);
+const hemi = new THREE.HemisphereLight(0x2b3140, 0x0b0b0b, 0.035);
 scene.add(hemi);
-
 
 // ============================================================
 // LIGHTING
@@ -2797,21 +2821,13 @@ sizeIosNVOverlay();
 function applyLampMood(mode) {
   if (!nightLights) return;
 
-  // pick palettes
+  // keep lamp lighting warm in both normal + NV toggle states
   const warm = {
     lamp: 0xffe6c8,
     push: 0xffc07a,
     hemiSky: 0x2b3140,
     hemiGround: 0x0b0b0b,
     exposure: 0.80,
-  };
-
-  const cold = {
-    lamp: 0xcfe8ff,
-    push: 0x9ad0ff,
-    hemiSky: 0x0b1020,
-    hemiGround: 0x000000,
-    exposure: 0.72,
   };
 
   const red = {
@@ -2822,18 +2838,16 @@ function applyLampMood(mode) {
     exposure: 0.75,
   };
 
-  const p = mode === 1 ? cold : mode === 2 ? red : warm;
+  // mode 1 used to be blue/cold — now keep it warm so NV can take over cleanly
+  const p = mode === 2 ? red : warm;
 
-  // change your actual Three.js lights
   nightLights.lampKey.color.setHex(p.lamp);
   nightLights.lampShadow.color.setHex(p.lamp);
   nightLights.rightPush.color.setHex(p.push);
 
-  // optional: also tint the hemisphere fill (your hemi exists globally)
   hemi.color.setHex(p.hemiSky);
   hemi.groundColor.setHex(p.hemiGround);
 
-  // optional: small exposure change helps the “mood” read clearly
   renderer.toneMappingExposure = p.exposure;
 }
 
@@ -4680,43 +4694,46 @@ async function unlockAudioOnce() {
   }
 }
 
-const audioEls = tracks.map((src) => {
-  const a = new Audio(src);
-  a.preload = "metadata"; // ✅ lighter than "auto" (doesn't download whole mp3 immediately)
-  a.crossOrigin = "anonymous";
+let audioEls = [];
+let playlistLazyLoadStarted = false;
 
-  // ✅ Count each track as an asset, finish when metadata loads (duration available)
-  const __endAudio = __beginAsset(src);
+function buildPlaylistAudio() {
+  if (audioEls.length) return audioEls;
 
-  const done = () => {
-    __endAudio();
-    a.removeEventListener("loadedmetadata", done);
-    a.removeEventListener("error", done);
-    a.removeEventListener("canplaythrough", done);
-  };
-
-  a.addEventListener("loadedmetadata", done, { once: true });
-  a.addEventListener("canplaythrough", done, { once: true }); // fallback
-  a.addEventListener("error", done, { once: true });
-
-  return a;
-});
-
-
-// ✅ AUTO-NEXT when a song finishes
-audioEls.forEach((a, i) => {
-  a.addEventListener("ended", () => {
-    // only advance if THIS ended track is the active one and we were playing
-    if (i !== trackIndex) return;
-    if (!isPlaying) return;
-
-    console.log("⏭ Track ended → auto next");
-    nextTrack();
+  audioEls = tracks.map((src) => {
+    const a = new Audio(src);
+    a.preload = "metadata";
+    a.crossOrigin = "anonymous";
+    return a;
   });
-});
 
+  // ✅ AUTO-NEXT when a song finishes
+  audioEls.forEach((a, i) => {
+    a.addEventListener("ended", () => {
+      if (i !== trackIndex) return;
+      if (!isPlaying) return;
+
+      console.log("⏭ Track ended → auto next");
+      nextTrack();
+    });
+  });
+
+  return audioEls;
+}
+
+function startLazyPlaylistLoad() {
+  if (playlistLazyLoadStarted) return;
+  playlistLazyLoadStarted = true;
+
+  // start after scene is entered
+  setTimeout(() => {
+    buildPlaylistAudio();
+    console.log("🎵 Playlist lazy load started");
+  }, 1000);
+}
 
 function currentAudio() {
+  if (!audioEls.length) buildPlaylistAudio();
   return audioEls[trackIndex];
 }
 
@@ -4724,7 +4741,7 @@ function ensureBackgroundAudio() {
   if (bgAudio) return bgAudio;
 
   bgAudio = new Audio("./assets/Audio/Background-sound11.mp3");
-  bgAudio.preload = "auto";
+  bgAudio.preload = "metadata";
   bgAudio.crossOrigin = "anonymous";
   bgAudio.loop = true;
   bgAudio.volume = isIOS ? 0.28 : 0.60; // ✅ lower on iOS only
@@ -4734,10 +4751,14 @@ function ensureBackgroundAudio() {
   return bgAudio;
 }
 
-const IOS_LAMP_VOLUME = 0.00015;   // iOS: BARELY noticeable
-const DESKTOP_LAMP_VOLUME = 0.05;  // desktop unchanged
+const IOS_LAMP_VOLUME = 0.12;
+const DESKTOP_LAMP_VOLUME = 0.22;
 
 let lampAudio = null;
+
+let smokeChirpAudio = null;
+let smokeChirpStartTimeout = null;
+let smokeChirpInterval = null;
 
 function applyLampAudioVolume(a) {
   if (!a) return;
@@ -4750,10 +4771,10 @@ function ensureLampAudio() {
     return lampAudio;
   }
 
-  lampAudio = new Audio("./assets/Audio/Light Flicker Sound.mp3");
+  lampAudio = new Audio("./assets/Audio/Electric-sound-2.mp3");
   lampAudio.preload = "auto";
   lampAudio.crossOrigin = "anonymous";
-  lampAudio.loop = true;
+  lampAudio.loop = false;
   lampAudio.playsInline = true;
   lampAudio.setAttribute?.("webkit-playsinline", "");
   applyLampAudioVolume(lampAudio);
@@ -4762,13 +4783,81 @@ function ensureLampAudio() {
   return lampAudio;
 }
 
+function ensureSmokeChirpAudio() {
+  if (smokeChirpAudio) return smokeChirpAudio;
+
+  smokeChirpAudio = new Audio("./assets/Audio/Smoke-Chirp.mp3");
+  smokeChirpAudio.preload = "auto";
+  smokeChirpAudio.crossOrigin = "anonymous";
+  smokeChirpAudio.loop = false;
+  smokeChirpAudio.playsInline = true;
+  smokeChirpAudio.setAttribute?.("webkit-playsinline", "");
+  smokeChirpAudio.volume = isIOS ? 0.009 : 0.01;
+  smokeChirpAudio.load();
+
+  return smokeChirpAudio;
+}
+
+function playSmokeChirp() {
+  const a = ensureSmokeChirpAudio();
+  if (!a) return;
+
+  try {
+    a.pause();
+    a.currentTime = 0;
+
+    const p = a.play();
+    if (p?.catch) {
+      p.catch((err) => {
+        console.warn("Smoke chirp play blocked:", err);
+      });
+    }
+  } catch (err) {
+    console.warn("Smoke chirp failed:", err);
+  }
+}
+
+function stopSmokeChirpCycle() {
+  if (smokeChirpStartTimeout) {
+    clearTimeout(smokeChirpStartTimeout);
+    smokeChirpStartTimeout = null;
+  }
+
+  if (smokeChirpInterval) {
+    clearInterval(smokeChirpInterval);
+    smokeChirpInterval = null;
+  }
+
+  if (smokeChirpAudio) {
+    try {
+      smokeChirpAudio.pause();
+      smokeChirpAudio.currentTime = 0;
+    } catch {}
+  }
+}
+
+function startSmokeChirpCycle() {
+  // prevent duplicates
+  stopSmokeChirpCycle();
+
+  // first chirp after 15s in scene
+  smokeChirpStartTimeout = setTimeout(() => {
+    playSmokeChirp();
+
+    // then every 30s forever
+    smokeChirpInterval = setInterval(() => {
+      playSmokeChirp();
+    }, 30000);
+  }, 15000);
+}
+
 let tvOnSound = null;
 
 function ensureTvOnSound() {
   if (tvOnSound) return tvOnSound;
 
   tvOnSound = new Audio("./assets/Audio/Tv On Sound1-01.mp3");
-  tvOnSound.preload = "auto";
+  tvOnSound.preload = "metadata";
   tvOnSound.crossOrigin = "anonymous";
   tvOnSound.playsInline = true;
   tvOnSound.setAttribute?.("webkit-playsinline", "");
@@ -4808,7 +4897,7 @@ function ensureTvOffSound() {
   if (tvOffSound) return tvOffSound;
 
   tvOffSound = new Audio("./assets/Audio/Tv Off Sound-01.mp3");
-  tvOffSound.preload = "auto";
+  tvOffSound.preload = "metadata";
   tvOffSound.crossOrigin = "anonymous";
   tvOffSound.playsInline = true;
   tvOffSound.setAttribute?.("webkit-playsinline", "");
@@ -5010,12 +5099,15 @@ function stopMusicBecauseUserLeft() {
   }
 
   // stop lamp ambience
-if (lampAudio) {
-  try {
-    lampAudio.pause();
-    lampAudio.currentTime = 0;
-  } catch {}
-}
+  if (lampAudio) {
+    try {
+      lampAudio.pause();
+      lampAudio.currentTime = 0;
+    } catch {}
+  }
+
+  // stop smoke chirp cycle
+  stopSmokeChirpCycle();
 
   isPlaying = false;
   updateSpeakerHintText?.();
@@ -5057,16 +5149,22 @@ async function playBackgroundAudio() {
 
 function playLampAudio() {
   const a = ensureLampAudio();
-
   if (!a) return;
 
   try {
     applyLampAudioVolume(a);
+    a.pause();
+    a.currentTime = 0;
+
     const p = a.play();
     if (p?.catch) {
-      p.catch(() => {});
+      p.catch((err) => {
+        console.warn("Lamp sound play blocked:", err);
+      });
     }
-  } catch {}
+  } catch (err) {
+    console.warn("Lamp sound play failed:", err);
+  }
 }
 
 async function tryAutoStartBackgroundAudio() {
@@ -5087,17 +5185,6 @@ async function tryAutoStartBackgroundAudio() {
     console.warn("Background ambience autoplay blocked:", err);
   }
 
-  try {
-    applyLampAudioVolume(lamp);
-    if (lamp.paused) {
-      await lamp.play();
-      console.log("💡 Lamp ambience autoplay started");
-      startedAnything = true;
-    }
-  } catch (err) {
-    console.warn("Lamp ambience autoplay blocked:", err);
-  }
-
   return startedAnything;
 }
 
@@ -5107,7 +5194,11 @@ function pauseBackgroundAudio() {
 }
 
 ensureBackgroundAudio();
-tryAutoStartBackgroundAudio();
+ensureLampAudio();
+ensureSmokeChirpAudio();
+ensureTvOnSound();
+ensureTvOffSound();
+
 
 async function playCurrent() {
   const a = currentAudio();
@@ -5139,17 +5230,6 @@ async function startBackgroundAudioFromUserGesture() {
     }
   } catch (err) {
     console.warn("Background ambience early gesture start blocked:", err);
-  }
-
-  try {
-    applyLampAudioVolume(lamp);
-    if (lamp.paused) {
-      await lamp.play();
-      console.log("💡 Lamp ambience started from early gesture");
-      startedAnything = true;
-    }
-  } catch (err) {
-    console.warn("Lamp ambience early gesture start blocked:", err);
   }
 
   if (startedAnything) {
@@ -6013,6 +6093,10 @@ const cigaretteHit = hits.find(h => cigaretteRoot && isInHierarchy(h.object, cig
 if (cigaretteHit) {
   console.log("🚬 cigarette hit:", cigaretteHit.object.name);
 
+  trackSceneClick("cigarette_click", {
+    object_name: cigaretteHit.object.name || "unknown",
+  });
+
   await unlockSmokeBreatheOnce();
   await unlockSmokerCoughOnce();
 
@@ -6039,6 +6123,10 @@ const socialTikTokHit = hits.find(
 if (socialTikTokHit) {
   console.log("🎵 TikTok button hit:", socialTikTokHit.object.name);
 
+  trackSceneClick("tiktok_click", {
+    object_name: socialTikTokHit.object.name || "unknown",
+  });
+
   setPressAxisFromHit(socialTikTokMeshRef, socialTikTokHit);
   setPressTarget(socialTikTokMeshRef, true);
 
@@ -6052,6 +6140,10 @@ const socialContactHit = hits.find(
 
 if (socialContactHit) {
   console.log("📇 Contact button hit:", socialContactHit.object.name);
+
+  trackSceneClick("contact_click", {
+    object_name: socialContactHit.object.name || "unknown",
+  });
 
   setPressAxisFromHit(socialContactMeshRef, socialContactHit);
   setPressTarget(socialContactMeshRef, true);
@@ -6067,6 +6159,10 @@ const socialYoutubeHit = hits.find(
 if (socialYoutubeHit) {
   console.log("▶️ Youtube button hit:", socialYoutubeHit.object.name);
 
+  trackSceneClick("youtube_click", {
+    object_name: socialYoutubeHit.object.name || "unknown",
+  });
+
   setPressAxisFromHit(socialYoutubeMeshRef, socialYoutubeHit);
   setPressTarget(socialYoutubeMeshRef, true);
 
@@ -6080,6 +6176,10 @@ const socialInstagramHit = hits.find(
 
 if (socialInstagramHit) {
   console.log("📸 Instagram button hit:", socialInstagramHit.object.name);
+
+  trackSceneClick("instagram_click", {
+    object_name: socialInstagramHit.object.name || "unknown",
+  });
 
   setPressAxisFromHit(socialInstagramMeshRef, socialInstagramHit);
   setPressTarget(socialInstagramMeshRef, true);
@@ -6155,14 +6255,18 @@ if (typeof stopIosRemotePulse === "function") stopIosRemotePulse();
   return; // 🔒 CRITICAL: nothing below runs
 }
 
-  // ✅ only toggle lamp + night vision when lamp is clicked
 if (hitIsLamp(hit)) {
+  playLampAudio();
+
   lampMood = (lampMood + 1) % 2; // 0<->1
-  applyLampMood(lampMood);
+
+  // turn NV on immediately, no delayed blue transition
   setNightVision(lampMood === 1);
+
+  applyLampMood(lampMood);
   updateLampHintText();
 
-      // ✅ show Grim only in lampMood 1, hide in lampMood 0
+  // ✅ show Grim only in lampMood 1, hide in lampMood 0
   setGrimVisible(lampMood === 1);
 
   return;
@@ -6282,6 +6386,12 @@ if (powerButtonMeshRef && isInHierarchy(hit, powerButtonMeshRef)) {
   console.log("📺 TV Power pressed:", hit.name);
 
   const turningOn = !tvOn;
+
+  trackSceneClick("power_button_click", {
+    tv_state_before: tvOn ? "on" : "off",
+    tv_state_after: turningOn ? "on" : "off",
+    object_name: hit.name || "unknown",
+  });
 
   if (turningOn) {
     // 🔊 TV ON
@@ -6403,6 +6513,11 @@ if (speakerMeshRef && isInHierarchy(hit, speakerMeshRef)) {
   const now = performance.now();
   const isDouble = now - lastClickTime < DOUBLE_CLICK_MS;
   lastClickTime = now;
+
+  trackSceneClick("speaker_click", {
+    click_type: isDouble ? "double" : "single",
+    object_name: hit.name || "unknown",
+  });
 
   // 🔓 make sure audio is unlocked on the same user click
   await unlockAudioOnce();
@@ -7147,6 +7262,88 @@ function darkenMaterial(
   return mat;
 }
 
+function tuneStaticSceneMaterial(mat, meshName = "") {
+  if (!mat) return mat;
+
+  const n = String(meshName || "").toLowerCase();
+
+  // clone so edits stay isolated
+  mat = mat.clone();
+
+  // base response: reduce flat environment wash
+  if ("envMapIntensity" in mat) mat.envMapIntensity = 0.02;
+
+  if ("metalness" in mat) {
+    mat.metalness = Math.min(mat.metalness ?? 0.0, 0.08);
+  }
+
+  if ("roughness" in mat) {
+    mat.roughness = Math.max(mat.roughness ?? 1.0, 0.72);
+  }
+
+  if (mat.color) {
+    mat.color = mat.color.clone();
+    mat.color.multiplyScalar(0.92);
+  }
+
+  // walls
+  if (n.includes("wall")) {
+    if ("envMapIntensity" in mat) mat.envMapIntensity = 0.01;
+    if ("roughness" in mat) mat.roughness = Math.max(mat.roughness ?? 1.0, 0.88);
+    if (mat.color) mat.color.multiplyScalar(1.04);
+  }
+
+  // wood / shelves / cabinet
+  if (n.includes("cab") || n.includes("wood") || n.includes("shelf")) {
+    if ("envMapIntensity" in mat) mat.envMapIntensity = 0.015;
+    if ("roughness" in mat) mat.roughness = Math.max(mat.roughness ?? 1.0, 0.82);
+    if (mat.color) mat.color.multiplyScalar(0.96);
+  }
+
+  // TV
+  if (n.includes("tv")) {
+    if ("envMapIntensity" in mat) mat.envMapIntensity = 0.035;
+    if ("roughness" in mat) mat.roughness = Math.max(0.45, Math.min(mat.roughness ?? 1.0, 0.78));
+    if ("metalness" in mat) mat.metalness = Math.min(mat.metalness ?? 0.0, 0.18);
+  }
+
+  // cloth / blanket / bed
+  if (
+    n.includes("blanket") ||
+    n.includes("bed") ||
+    n.includes("cloth") ||
+    n.includes("fabric")
+  ) {
+    if ("envMapIntensity" in mat) mat.envMapIntensity = 0.0;
+    if ("roughness" in mat) mat.roughness = Math.max(mat.roughness ?? 1.0, 0.95);
+    if ("metalness" in mat) mat.metalness = 0.0;
+  }
+
+  // remote
+  // remote
+  if (n.includes("remote")) {
+    if ("envMapIntensity" in mat) mat.envMapIntensity = 0.0;
+    if ("roughness" in mat) mat.roughness = 1.0;
+    if ("metalness" in mat) mat.metalness = 0.0;
+    if (mat.color) mat.color.multiplyScalar(0.92);
+  }
+
+  // small metal accents / frames / knobs
+  if (
+    n.includes("frame") ||
+    n.includes("metal") ||
+    n.includes("handle") ||
+    n.includes("knob")
+  ) {
+    if ("envMapIntensity" in mat) mat.envMapIntensity = 0.05;
+    if ("roughness" in mat) mat.roughness = Math.max(0.35, Math.min(mat.roughness ?? 1.0, 0.68));
+    if ("metalness" in mat) mat.metalness = Math.min(Math.max(mat.metalness ?? 0.0, 0.10), 0.30);
+  }
+
+  mat.needsUpdate = true;
+  return mat;
+}
+
 const fallbackMat = new THREE.MeshStandardMaterial({
   color: 0xffffff,
   roughness: 0.8,
@@ -7172,7 +7369,7 @@ const materials = {
   pasted_remote: makePBR({
     albedo: "./assets/Textures/Remote/Main object/Remote Albeto.jpg",
     },
-    { roughness: 1.0, metalness: 0.2}
+    { roughness: 1.0, metalness: 0.0}
 ),
 
  TV_Box2: makePBR({
@@ -7287,6 +7484,13 @@ TV_stand: makePBR({
 
     //WALLS & Door
   front_wall1: makePBR(
+    {
+      albedo: "./assets/Textures/Walls/Front Wall/Front Wall10 Albedo.jpg",
+    },
+    { metalness: 0.0, roughness: 2.0 }
+  ),
+
+    front_wall2: makePBR(
     {
       albedo: "./assets/Textures/Walls/Front Wall/Front Wall10 Albedo.jpg",
     },
@@ -9026,20 +9230,20 @@ function updateCigaretteEmber() {
 
 if (emberTipMatRef) {
   const flare =
-    Math.max(0, Math.sin(now * 8.0)) * 0.28 +
-    Math.max(0, Math.sin(now * 13.0)) * 0.12;
+    Math.max(0, Math.sin(now * 8.0)) * 0.42 +
+    Math.max(0, Math.sin(now * 13.0)) * 0.24;
 
   emberTipMatRef.emissive.setRGB(
-    0.78 + heat * 0.16,
-    0.035 + heat * 0.030 + flare * 0.025,
+    1.8 + heat * 0.35,
+    0.16 + heat * 0.10 + flare * 0.10,
     0.0
   );
 
-  emberTipMatRef.emissiveIntensity = 5.4 + heat * 2.0 + flare * 0.6;
+  emberTipMatRef.emissiveIntensity = 24.0 + heat * 6.0 + flare * 3.0;
 
   emberTipMatRef.color.setRGB(
-    0.14 + heat * 0.05,
-    0.01,
+    0.28 + heat * 0.10,
+    0.03,
     0.0
   );
 
@@ -9175,7 +9379,7 @@ const loader = new GLTFLoader();
 const __endMainGLB = __beginAsset("Main GLB");
 
 loader.load(
-  "./assets/models/Final Static Materials4.glb",
+  "./assets/models/Final Static Materials7.glb",
   (gltf) => {
     __endMainGLB();
 
@@ -9186,6 +9390,9 @@ console.log("======== FINAL STATIC MATERIALS GLB MESH LIST ========");
 
 model.traverse((o) => {
   if (!o.isMesh) return;
+
+  o.castShadow = true;
+o.receiveShadow = true;
 
   console.log(
     "[MESH]",
@@ -9271,7 +9478,7 @@ if (n.includes("foot") && o.material) {
   }
 
   // make it less shiny
-  o.material.roughness = Math.max(o.material.roughness ?? 0.8, 0.95);
+ o.material.roughness = 1.0;
 
   // slightly reduce highlight strength
   if ("metalness" in o.material) {
@@ -9389,17 +9596,45 @@ if (n.includes("remote") && o.material) {
 
   // Slightly darken overall
   if (o.material.color) {
-    o.material.color.multiplyScalar(0.93); // subtle (0.88–0.95)
+    o.material.color.multiplyScalar(0.90);
   }
 
-  // Reduce highlight sharpness
+  // Make highlights much broader / softer
   if ("roughness" in o.material) {
-    o.material.roughness = Math.max(o.material.roughness ?? 0.6, 0.75);
+    o.material.roughness = Math.max(o.material.roughness ?? 0.6, 0.92);
   }
 
-  // Kill excessive reflections
+  // Remove specular punch
+  if ("metalness" in o.material) {
+    o.material.metalness = 0.0;
+  }
+
+  // Kill environment reflections almost completely
   if ("envMapIntensity" in o.material) {
-    o.material.envMapIntensity = 0.01;
+    o.material.envMapIntensity = 0.0;
+  }
+
+  o.material.needsUpdate = true;
+}
+
+// ✅ REMOTE BUTTONS — reduce highlight punch
+if (n.includes("button") && o.material) {
+  o.material = o.material.clone();
+
+  if (o.material.color) {
+    o.material.color.multiplyScalar(0.85); // slightly darker buttons
+  }
+
+  if ("roughness" in o.material) {
+    o.material.roughness = 0.95; // very matte
+  }
+
+  if ("metalness" in o.material) {
+    o.material.metalness = 0.0;
+  }
+
+  if ("envMapIntensity" in o.material) {
+    o.material.envMapIntensity = 0.0;
   }
 
   o.material.needsUpdate = true;
@@ -9652,24 +9887,34 @@ if (isIOSDevice()) {
   setInitialCameraFraming();
 }
 
+
     // Setup lights
     nightLights = setupNightLights(maxDim);
+
+if (nightLights) {
+  if (nightLights.lampKey)       nightLights.lampKey.intensity *= 0.90;
+  if (nightLights.lampShadow)    nightLights.lampShadow.intensity *= 1.0;
+  if (nightLights.rightPush)     nightLights.rightPush.intensity *= 0.85;
+  if (nightLights.tvFill)        nightLights.tvFill.intensity *= 1.55;
+  if (nightLights.remoteBoost)   nightLights.remoteBoost.intensity *= 0.28;
+  if (nightLights.underShelfUp)  nightLights.underShelfUp.intensity *= 1.06;
+}
 
 // ============================================================
 // ✅ SHELF DEPTH FILL (subtle, no shadows, helps objects read)
 // Paste directly under: nightLights = setupNightLights(maxDim);
 // ============================================================
-const shelfFill = new THREE.SpotLight(0xffd2a6, 10); // warm low fill
+const shelfFill = new THREE.SpotLight(0xffc89a, 6.5); // softer, dimmer, warmer
 shelfFill.layers.set(LAYER_ACCENT);
 shelfFill.castShadow = false;
 shelfFill.decay = 2;
-shelfFill.distance = maxDim * 0.55;
-shelfFill.angle = Math.PI / 7;
+shelfFill.distance = maxDim * 0.48;
+shelfFill.angle = Math.PI / 8;
 shelfFill.penumbra = 1.0;
 
-// Position: slightly inside / above shelf opening
-shelfFill.position.set(maxDim * -0.18, maxDim * 0.14, maxDim * 0.22);
-shelfFill.target.position.set(maxDim * -0.18, maxDim * 0.02, maxDim * -0.32);
+// Position: slightly inside / above left shelf opening
+shelfFill.position.set(maxDim * -0.19, maxDim * 0.12, maxDim * 0.18);
+shelfFill.target.position.set(maxDim * -0.18, maxDim * 0.01, maxDim * -0.28);
 scene.add(shelfFill);
 scene.add(shelfFill.target);
 
@@ -9708,6 +9953,16 @@ contactShadow.castShadow = true;
 
 scene.add(contactShadow);
 scene.add(contactShadow.target);
+
+// ✅ subtle bounce under TV / cabinet
+const tvBounce = new THREE.PointLight(0xffc89a, 0.35, maxDim * 0.28);
+tvBounce.position.set(
+  0,
+  maxDim * -0.12,
+  maxDim * 0.08
+);
+tvBounce.decay = 2;
+scene.add(tvBounce);
 
 if (lampMeshRef && lampMeshRef.material) {
   const m = lampMeshRef.material;
@@ -9913,6 +10168,7 @@ if (lampMeshRef) {
 
   const meshName = (o.name || "").toLowerCase();
   const matName  = (o.material?.name || "").toLowerCase();
+  
 
   // -------------------------
 // REMOTE UI BUTTONS
@@ -10864,7 +11120,7 @@ if (matName.includes("ash")) {
     });
 
 if (emberTipRef && !emberLightRef) {
-  emberLightRef = new THREE.PointLight(0xff2a12, 2.1, 0.34, 1.8);
+  emberLightRef = new THREE.PointLight(0xff6024, 8.0, 0.9, 1.6);
   emberLightRef.castShadow = false;
   emberTipRef.add(emberLightRef);
 
@@ -10875,22 +11131,23 @@ if (emberTipRef && !emberLightRef) {
 }
 
 if (emberTipRef && !emberHaloRef) {
-emberHaloMatRef = new THREE.SpriteMaterial({
-  map: emberHaloTex,
-  color: 0xb11800,
-  transparent: true,
-  opacity: 0.13,
-  depthWrite: false,
-  depthTest: true,
-  blending: THREE.AdditiveBlending,
-  toneMapped: false,
-});
+  emberHaloMatRef = new THREE.SpriteMaterial({
+    map: emberHaloTex,
+    color: 0xff5a1f,
+    transparent: true,
+    opacity: 1.0,
+    depthWrite: false,
+    depthTest: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  });
 
   emberHaloRef = new THREE.Sprite(emberHaloMatRef);
   emberTipRef.add(emberHaloRef);
 
-  emberHaloRef.position.set(0.0, 0.0, 0.010);
-emberHaloRef.scale.set(0.032, 0.018, 1.0);
+  emberHaloRef.position.set(0.0, 0.0, 0.016);
+  emberHaloRef.scale.set(0.14, 0.08, 1.0);
+  emberHaloRef.renderOrder = 999;
 
   console.log("🔥 ember halo sprite created on:", emberTipRef.name);
 }
@@ -11106,7 +11363,7 @@ if (gltf.animations && gltf.animations.length > 0) {
 // ✅ GLOBAL LOOK CONTROL (mood / overall darkness)
 // ============================================================
 const LOOK = {
-  exposure: 1.2,
+  exposure: 1.1,
 };
 
 function setupWorldSmokeDebug() {
