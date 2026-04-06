@@ -35,10 +35,10 @@ const isIOS =
 const SAFE_MOBILE = isIOS; // flip to true to test on desktop
 
 const MOBILE_PROFILE = {
-  maxDpr: SAFE_MOBILE ? 1.3 : 2.0,   // desktop lower resolution
+  maxDpr: SAFE_MOBILE ? 1.8 : 2.0,   // desktop lower resolution
   shadows: SAFE_MOBILE ? false : true,
   maxAniso: SAFE_MOBILE ? 2 : null,
-  shadowMapSize: SAFE_MOBILE ? 1024 : 4096,
+  shadowMapSize: SAFE_MOBILE ? 2048 : 4096,
   postFX: SAFE_MOBILE ? false : true,
 };
 
@@ -829,11 +829,11 @@ function setInitialCameraFraming() {
 // Change these numbers to move iOS camera on X / Y / Z
 // ============================================================
 const IOS_CAM = {
-    fov: 22,
+    fov: 20.5,
 
   x: 0.02,    // + = right,  - = left
-  y: -0.148,   // + = up,     - = down
-  z: 0.224,    // + = farther, - = closer
+  y: -0.06,   // + = up,     - = down
+  z: 0.18,    // + = farther, - = closer
 
   targetX: 1.18,
   targetY: -0.155, // multiplied by maxDim below
@@ -1141,6 +1141,7 @@ RectAreaLightUniformsLib.init();
 
 let nightLights = null;
 let remoteMeshRef = null;
+let remoteRootRef = null;
 let skateboardMeshRef = null;
 
 let lampMeshRef = null; 
@@ -1279,47 +1280,36 @@ if (t < window.lampBurstUntil && window.lampBurstParams) {
   nightLights.lampShadow.intensity = lampBaseShadowI * clamped;
 }
 
-// ============================================================
-// ✅ iOS REMOTE PERSPECTIVE FIX
-// - ONLY affects iOS
-// - does NOT touch desktop
-// - does NOT change camera
-// - narrows remote slightly on X
-// - pushes remote slightly farther from camera
-// ============================================================
 const IOS_REMOTE_TWEAK = {
   enabled: true,
 
-  // make the remote look less wide
-  // lower = narrower
-  scaleX: 0.90,
+  scaleX: 1.00,
   scaleY: 1.00,
   scaleZ: 1.00,
 
-  // push remote slightly away from camera
-  // this is multiplied by roomMaxDim
   pushBackFactor: 0.000,
 
-  offsetX: 7.5,
-  offsetY: -0.1,
-  offsetZ: 3.5,
+  // shared movement for remote body + all buttons
+  offsetX: 0.0,
+  offsetY: 0.2,
+  offsetZ: 4.5,
 };
 
-// ============================================================
-// ✅ iOS REMOTE BUTTON OFFSETS
-// - ONLY for the 6 remote buttons
-// - DO NOT affect desktop
-// - DO NOT affect remote body
-// ============================================================
 const IOS_REMOTE_BUTTON_TWEAK = {
   enabled: true,
 
-  power: { x: 0.15, y: -0.1, z: 3.5 }, // x
-  up:    { x: 0.04, y: -0.115, z: 3.55 },
-  down:  { x: 0.02, y: -0.115, z: 3.55 },
-  left:  { x: 0.065, y: -0.115, z: 3.55 },
-  right: { x: -0.02, y: -0.115, z: 3.55 },
-  ok:    { x: 0.02, y: -0.115, z: 3.55 },
+  // tiny per-button correction only
+  power: { x: 0, y: 0, z: 0 },
+  up:    { x: 0, y: 0, z: 0 },
+  down:  { x: 0, y: 0, z: 0 },
+  left:  { x: 0, y: 0, z: 0 },
+  right: { x: 0, y: 0, z: 0 },
+  ok:    { x: 0, y: 0, z: 0 },
+
+  instagram:  { x: 0, y: 0, z: 0 },
+  youtube:  { x: 0, y: 0, z: 0 },
+  contact: { x: 0, y: 0, z: 0 },
+  tiktok:    { x: 0, y: 0, z: 0 },
 };
 
 
@@ -1341,6 +1331,36 @@ function pushMeshAwayFromCamera(mesh, amount) {
   mesh.position.copy(newWorldPos);
 }
 
+function applySharedIOSRemoteOffset(mesh) {
+  if (!isIOSDevice()) return;
+  if (!IOS_REMOTE_TWEAK.enabled) return;
+  if (!mesh) return;
+
+  mesh.position.x += IOS_REMOTE_TWEAK.offsetX;
+  mesh.position.y += IOS_REMOTE_TWEAK.offsetY;
+  mesh.position.z += IOS_REMOTE_TWEAK.offsetZ;
+
+  mesh.updateMatrixWorld(true);
+}
+
+function applyIOSRemoteRootTweak(root) {
+  if (!isIOSDevice()) return;
+  if (!IOS_REMOTE_TWEAK.enabled) return;
+  if (!root) return;
+
+  // prevent double-applying
+  if (root.userData.__iosRemoteRootTweaked) return;
+
+  root.position.x += IOS_REMOTE_TWEAK.offsetX;
+  root.position.y += IOS_REMOTE_TWEAK.offsetY;
+  root.position.z += IOS_REMOTE_TWEAK.offsetZ;
+
+  root.updateMatrixWorld(true);
+  root.userData.__iosRemoteRootTweaked = true;
+
+  console.log("📱 iOS remote ROOT moved:", root.position);
+}
+
 function applyIOSRemoteTweakToMesh(mesh) {
   if (!isIOSDevice()) return;
   if (!IOS_REMOTE_TWEAK.enabled) return;
@@ -1357,9 +1377,7 @@ function applyIOSRemoteTweakToMesh(mesh) {
   const pushAmount = roomMaxDim * IOS_REMOTE_TWEAK.pushBackFactor;
   pushMeshAwayFromCamera(mesh, pushAmount);
 
-  mesh.position.x += IOS_REMOTE_TWEAK.offsetX;
-  mesh.position.y += IOS_REMOTE_TWEAK.offsetY;
-  mesh.position.z += IOS_REMOTE_TWEAK.offsetZ;
+applySharedIOSRemoteOffset(mesh);
 
   mesh.updateMatrixWorld(true);
 
@@ -1378,9 +1396,11 @@ function applyIOSButtonOffset(mesh, offset, keyName) {
   // ----------------------------------------------------------
   // 1) First apply your current tuned position offset
   // ----------------------------------------------------------
-  mesh.position.x += offset.x;
-  mesh.position.y += offset.y;
-  mesh.position.z += offset.z;
+applySharedIOSRemoteOffset(mesh);
+
+mesh.position.x += offset.x;
+mesh.position.y += offset.y;
+mesh.position.z += offset.z;
 
   mesh.updateMatrixWorld(true);
 
@@ -1438,20 +1458,22 @@ function applyIOSButtonOffset(mesh, offset, keyName) {
 function applyIOSRemoteTweaks() {
   if (!isIOSDevice()) return;
 
-  // ==========================================================
-  // REMOTE BODY ONLY
-  // ==========================================================
-  applyIOSRemoteTweakToMesh(remoteMeshRef);
+  // move the actual remote GLB root
+  applyIOSRemoteRootTweak(remoteRootRef);
 
-  // ==========================================================
-  // BUTTONS ONLY
-  // ==========================================================
+  // main remote buttons
   applyIOSButtonOffset(powerButtonMeshRef, IOS_REMOTE_BUTTON_TWEAK.power, "power");
   applyIOSButtonOffset(okButtonMeshRef,    IOS_REMOTE_BUTTON_TWEAK.ok,    "ok");
   applyIOSButtonOffset(upArrowMeshRef,     IOS_REMOTE_BUTTON_TWEAK.up,    "up");
   applyIOSButtonOffset(downArrowMeshRef,   IOS_REMOTE_BUTTON_TWEAK.down,  "down");
   applyIOSButtonOffset(leftArrowMeshRef,   IOS_REMOTE_BUTTON_TWEAK.left,  "left");
   applyIOSButtonOffset(rightArrowMeshRef,  IOS_REMOTE_BUTTON_TWEAK.right, "right");
+
+  // social buttons
+  applyIOSButtonOffset(socialInstagramMeshRef, IOS_REMOTE_BUTTON_TWEAK.instagram, "instagram");
+  applyIOSButtonOffset(socialYoutubeMeshRef,   IOS_REMOTE_BUTTON_TWEAK.youtube,   "youtube");
+  applyIOSButtonOffset(socialTikTokMeshRef,    IOS_REMOTE_BUTTON_TWEAK.tiktok,    "tiktok");
+  applyIOSButtonOffset(socialContactMeshRef,   IOS_REMOTE_BUTTON_TWEAK.contact,   "contact");
 }
 
 // ============================================================
@@ -9949,19 +9971,6 @@ if (!grimReaperRef && n === "grim_reaper") {
   console.log("☠️ Grim_reaper permanently hidden:", o.name, "| material:", o.material?.name);
 }
 
-if (
-  n === "pasted__remote" ||
-  (o.material?.name || "").toLowerCase() === "pasted__remote" ||
-  (o.parent?.name || "").toLowerCase() === "pasted__remote"
-) {
-  o.visible = false;
-  o.castShadow = false;
-  o.receiveShadow = false;
-  o.raycast = () => null;
-
-  console.log("📺 pasted__remote permanently hidden:", o.name, "| material:", o.material?.name);
-}
-
       // ✅ Capture Picture1 mesh by name OR material name
       const mnLower = (o.material?.name || "").toLowerCase();
       if (!picture1MeshRef && (n.includes("picture1") || mnLower.includes("picture1"))) {
@@ -10007,30 +10016,25 @@ if (n.includes("door") && o.material && o.material.color) {
   o.material.needsUpdate = true;
 }
 
-// ============================================================
-// ✅ REMOTE — reduce visual dominance (hierarchy control)
-// ============================================================
-if (n.includes("remote") && o.material) {
-  remoteMeshRef = o; // ✅ store the main remote body mesh
+if (n === "pasted_remote" && o.material) {
+  remoteMeshRef = o;
 
-  o.material = o.material.clone(); // isolate
+  console.log("📱 remoteMeshRef = pasted_remote:", o.name, "| material:", o.material?.name);
 
-  // Slightly darken overall
+  o.material = o.material.clone();
+
   if (o.material.color) {
     o.material.color.multiplyScalar(0.90);
   }
 
-  // Make highlights much broader / softer
   if ("roughness" in o.material) {
     o.material.roughness = Math.max(o.material.roughness ?? 0.6, 0.92);
   }
 
-  // Remove specular punch
   if ("metalness" in o.material) {
     o.material.metalness = 0.0;
   }
 
-  // Kill environment reflections almost completely
   if ("envMapIntensity" in o.material) {
     o.material.envMapIntensity = 0.0;
   }
@@ -10590,9 +10594,6 @@ if (lampMeshRef) {
   const meshName = (o.name || "").toLowerCase();
   const matName  = (o.material?.name || "").toLowerCase();
   
-
-  // -------------------------
-// REMOTE UI BUTTONS
 
 // ----- DOWN ARROW -----
 const isDownArrow =
@@ -11311,6 +11312,8 @@ newRemoteLoader.load(
 
     const remote = gltf.scene;
 
+    remoteRootRef = remote;
+
     // add it to the same parent as your other extra model loads
     anchor.add(remote);
 
@@ -11358,6 +11361,12 @@ newRemoteLoader.load(
     }
   }
 
+  // ✅ THIS is the actual iOS remote body
+  if ((o.name || "").toLowerCase() === "pasted_remote") {
+    remoteMeshRef = o;
+    console.log("📱 remoteMeshRef set from New remote.glb:", o.name);
+  }
+
   o.castShadow = true;
   o.receiveShadow = true;
   o.frustumCulled = true;
@@ -11368,6 +11377,9 @@ newRemoteLoader.load(
 
     // STARTING TEST SCALE
     remote.scale.set(1, 1, 1);
+
+        // ✅ now that the remote body exists, apply iOS body/button offsets
+    applyIOSRemoteTweaks();
 
     // OPTIONAL: inspect mesh names in console
     remote.traverse((o) => {

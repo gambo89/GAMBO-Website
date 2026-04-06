@@ -55,6 +55,7 @@
   will-change: transform;
 }
 
+
 @keyframes loaderBgDrift {
   0% {
     transform: scale(1) translate(0px, 0px);
@@ -80,6 +81,10 @@
   justify-content: center;
 }
 
+body.ios .loader-inner {
+  transform: translateY(-4%);
+}
+
 #loader-status {
   margin-top: 18px;
   min-height: 18px;
@@ -91,6 +96,11 @@
   user-select: none;
   opacity: 0.9;
   letter-spacing: 0.04em;
+}
+
+body.ios #loader-status {
+  margin-top: 6px;
+  font-size: 14px;
 }
 
 #loader-status.is-enter-ready {
@@ -173,8 +183,8 @@ body.ios #loader-status {
 
 /* iOS only */
 body.ios .loader-logo-wrap {
-  width: min(38vw, 320px);   /* change these numbers */
-  transform: translate(-6px, 0px);
+  width: min(34vw, 270px);
+  transform: translate(-6px, 6px);
 }
 
 .loader-logo {
