@@ -35,10 +35,10 @@ const isIOS =
 const SAFE_MOBILE = isIOS; // flip to true to test on desktop
 
 const MOBILE_PROFILE = {
-  maxDpr: SAFE_MOBILE ? 1.8 : 2.0,   // desktop lower resolution
+  maxDpr: SAFE_MOBILE ? 2.0 : 2.0,   // desktop lower resolution
   shadows: SAFE_MOBILE ? false : true,
   maxAniso: SAFE_MOBILE ? 2 : null,
-  shadowMapSize: SAFE_MOBILE ? 2048 : 4096,
+  shadowMapSize: SAFE_MOBILE ? 4096 : 4096,
   postFX: SAFE_MOBILE ? false : true,
 };
 
@@ -116,8 +116,12 @@ async function enterSceneFromLoader() {
 
   hideLoader();
 
-  // start smoke alarm chirp schedule
+// start smoke alarm chirp schedule (desktop only)
+if (!isIOS) {
   startSmokeChirpCycle();
+} else {
+  stopSmokeChirpCycle();
+}
 
   // ✅ lazy load playlist AFTER first entry
   startLazyPlaylistLoad();
@@ -829,22 +833,22 @@ function setInitialCameraFraming() {
 // Change these numbers to move iOS camera on X / Y / Z
 // ============================================================
 const IOS_CAM = {
-    fov: 20.5,
+    fov: 20.0,
 
   x: 0.02,    // + = right,  - = left
-  y: -0.06,   // + = up,     - = down
-  z: 0.18,    // + = farther, - = closer
+  y: -0.059,   // + = up,     - = down
+  z: 0.1899,    // + = farther, - = closer
 
   targetX: 1.18,
-  targetY: -0.155, // multiplied by maxDim below
+  targetY: -0.150, // multiplied by maxDim below
   targetZ: 0,
 };
 
 const IOS_LAMP = {
   scale: 1.0,
-  x: 1.4,
-  y: 0.2,
-  z: 0.0,
+  x: 2.0,
+  y: 0.5,
+  z: 4.0,
 };
 
 function setIOSCameraFraming(maxDim) {
@@ -1142,6 +1146,7 @@ RectAreaLightUniformsLib.init();
 let nightLights = null;
 let remoteMeshRef = null;
 let remoteRootRef = null;
+let remoteFillLightRef = null;
 let skateboardMeshRef = null;
 
 let lampMeshRef = null; 
@@ -1292,7 +1297,7 @@ const IOS_REMOTE_TWEAK = {
   // shared movement for remote body + all buttons
   offsetX: 0.0,
   offsetY: 0.2,
-  offsetZ: 4.5,
+  offsetZ: 6.6,
 };
 
 const IOS_REMOTE_BUTTON_TWEAK = {
@@ -1474,6 +1479,31 @@ function applyIOSRemoteTweaks() {
   applyIOSButtonOffset(socialYoutubeMeshRef,   IOS_REMOTE_BUTTON_TWEAK.youtube,   "youtube");
   applyIOSButtonOffset(socialTikTokMeshRef,    IOS_REMOTE_BUTTON_TWEAK.tiktok,    "tiktok");
   applyIOSButtonOffset(socialContactMeshRef,   IOS_REMOTE_BUTTON_TWEAK.contact,   "contact");
+}
+
+function updateIOSRemoteFillLight(maxDim) {
+  if (!isIOSDevice()) return;
+  if (!remoteRootRef) return;
+
+  const remotePos = new THREE.Vector3();
+  remoteRootRef.getWorldPosition(remotePos);
+
+  if (!remoteFillLightRef) {
+    remoteFillLightRef = new THREE.PointLight(0xffe6c8, 6.5, maxDim * 1.2, 2);
+    scene.add(remoteFillLightRef);
+  }
+
+  remoteFillLightRef.intensity = 6.5;
+  remoteFillLightRef.distance = maxDim * 1.2;
+  remoteFillLightRef.decay = 2;
+
+  remoteFillLightRef.position.copy(remotePos).add(
+    new THREE.Vector3(
+      maxDim * 0.22,
+      maxDim * 0.08,
+      maxDim * 0.18
+    )
+  );
 }
 
 // ============================================================
@@ -1708,6 +1738,9 @@ let iosPulseStarted = false;  // helps initialize schedule once
 let iosRemoteRippleTimers = [];
 let iosRemotePulseCycleId = 0; // ✅ invalidates stale ripple timeouts
 
+let iosPowerPulseTimer = null;
+let iosPowerPulseOn = false;
+
 function setRemoteGlowPulse(on) {
   if (iosSoloGlowActive) return;
   if (overlayOpen || videoOverlayOpen || modelOverlayOpen) return;
@@ -1777,6 +1810,41 @@ function stopIosRemotePulse() {
   iosPulseOn = false;
   forceAllRemoteNavGlowOff();
   setRemoteGlowPulse(false);
+}
+
+function stopIosPowerPulse() {
+  if (iosPowerPulseTimer) {
+    clearTimeout(iosPowerPulseTimer);
+    iosPowerPulseTimer = null;
+  }
+
+  iosPowerPulseOn = false;
+  setGlowTarget(powerButtonMeshRef, false, POWER_GLOW_COLOR);
+}
+
+function startIosPowerPulse() {
+  if (!isIOSDevice()) return;
+  if (!powerButtonMeshRef) return;
+
+  stopIosPowerPulse();
+
+  function tick() {
+    if (!isIOSDevice()) return;
+    if (tvOn) {
+      stopIosPowerPulse();
+      return;
+    }
+
+    iosPowerPulseOn = !iosPowerPulseOn;
+    setGlowTarget(powerButtonMeshRef, iosPowerPulseOn, POWER_GLOW_COLOR);
+
+    iosPowerPulseTimer = setTimeout(
+      tick,
+      iosPowerPulseOn ? IOS_POWER_ON_MS : IOS_POWER_OFF_MS
+    );
+  }
+
+  tick();
 }
 
 function startIosRemotePulse() {
@@ -2029,6 +2097,24 @@ function showTvHint(show) {
 
   tvHintVisible = show;
   tvHint.style.opacity = show ? "1" : "0";
+}
+
+function popIosFullscreenHint() {
+  if (!isIOSDevice()) return;
+  if (!tvOn) return;
+
+  // ✅ kill the menu-controls hint immediately
+  hideIosMenuControlsHint();
+
+  // ✅ make sure only one TV hint is visible
+  showTvHint(false);
+
+  tvHint.innerText = "double tap to view full screen";
+  showTvHint(true);
+
+  setTimeout(() => {
+    showTvHint(false);
+  }, 3000);
 }
 
 function updateTvHintText() {
@@ -2353,19 +2439,25 @@ wallHintMain.innerText = "press to draw";
 const wallHintSub1 = document.createElement("div");
 wallHintSub1.style.fontSize = "12px";
 wallHintSub1.style.opacity = "0.85";
-wallHintSub1.innerText = "C = change color";
+wallHintSub1.innerText = isIOSDevice()
+  ? "double tap = change color"
+  : "C = change color";
 
 const wallHintSub2 = document.createElement("div");
 wallHintSub2.style.fontSize = "12px";
 wallHintSub2.style.opacity = "0.85";
 wallHintSub2.style.marginTop = "2px";
-wallHintSub2.innerText = "E = erase";
+wallHintSub2.innerText = isIOSDevice()
+  ? "2 finger hold = erase"
+  : "E = erase";
 
 const wallHintSub3 = document.createElement("div");
 wallHintSub3.style.fontSize = "12px";
 wallHintSub3.style.opacity = "0.85";
 wallHintSub3.style.marginTop = "2px";
-wallHintSub3.innerText = "double click = clear wall";
+wallHintSub3.innerText = isIOSDevice()
+  ? "triple tap = clear wall"
+  : "double click = clear wall";
 
 wallHint.appendChild(wallHintMain);
 wallHint.appendChild(wallHintSub1);
@@ -2492,30 +2584,30 @@ let iosMenuHintTimeout = null;
 
 const iosMenuHint = document.createElement("div");
 iosMenuHint.style.position = "fixed";
-iosMenuHint.style.left = "48.35%";
-iosMenuHint.style.bottom = "110px";
+iosMenuHint.style.left = "50%";
+iosMenuHint.style.bottom = "80px";
 iosMenuHint.style.transform = "translateX(-50%)";
-iosMenuHint.style.padding = "12px 18px";
-iosMenuHint.style.borderRadius = "18px";
-iosMenuHint.style.background = "rgba(0,0,0,0.65)";
+iosMenuHint.style.padding = "10px 16px";
+iosMenuHint.style.borderRadius = "20px";
+iosMenuHint.style.background = "rgba(0,0,0,0.6)";
 iosMenuHint.style.color = "#fff";
 iosMenuHint.style.fontFamily = "Arial, sans-serif";
 iosMenuHint.style.textAlign = "center";
 iosMenuHint.style.pointerEvents = "none";
 iosMenuHint.style.opacity = "0";
-iosMenuHint.style.transition = "opacity 0.2s ease";
+iosMenuHint.style.transition = "opacity 0.25s ease";
 iosMenuHint.style.zIndex = "9998";
 
 // 2-line layout
 const iosMenuHintLine1 = document.createElement("div");
 iosMenuHintLine1.style.fontSize = "14px";
-iosMenuHintLine1.style.fontWeight = "700";
+iosMenuHintLine1.style.fontWeight = "600";
 iosMenuHintLine1.innerText = "swipe to change selection";
 
 const iosMenuHintLine2 = document.createElement("div");
-iosMenuHintLine2.style.fontSize = "13px";
-iosMenuHintLine2.style.opacity = "0.9";
-iosMenuHintLine2.style.marginTop = "4px";
+iosMenuHintLine2.style.fontSize = "12px";
+iosMenuHintLine2.style.opacity = "0.85";
+iosMenuHintLine2.style.marginTop = "2px";
 iosMenuHintLine2.innerText = "tap to view selection";
 
 iosMenuHint.appendChild(iosMenuHintLine1);
@@ -2538,6 +2630,14 @@ function showIosMenuControlsHintOnce() {
   }, 5000);
 }
 
+function hideIosMenuControlsHint() {
+if (iosMenuHintTimeout) {
+    clearTimeout(iosMenuHintTimeout);
+    iosMenuHintTimeout = null;
+  }
+
+  iosMenuHint.style.opacity = "0";
+}
 
 // Helper to hide all remote hints quickly
 function hideRemoteHints() {
@@ -3880,12 +3980,14 @@ function drawTvMenu() {
   // vertical layout values
   tvCtx.textAlign = "center";
   tvCtx.textBaseline = "middle";
-  tvCtx.font = "bold 86px Arial";
+  tvCtx.font = isIOSDevice()
+  ? "bold 118px Arial"
+  : "bold 102px Arial";
   tvCtx.fillStyle = "white";
 
   const cx = w * 0.5;
-  const startY = h * 0.35;
-  const gapY = 130;
+  const startY = isIOSDevice() ? h * 0.31 : h * 0.33;
+  const gapY   = isIOSDevice() ? 160     : 145;
 
    // blinking highlight ✅ (restored)
   const t = (performance.now() - blinkT0) * 0.001; // seconds since last selection change
@@ -3932,28 +4034,31 @@ function confirmMenuSelection() {
   // switch UI state
   tvUiState = selected; // "PHOTO" | "VIDEO" | "3D MODEL"
 
-  // ✅ PHOTO mode: load the first photo immediately
   if (tvUiState === "PHOTO") {
     photoImage = null;
     photoLoading = false;
     loadPhotoAt(0);
+
+    popIosFullscreenHint();
     return;
   }
 
-if (tvUiState === "VIDEO") {
-  ensureVideoEl();
-  loadVideoAt(0, { autoPlay: true }); // start playing immediately
-  return;
-}
+  if (tvUiState === "VIDEO") {
+    ensureVideoEl();
+    loadVideoAt(0, { autoPlay: true });
 
-if (tvUiState === "3D MODEL") {
-  ensureModelVideoEl();
-  loadModelAt(0, { autoPlay: true }); // start playing immediately
-  return;
-}
+    popIosFullscreenHint();
+    return;
+  }
 
-  // ✅ 3D MODEL (placeholder for now)
-  // keep menu (or you can clear screen)
+  if (tvUiState === "3D MODEL") {
+    ensureModelVideoEl();
+    loadModelAt(0, { autoPlay: true });
+
+    popIosFullscreenHint();
+    return;
+  }
+
   drawTvMenu();
 }
 
@@ -4118,7 +4223,8 @@ function ensureVideoEl() {
   videoEl.playsInline = true;
   videoEl.setAttribute("webkit-playsinline", ""); // iOS Safari
   videoEl.loop = true; // optional (feel free to set false)
-  videoEl.muted = false; // audio allowed, but play requires a gesture (OK click counts)
+  videoEl.muted = false;
+  videoEl.volume = 1.0;
   videoEl.controls = false;
 
 videoEl.addEventListener("loadeddata", async () => {
@@ -4201,6 +4307,9 @@ async function playVideo() {
   if (!videoEl) return;
 
   try {
+    videoEl.muted = false;
+    videoEl.volume = 1.0;
+
     await videoEl.play();
     videoPlaying = true;
   } catch (err) {
@@ -4409,7 +4518,7 @@ function ensureModelVideoEl() {
   modelVideoEl.playsInline = true;
   modelVideoEl.setAttribute("webkit-playsinline", "");
   modelVideoEl.loop = true;
-  modelVideoEl.muted = false;
+  modelVideoEl.muted = isIOS ? true : false;
   modelVideoEl.controls = false;
 
   modelVideoEl.addEventListener("loadeddata", async () => {
@@ -4499,13 +4608,17 @@ async function playModel() {
   if (tvUiState !== "3D MODEL") return;
   if (!modelVideoEl) return;
 
-  try {
-    await modelVideoEl.play();
-    modelPlaying = true;
-  } catch (err) {
-    console.warn("3D Model play blocked (needs user gesture):", err);
-    modelPlaying = false;
+ try {
+  await modelVideoEl.play();
+  modelPlaying = true;
+
+  if (isIOS) {
+    playBackgroundAudio();
   }
+} catch (err) {
+  console.warn("3D Model play blocked (needs user gesture):", err);
+  modelPlaying = false;
+}
 }
 
 function pauseModel() {
@@ -4812,7 +4925,7 @@ function ensureSmokeChirpAudio() {
   smokeChirpAudio.loop = false;
   smokeChirpAudio.playsInline = true;
   smokeChirpAudio.setAttribute?.("webkit-playsinline", "");
-  smokeChirpAudio.volume = isIOS ? 0.005 : 0.009;
+  smokeChirpAudio.volume = isIOS ? 0.12 : 0.08;
   smokeChirpAudio.load();
 
   return smokeChirpAudio;
@@ -5471,12 +5584,9 @@ function handleIOSTvTap(uv) {
   
 // ✅ If TV is OFF, any tap on the screen turns it ON and shows MENU
 if (!tvOn) {
-  playTvOnSound();
   setTvPower(true);
 
-  // ✅ iOS onboarding hint (4 seconds)
   showIosMenuControlsHintOnce();
-
   return true;
 }
 
@@ -5721,15 +5831,18 @@ if (!tvOn) {
 
   tvAnim = { from, to, t0: performance.now() / 1000 };
 
-// ✅ Keep remote pulses in sync with TV on/off
 if (isIOSDevice()) {
   if (tvOn) {
-    // ✅ always restart iOS pulse fresh when TV turns on
+    // TV ON: stop power pulse, start nav pulse
+    stopIosPowerPulse();
+
     iosPulseStarted = false;
     iosNextPulseAtMs = 0;
     startIosRemotePulse();
   } else {
+    // TV OFF: stop nav pulse, restart power pulse
     stopIosRemotePulse();
+    startIosPowerPulse();
   }
 } else {
   syncDesktopPulseWithTvState();
@@ -6424,8 +6537,12 @@ if (downArrowMeshRef && isInHierarchy(hit, downArrowMeshRef)) {
 }
 
 if (leftArrowMeshRef && isInHierarchy(hit, leftArrowMeshRef)) {
-  if (isIOSDevice() && e.pointerType === "touch") iosSoloGlow(leftArrowMeshRef);
-    markDesktopRemoteUsed();
+  if (isIOSDevice() && e.pointerType === "touch") {
+    iosSoloGlow(leftArrowMeshRef);
+    markIosRemoteUsed();
+  }
+
+  markDesktopRemoteUsed();
   setPressAxisFromHit(leftArrowMeshRef, hitInfo);
   setPressTarget(leftArrowMeshRef, true);
 }
@@ -6901,7 +7018,7 @@ if (
 
   // these must match drawTvMenu()
   const startY = h * 0.35;
-  const gapY = 130;
+  const gapY = 170;
   const n = MENU_ITEMS.length;
 
   const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
@@ -7188,7 +7305,7 @@ scene.add(pinRight);
   scene.add(tvFill);
 
   // --- remote boost (Layer 2 only) ---
-  const remoteBoost = new THREE.SpotLight(0xfff1df, 45);
+  const remoteBoost = new THREE.SpotLight(0xfff1df, isIOS ? 95 : 45);
   remoteBoost.angle = Math.PI / 10;
   remoteBoost.penumbra = 1.0;
   remoteBoost.decay = 2;
@@ -7228,8 +7345,8 @@ scene.add(pinRight);
 // ✅ SHELF CAVITY FILL (adds depth separation)
 // ============================================================
 const shelfFill = new THREE.RectAreaLight(
-  0xd9ecff,     // cool bounce
-  0.35,         // intensity (small!)
+  0xd9ecff,
+  isIOS ? 0.5 : 0.35,
   maxDim * 0.55,
   maxDim * 0.22
 );
@@ -7419,13 +7536,11 @@ function tuneStaticSceneMaterial(mat, meshName = "") {
   }
 
   // remote
-  // remote
-  if (n.includes("remote")) {
-    if ("envMapIntensity" in mat) mat.envMapIntensity = 0.0;
-    if ("roughness" in mat) mat.roughness = 1.0;
-    if ("metalness" in mat) mat.metalness = 0.0;
-    if (mat.color) mat.color.multiplyScalar(0.92);
-  }
+ if (n.includes("remote")) {
+  if ("envMapIntensity" in mat) mat.envMapIntensity = 0.0;
+  if ("roughness" in mat) mat.roughness = 1.0;
+  if ("metalness" in mat) mat.metalness = 0.0;
+}
 
   // small metal accents / frames / knobs
   if (
@@ -8607,10 +8722,18 @@ function getWallSurfaceAlpha(x, y) {
   return a;
 }
 
-function sprayDot(x, y) {
+function sprayDot(x, y, pressure = 1) {
   if (!wallDrawCtx) return;
 
   const paintRgb = getWallPaintRgb(wallMarkerColor);
+
+  const p = Math.max(1, pressure);
+const coreCount = Math.round(WALL_SPRAY_CORE_DABS * (0.9 + (p - 1) * 0.55));
+const edgeCount = Math.round(WALL_SPRAY_EDGE_DABS * (0.9 + (p - 1) * 0.45));
+const coreJitter = WALL_SPRAY_JITTER * (0.95 + (p - 1) * 0.55);
+const edgeJitter = WALL_SPRAY_EDGE_JITTER * (0.95 + (p - 1) * 0.60);
+const radiusScale = 1.0 + (p - 1) * 0.55;
+const holeScale = 1.0 + (p - 1) * 0.35;
 
   wallDrawCtx.save();
   wallDrawCtx.globalCompositeOperation = "source-over";
@@ -8618,9 +8741,9 @@ function sprayDot(x, y) {
   // --------------------------------------------------
   // PASS 1: main body of paint
   // --------------------------------------------------
-  for (let i = 0; i < WALL_SPRAY_CORE_DABS; i++) {
+  for (let i = 0; i < coreCount; i++) {
     const angle = Math.random() * Math.PI * 2;
-    const dist = Math.pow(Math.random(), 2.35) * WALL_SPRAY_JITTER;
+    const dist = Math.pow(Math.random(), 2.35) * coreJitter;
 
     const dx = Math.cos(angle) * dist;
     const dy = Math.sin(angle) * dist;
@@ -8631,7 +8754,8 @@ function sprayDot(x, y) {
   const r =
   (WALL_SPRAY_DOT_MIN +
     Math.random() * (WALL_SPRAY_DOT_MAX - WALL_SPRAY_DOT_MIN)) *
-  (0.85 + Math.random() * 0.35);
+  (0.85 + Math.random() * 0.35) *
+  radiusScale;
 
     const baseAlpha =
       WALL_PAINT_ALPHA_MIN +
@@ -8649,12 +8773,12 @@ function sprayDot(x, y) {
   // --------------------------------------------------
   // PASS 2: subtle edge dust
   // --------------------------------------------------
-  for (let i = 0; i < WALL_SPRAY_EDGE_DABS; i++) {
+ for (let i = 0; i < edgeCount; i++) {
     const angle = Math.random() * Math.PI * 2;
 
     const dist =
-      WALL_SPRAY_JITTER +
-      Math.random() * (WALL_SPRAY_EDGE_JITTER - WALL_SPRAY_JITTER);
+  coreJitter +
+  Math.random() * (edgeJitter - coreJitter);
 
     const dx = Math.cos(angle) * dist;
     const dy = Math.sin(angle) * dist;
@@ -8662,7 +8786,7 @@ function sprayDot(x, y) {
     const px = x + dx;
     const py = y + dy;
 
-    const r = 0.25 + Math.random() * 0.55;
+    const r = (0.25 + Math.random() * 0.55) * radiusScale;
     const wallAlpha = getWallSurfaceAlpha(px, py);
     const alpha = (0.008 + Math.random() * 0.012) * wallAlpha * 0.9;
 
@@ -8679,7 +8803,7 @@ function sprayDot(x, y) {
     if (Math.random() > WALL_SPRAY_HOLE_CHANCE) continue;
 
     const angle = Math.random() * Math.PI * 2;
-    const dist = Math.pow(Math.random(), 2.2) * WALL_SPRAY_JITTER;
+    const dist = Math.pow(Math.random(), 2.2) * coreJitter;
 
     const dx = Math.cos(angle) * dist;
     const dy = Math.sin(angle) * dist;
@@ -8687,7 +8811,7 @@ function sprayDot(x, y) {
     const px = x + dx;
     const py = y + dy;
 
-    const r = 0.18 + Math.random() * 0.30;
+    const r = (0.18 + Math.random() * 0.30) * holeScale;
 
     wallDrawCtx.globalCompositeOperation = "destination-out";
     wallDrawCtx.beginPath();
@@ -8713,8 +8837,8 @@ function drawOnWallAtUV(uv) {
     wallDrawCtx.arc(x, y, WALL_ERASER_RADIUS, 0, Math.PI * 2);
     wallDrawCtx.fill();
   } else {
-    sprayDot(x, y);
-  }
+  sprayDot(x, y, wallDrawPressure);
+}
 
   wallDrawCtx.restore();
   wallDrawTex.needsUpdate = true;
@@ -8741,17 +8865,20 @@ function drawWallLineUV(uvA, uvB) {
     wallDrawCtx.lineTo(x2, y2);
     wallDrawCtx.stroke();
   } else {
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const dist = Math.hypot(dx, dy);
-    const steps = Math.max(1, Math.ceil(dist / (0.8 + Math.random() * 0.3)));
+   const pressure = wallDrawPressure || WALL_PRESSURE_MIN;
+const dx = x2 - x1;
+const dy = y2 - y1;
+const dist = Math.hypot(dx, dy);
 
-    for (let i = 0; i <= steps; i++) {
-      const t = i / steps;
-      const x = x1 + dx * t;
-      const y = y1 + dy * t;
-      sprayDot(x, y);
-    }
+const spacing = (0.8 + Math.random() * 0.3) / Math.max(1, pressure * 0.75);
+const steps = Math.max(1, Math.ceil(dist / spacing));
+
+for (let i = 0; i <= steps; i++) {
+  const t = i / steps;
+  const x = x1 + dx * t;
+  const y = y1 + dy * t;
+  sprayDot(x, y, pressure);
+}
   }
 
   wallDrawCtx.restore();
@@ -9464,6 +9591,13 @@ let hasLastWallDrawUv = false;
 
 let wallTool = "pen"; // "pen" or "eraser"
 
+let wallDrawStartMs = 0;
+let wallDrawPressure = 1.0;
+
+const WALL_PRESSURE_MIN = 1.0;
+const WALL_PRESSURE_MAX = 1.9;
+const WALL_PRESSURE_RAMP_MS = 1600;
+
 const WALL_MARKER_COLORS = [
   "#000000", // black
   "#FFFFFF", // white
@@ -9504,6 +9638,16 @@ const WALL_ERASER_LINE_WIDTH = 24;
 const wallDrawUv = new THREE.Vector2();
 const lastWallDrawUv = new THREE.Vector2();
 const wallDrawRaycastHits = [];
+
+const IOS_WALL_DOUBLE_TAP_MS = 300;
+const IOS_WALL_TRIPLE_TAP_MS = 480;
+const IOS_WALL_HOLD_MS = 220;
+
+let iosWallTapCount = 0;
+let iosWallTapTimer = null;
+let iosWallEraseHoldTimer = null;
+let iosWallTwoFingerEraseActive = false;
+let iosWallPrevTool = "pen";
 
 const WALL_DRAW_SIZE = 1024;
 
@@ -10023,10 +10167,6 @@ if (n === "pasted_remote" && o.material) {
 
   o.material = o.material.clone();
 
-  if (o.material.color) {
-    o.material.color.multiplyScalar(0.90);
-  }
-
   if ("roughness" in o.material) {
     o.material.roughness = Math.max(o.material.roughness ?? 0.6, 0.92);
   }
@@ -10037,6 +10177,14 @@ if (n === "pasted_remote" && o.material) {
 
   if ("envMapIntensity" in o.material) {
     o.material.envMapIntensity = 0.0;
+  }
+
+  if ("emissive" in o.material) {
+    o.material.emissive.setHex(0x000000);
+  }
+
+  if ("emissiveIntensity" in o.material) {
+    o.material.emissiveIntensity = 0.0;
   }
 
   o.material.needsUpdate = true;
@@ -10321,7 +10469,7 @@ if (nightLights) {
   if (nightLights.lampShadow)    nightLights.lampShadow.intensity *= 1.0;
   if (nightLights.rightPush)     nightLights.rightPush.intensity *= 0.85;
   if (nightLights.tvFill)        nightLights.tvFill.intensity *= 1.55;
-  if (nightLights.remoteBoost)   nightLights.remoteBoost.intensity *= 0.28;
+  if (nightLights.remoteBoost)   nightLights.remoteBoost.intensity *= isIOS ? 0.35 : 0.28;
   if (nightLights.underShelfUp)  nightLights.underShelfUp.intensity *= 1.06;
 }
 
@@ -10395,6 +10543,34 @@ if (lampMeshRef && lampMeshRef.material) {
   m.needsUpdate = true;
 }
 
+if (remoteRootRef && nightLights?.remoteBoost) {
+  const remotePos = new THREE.Vector3();
+  remoteRootRef.getWorldPosition(remotePos);
+
+  if (isIOSDevice()) {
+    // iOS: warm side-light from the RIGHT, slightly above, slightly forward
+    nightLights.remoteBoost.position.copy(remotePos).add(
+      new THREE.Vector3(
+        maxDim * 0.52,   // more to the RIGHT
+        maxDim * 0.10,   // only a little higher
+        maxDim * 0.18    // slightly forward
+      )
+    );
+  } else {
+    // desktop: keep your original placement
+    nightLights.remoteBoost.position.copy(remotePos).add(
+      new THREE.Vector3(
+        maxDim * 0.22,
+        maxDim * 0.20,
+        maxDim * 0.55
+      )
+    );
+  }
+
+  nightLights.remoteBoost.target.position.copy(remotePos);
+  nightLights.remoteBoost.target.updateMatrixWorld(true);
+}
+
     if (skateboardMeshRef) {
       const skatePos = new THREE.Vector3();
       skateboardMeshRef.getWorldPosition(skatePos);
@@ -10457,6 +10633,7 @@ setTimeout(() => {
   // ✅ iOS only: fix remote body perspective after camera/layout settle
   applyIOSRemoteTweaks();
   applyIOSLampTransform();
+  updateIOSRemoteFillLight(maxDim);
 
 }, 260);
 
@@ -10842,14 +11019,8 @@ if (isRightArrow) {
   o.frustumCulled = true;
 });
 
-
 ui.updateMatrixWorld(true);
 console.log("Interactives loaded");
-
-// ✅ iOS only: fix remote buttons after they exist
-applyIOSRemoteTweaks();
-
-syncDesktopPulseWithTvState();
 
 // Force TV to start OFF
 tvOn = false;
@@ -10858,6 +11029,15 @@ if (tvScreenMatRef) {
   tvScreenMatRef.emissiveIntensity = 0.0;
   tvScreenMatRef.color.setHex(0x111111);
   tvScreenMatRef.needsUpdate = true;
+}
+
+// ✅ iOS only: fix remote buttons after they exist
+applyIOSRemoteTweaks();
+
+if (isIOSDevice()) {
+  startIosPowerPulse();
+} else {
+  syncDesktopPulseWithTvState();
 }
 
 },
@@ -11320,6 +11500,10 @@ newRemoteLoader.load(
  remote.traverse((o) => {
   if (!o.isMesh) return;
 
+  // ✅ make remote receive accent lighting
+  o.layers.enable(LAYER_ACCENT);
+  o.layers.enable(LAYER_WORLD);
+
   // same behavior as your working scene meshes
   if (o.geometry && o.geometry.attributes.uv && !o.geometry.attributes.uv2) {
     o.geometry.setAttribute("uv2", o.geometry.attributes.uv);
@@ -11341,25 +11525,72 @@ newRemoteLoader.load(
   }
 
   if (mat) {
-    o.material = mat;
+  o.material = mat.clone();
 
+  if ((o.name || "").toLowerCase() === "pasted_remote") {
+    if (o.material.color) {
+      o.material.color.multiplyScalar(isIOS ? 1.90 : 1.0);
+
+      // warm it slightly on iOS
+      if (isIOS) {
+        o.material.color.r *= 1.05;
+        o.material.color.g *= 1.02;
+        o.material.color.b *= 0.90;
+      }
+    }
+
+    // keep it matte
+    if ("roughness" in o.material) o.material.roughness = 1.0;
+    if ("metalness" in o.material) o.material.metalness = 0.0;
+
+    // kill cool env reflections on iOS
+    if ("envMapIntensity" in o.material) {
+      o.material.envMapIntensity = isIOS ? 0.0 : 0.02;
+    }
+
+    // very subtle warm lift only
+    if ("emissive" in o.material) {
+      o.material.emissive.setHex(isIOS ? 0x120a06 : 0x000000);
+    }
+
+    if ("emissiveIntensity" in o.material) {
+      o.material.emissiveIntensity = isIOS ? 0.10 : 0.0;
+    }
+  } else {
     if (o.material && "envMapIntensity" in o.material) {
       o.material.envMapIntensity = 0.02;
     }
+  }
+
+  o.material.needsUpdate = true;
+} else {
+  if (o.material) {
+    o.material = o.material.clone();
+
+    if ((o.name || "").toLowerCase() === "pasted_remote") {
+  if ("roughness" in o.material) o.material.roughness = 1.0;
+  if ("metalness" in o.material) o.material.metalness = 0.0;
+
+  if ("envMapIntensity" in o.material) {
+    o.material.envMapIntensity = isIOS ? 0.0 : 0.02;
+  }
+
+  if ("emissive" in o.material) {
+    o.material.emissive.setHex(isIOS ? 0x2a1a10 : 0x000000);
+  }
+
+  if ("emissiveIntensity" in o.material) {
+    o.material.emissiveIntensity = isIOS ? 2.0 : 0.0;
+  }
+} else {
+  if ("envMapIntensity" in o.material) o.material.envMapIntensity = 0.02;
+  if ("metalness" in o.material) o.material.metalness = 0.0;
+  if ("roughness" in o.material) o.material.roughness = 1.0;
+}
 
     o.material.needsUpdate = true;
-  } else {
-    // fallback if no exact material match exists
-    if (o.material) {
-      o.material = o.material.clone();
-
-      if ("envMapIntensity" in o.material) o.material.envMapIntensity = 0.02;
-      if ("metalness" in o.material) o.material.metalness = 0.0;
-      if ("roughness" in o.material) o.material.roughness = 1.0;
-
-      o.material.needsUpdate = true;
-    }
   }
+}
 
   // ✅ THIS is the actual iOS remote body
   if ((o.name || "").toLowerCase() === "pasted_remote") {
@@ -11863,6 +12094,18 @@ function updatePointerNdcFromEvent(e) {
   pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 }
 
+function getWallDrawPressure() {
+  if (!isWallDrawing || !wallDrawStartMs) return WALL_PRESSURE_MIN;
+
+  const heldMs = performance.now() - wallDrawStartMs;
+  const t = Math.max(0, Math.min(1, heldMs / WALL_PRESSURE_RAMP_MS));
+
+  // soft ramp: starts subtle, builds naturally
+  const eased = 1 - Math.pow(1 - t, 2);
+
+  return WALL_PRESSURE_MIN + (WALL_PRESSURE_MAX - WALL_PRESSURE_MIN) * eased;
+}
+
 function tryBeginWallDraw(e) {
   if (!drawMode || !wallDrawPlaneRef) return false;
 
@@ -11881,6 +12124,8 @@ function tryBeginWallDraw(e) {
   lastWallDrawUv.copy(hit.uv);
   hasLastWallDrawUv = true;
   isWallDrawing = true;
+  wallDrawStartMs = performance.now();
+  wallDrawPressure = WALL_PRESSURE_MIN;
 
   trackSceneClick("front_wall_draw_start", {
     object_name: wallDrawPlaneRef?.name || "WallDrawPlane",
@@ -11908,13 +12153,14 @@ function continueWallDraw(e) {
   const hit = wallDrawRaycastHits[0];
   if (!hit.uv) return false;
 
-  wallDrawUv.copy(hit.uv);
+wallDrawUv.copy(hit.uv);
+wallDrawPressure = getWallDrawPressure();
 
-  if (hasLastWallDrawUv) {
-    drawWallLineUV(lastWallDrawUv, wallDrawUv);
-  } else {
-    drawOnWallAtUV(wallDrawUv);
-  }
+if (hasLastWallDrawUv) {
+  drawWallLineUV(lastWallDrawUv, wallDrawUv);
+} else {
+  drawOnWallAtUV(wallDrawUv);
+}
 
   lastWallDrawUv.copy(wallDrawUv);
   hasLastWallDrawUv = true;
@@ -11925,6 +12171,71 @@ function continueWallDraw(e) {
 function endWallDraw() {
   isWallDrawing = false;
   hasLastWallDrawUv = false;
+  wallDrawStartMs = 0;
+  wallDrawPressure = WALL_PRESSURE_MIN;
+}
+
+function iosIsTouchEventOverWall(e) {
+  if (!wallDrawPlaneRef || !drawMode) return false;
+
+  const touch =
+    e.changedTouches?.[0] ||
+    e.touches?.[0];
+
+  if (!touch) return false;
+
+  updatePointerNdcFromEvent(touch);
+
+  raycaster.setFromCamera(pointer, camera);
+  wallDrawRaycastHits.length = 0;
+  raycaster.intersectObject(wallDrawPlaneRef, false, wallDrawRaycastHits);
+
+  return wallDrawRaycastHits.length > 0;
+}
+
+function iosBeginTwoFingerEraseHold() {
+  if (!isIOSDevice()) return;
+  if (!drawMode) return;
+  if (iosWallTwoFingerEraseActive) return;
+
+  iosWallTwoFingerEraseActive = true;
+  iosWallPrevTool = wallTool;
+  wallTool = "eraser";
+  console.log("📱 iOS wall erase hold ON");
+}
+
+function iosEndTwoFingerEraseHold() {
+  if (!iosWallTwoFingerEraseActive) return;
+
+  iosWallTwoFingerEraseActive = false;
+  wallTool = iosWallPrevTool || "pen";
+  console.log("📱 iOS wall erase hold OFF");
+}
+
+function iosHandleWallTapGesture() {
+  if (!isIOSDevice()) return;
+  if (!drawMode) return;
+
+  iosWallTapCount += 1;
+
+  if (iosWallTapTimer) {
+    clearTimeout(iosWallTapTimer);
+    iosWallTapTimer = null;
+  }
+
+  iosWallTapTimer = setTimeout(() => {
+    if (iosWallTapCount >= 3) {
+      clearWallDrawing();
+      endWallDraw();
+      console.log("📱 iOS wall triple tap -> clear wall");
+    } else if (iosWallTapCount === 2) {
+      cycleWallMarkerColor();
+      console.log("📱 iOS wall double tap -> change color");
+    }
+
+    iosWallTapCount = 0;
+    iosWallTapTimer = null;
+  }, IOS_WALL_TRIPLE_TAP_MS);
 }
 
 //ANIMATE
@@ -12072,6 +12383,10 @@ renderer.setPixelRatio(Math.min(dpr, MOBILE_PROFILE.maxDpr));
   camera.aspect = aspect;
   camera.updateProjectionMatrix();
 
+  if (isIOSDevice()) {
+  updateIOSRemoteFillLight(roomMaxDim);
+}
+
   if (composer) composer.setSize(w, h);
   if (nightVisionPass?.uniforms?.uResolution?.value) {
     nightVisionPass.uniforms.uResolution.value.set(w, h);
@@ -12109,6 +12424,47 @@ renderer.domElement.addEventListener("pointermove", (e) => {
 window.addEventListener("pointerup", () => {
   endWallDraw();
 });
+
+if (isIOSDevice()) {
+  renderer.domElement.addEventListener("touchstart", (e) => {
+    if (!drawMode || !wallDrawPlaneRef) return;
+
+    // 2-finger hold -> temporary eraser
+    if (e.touches.length === 2 && iosIsTouchEventOverWall(e)) {
+      if (iosWallEraseHoldTimer) clearTimeout(iosWallEraseHoldTimer);
+
+      iosWallEraseHoldTimer = setTimeout(() => {
+        iosBeginTwoFingerEraseHold();
+      }, IOS_WALL_HOLD_MS);
+
+      return;
+    }
+
+    // single-finger tap count on wall
+    if (e.touches.length === 1 && iosIsTouchEventOverWall(e)) {
+      iosHandleWallTapGesture();
+    }
+  }, { passive: true });
+
+  renderer.domElement.addEventListener("touchend", () => {
+    if (iosWallEraseHoldTimer) {
+      clearTimeout(iosWallEraseHoldTimer);
+      iosWallEraseHoldTimer = null;
+    }
+
+    iosEndTwoFingerEraseHold();
+  }, { passive: true });
+
+  renderer.domElement.addEventListener("touchcancel", () => {
+    if (iosWallEraseHoldTimer) {
+      clearTimeout(iosWallEraseHoldTimer);
+      iosWallEraseHoldTimer = null;
+    }
+
+    iosEndTwoFingerEraseHold();
+    endWallDraw();
+  }, { passive: true });
+}
 
 window.addEventListener("keydown", (e) => {
   if (e.repeat) return;
