@@ -803,6 +803,7 @@ let baseCamDir0 = null;
 let baseCamFov0 = null;
 let baseCamTarget0 = null; 
 
+
 // Desktop Camera Values
 function setInitialCameraFraming() {
   camera.fov = 31.5;
@@ -1149,7 +1150,6 @@ let chainMeshRef = null;
 
 let lampMood = 0; // 0 = warm (default), 1 = cold/blue, 2 = red (optional)
 
-
 //Bug Animation
 let bugMixer = null;
 let bugActions = [];
@@ -1190,7 +1190,7 @@ function updateLampFlicker() {
     Math.sin(t * 9.5) * 0.05 +
     Math.random() * 0.05;
 
-  emberTipRef.material.emissiveIntensity = flicker * 2.2;
+  emberTipRef.material.emissiveIntensity = flicker * 20.0;
 }
 
   const t = performance.now() / 1000;
@@ -4769,7 +4769,7 @@ function ensureLampAudio() {
     return lampAudio;
   }
 
-  lampAudio = new Audio("./assets/Audio/Electric-sound-2.mp3");
+  lampAudio = new Audio("./assets/Audio/Lamp-Turnon_01.mp3");
   lampAudio.preload = "auto";
   lampAudio.crossOrigin = "anonymous";
   lampAudio.loop = false;
@@ -5146,15 +5146,20 @@ async function playBackgroundAudio() {
 }
 
 function playLampAudio() {
-  const a = ensureLampAudio();
-  if (!a) return;
+  const base = ensureLampAudio();
+  if (!base) return;
 
   try {
-    applyLampAudioVolume(a);
-    a.pause();
-    a.currentTime = 0;
+    const s = base.cloneNode(true);
+    s.preload = "auto";
+    s.crossOrigin = "anonymous";
+    s.loop = false;
+    s.playsInline = true;
+    s.setAttribute?.("webkit-playsinline", "");
+    applyLampAudioVolume(s);
+    s.currentTime = 0;
 
-    const p = a.play();
+    const p = s.play();
     if (p?.catch) {
       p.catch((err) => {
         console.warn("Lamp sound play blocked:", err);
@@ -8230,14 +8235,14 @@ g.addColorStop(1.00, "rgba(0,0,0,0.0)");
   const breakChance = Math.random();
 
   // 🔥 kill parts of the ring (dead ash sections)
-  if (breakChance > 0.78) {
+if (breakChance > 0.995)   {
     ctx.fillStyle = `rgba(0,0,0,${0.35 + Math.random() * 0.4})`;
     ctx.fillRect(0, y, size, 1);
     continue;
   }
 
   // 🔥 dim uneven areas
-  if (breakChance > 0.55) {
+  if (breakChance > 0.985) {
     ctx.fillStyle = `rgba(0,0,0,${0.15 + Math.random() * 0.25})`;
     ctx.fillRect(0, y, size, 1);
   }
@@ -8258,9 +8263,9 @@ for (let i = 0; i < 14; i++) {
 
   const isHot = Math.random() > 0.72;
 
-  ctx.fillStyle = isHot
-  ? `rgba(255,190,90,${0.14 + Math.random() * 0.16})`
-  : `rgba(220,45,8,${0.08 + Math.random() * 0.10})`;
+ctx.fillStyle = isHot
+  ? `rgba(255,240,170,${0.55 + Math.random() * 0.30})`
+  : `rgba(255,90,20,${0.30 + Math.random() * 0.25})`;
 
   ctx.fillRect(x, y, w, h);
 }
@@ -8284,24 +8289,19 @@ function makeEmberHaloTexture(size = 256) {
     size * 0.5, size * 0.5, size * 0.5
   );
 
- g.addColorStop(0.00, "rgba(255,120,50,0.16)");
-g.addColorStop(0.14, "rgba(190,28,0,0.22)");
-g.addColorStop(0.34, "rgba(95,0,0,0.14)");
-g.addColorStop(0.70, "rgba(30,0,0,0.03)");
+g.addColorStop(0.00, "rgba(0,0,0,0.0)");
+g.addColorStop(0.18, "rgba(80,0,0,0.20)");
+g.addColorStop(0.34, "rgba(180,20,0,0.75)");
+g.addColorStop(0.46, "rgba(255,90,20,1.0)");
+g.addColorStop(0.50, "rgba(255,220,140,1.0)");
+g.addColorStop(0.54, "rgba(255,90,20,1.0)");
+g.addColorStop(0.68, "rgba(180,20,0,0.70)");
+g.addColorStop(0.84, "rgba(80,0,0,0.18)");
 g.addColorStop(1.00, "rgba(0,0,0,0.0)");
 
   ctx.clearRect(0, 0, size, size);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, size, size);
-
-  // 🔥 darken lower half (adds depth / realism)
-const shadowGrad = ctx.createLinearGradient(0, 0, 0, size);
-shadowGrad.addColorStop(0.0, "rgba(0,0,0,0.0)");
-shadowGrad.addColorStop(0.5, "rgba(0,0,0,0.15)");
-shadowGrad.addColorStop(1.0, "rgba(0,0,0,0.35)");
-
-ctx.fillStyle = shadowGrad;
-ctx.fillRect(0, 0, size, size);
 
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -8822,11 +8822,13 @@ cigaretteSmokePoints.renderOrder = 999;
   // put smoke into WORLD space, not under the tilted mesh
   worldRoot.add(cigaretteSmokePoints);
 
-  // initial world position from emitter
-  emitterParent.updateMatrixWorld(true);
-  emitterParent.getWorldPosition(smokeSourceWorld);
-smokeSourceWorld.y += 0.15; // 🔥 same offset here
-cigaretteSmokePoints.position.copy(smokeSourceWorld);
+emitterParent.updateMatrixWorld(true);
+emitterParent.getWorldPosition(exhaleSmokeSourceWorld);
+emitterParent.getWorldQuaternion(exhaleSmokeQuatWorld);
+
+exhaleSmokeSourceWorld.y += 0.15;
+exhaleSmokePoints.position.copy(exhaleSmokeSourceWorld);
+exhaleSmokePoints.quaternion.copy(exhaleSmokeQuatWorld);
 
   console.log("✅ cigarette smoke built in WORLD space at:", smokeSourceWorld);
 }
@@ -8864,12 +8866,12 @@ function resetAllSmokeParticlesToEmitter() {
     p.y = 0;
     p.z = 0;
 
-    p.vx = (Math.random() - 0.5) * 0.03;
-    p.vy = 0.14 + Math.random() * 0.08;
-    p.vz = (Math.random() - 0.5) * 0.03;
+  p.vx = (Math.random() - 0.5) * 0.08;
+  p.vy = 0.22 + Math.random() * 0.10;
+  p.vz = (Math.random() - 0.5) * 0.08;
 
-    p.age = 0;
-    p.life = 3.0 + Math.random() * 2.0;
+  p.age = 0;
+  p.life = 3.8 + Math.random() * 2.2;
     p.swirl = Math.random() * Math.PI * 2;
 
     pos[i3 + 0] = 0;
@@ -8966,6 +8968,316 @@ const spread = 0.050 + k * 0.12;
   }
 }
 
+// ============================================================
+// EXHALE SMOKE DEBUG SYSTEM
+// - separate smoke system
+// - attached to a movable square + sphere marker
+// ============================================================
+function buildExhaleSmoke(emitterParent) {
+  if (!emitterParent) {
+    console.warn("buildExhaleSmoke: emitterParent missing");
+    return;
+  }
+
+  const worldRoot = ensureSmokeWorldRoot();
+
+  if (exhaleSmokePoints) {
+    exhaleSmokePoints.removeFromParent();
+    exhaleSmokeGeo?.dispose?.();
+    exhaleSmokeMat?.dispose?.();
+    exhaleSmokeGeo = null;
+    exhaleSmokeMat = null;
+    exhaleSmokePoints = null;
+    exhaleSmokeData.length = 0;
+  }
+
+  exhaleSmokeGeo = new THREE.BufferGeometry();
+  const positions = new Float32Array(EXHALE_SMOKE_COUNT * 3);
+
+  exhaleSmokeData.length = 0;
+
+  for (let i = 0; i < EXHALE_SMOKE_COUNT; i++) {
+    const i3 = i * 3;
+
+    const x = 0;
+    const y = 0;
+    const z = 0;
+
+    positions[i3 + 0] = x;
+    positions[i3 + 1] = y;
+    positions[i3 + 2] = z;
+
+    exhaleSmokeData.push({
+      x,
+      y,
+      z,
+      vx: (Math.random() - 0.5) * 0.03,
+      vy: 0.14 + Math.random() * 0.08,
+      vz: (Math.random() - 0.5) * 0.03,
+      age: 0,
+      life: 3.0 + Math.random() * 2.0,
+      swirl: Math.random() * Math.PI * 2,
+    });
+  }
+
+  exhaleSmokeGeo.setAttribute(
+    "position",
+    new THREE.BufferAttribute(positions, 3)
+  );
+
+  exhaleSmokeMat = new THREE.PointsMaterial({
+    color: 0xf0f0f0,
+    map: cigaretteSmokeTex,
+    alphaMap: cigaretteSmokeTex,
+    transparent: true,
+    opacity: 0.39,
+    size: 0.50,
+    sizeAttenuation: true,
+    depthTest: false,
+    depthWrite: false,
+    blending: THREE.NormalBlending,
+    fog: true
+  });
+
+exhaleSmokePoints = new THREE.Points(exhaleSmokeGeo, exhaleSmokeMat);
+exhaleSmokePoints.frustumCulled = false;
+exhaleSmokePoints.renderOrder = 999;
+exhaleSmokePoints.visible = false;
+
+  worldRoot.add(exhaleSmokePoints);
+
+  emitterParent.updateMatrixWorld(true);
+  emitterParent.getWorldPosition(exhaleSmokeSourceWorld);
+  exhaleSmokeSourceWorld.y += 0.15;
+  exhaleSmokePoints.position.copy(exhaleSmokeSourceWorld);
+
+  console.log("✅ exhale smoke built in WORLD space at:", exhaleSmokeSourceWorld);
+}
+
+function resetAllExhaleSmokeParticlesToEmitter() {
+  if (!exhaleSmokeGeo) return;
+
+  const pos = exhaleSmokeGeo.attributes.position.array;
+
+  for (let i = 0; i < EXHALE_SMOKE_COUNT; i++) {
+    const p = exhaleSmokeData[i];
+    const i3 = i * 3;
+
+    p.x = 0;
+    p.y = 0;
+    p.z = 0;
+
+   p.vx = (Math.random() - 0.5) * 0.08;
+   p.vy = 0.22 + Math.random() * 0.10;
+   p.vz = (Math.random() - 0.5) * 0.08;
+
+   p.age = 0;
+   p.life = 3.8 + Math.random() * 2.2;
+    p.swirl = Math.random() * Math.PI * 2;
+
+    pos[i3 + 0] = 0;
+    pos[i3 + 1] = 0;
+    pos[i3 + 2] = 0;
+  }
+
+  exhaleSmokeGeo.attributes.position.needsUpdate = true;
+}
+
+function updateExhaleSmoke(dt) {
+  if (!exhaleSmokeSphere) return;
+  if (!exhaleSmokePoints || !exhaleSmokeGeo) return;
+
+  const now = performance.now() * 0.001;
+
+  // wait until 5.5s after cigarette animation starts
+  if (exhaleSmokeArmed && !exhaleSmokeActive && !exhaleSmokeDissipating) {
+    if ((now - exhaleSmokeStartTime) < EXHALE_SMOKE_DELAY) {
+      exhaleSmokePoints.visible = false;
+      return;
+    }
+
+    exhaleSmokeActive = true;
+    exhaleSmokeDissipating = false;
+    exhaleSmokePoints.visible = true;
+    resetAllExhaleSmokeParticlesToEmitter();
+
+    console.log("💨 exhale smoke START");
+  }
+
+  // after burst duration, stop emitting but let smoke naturally dissipate
+  if (exhaleSmokeActive) {
+    const burstElapsed = now - exhaleSmokeStartTime - EXHALE_SMOKE_DELAY;
+
+    if (burstElapsed > EXHALE_SMOKE_BURST) {
+      exhaleSmokeActive = false;
+      exhaleSmokeArmed = false;
+      exhaleSmokeDissipating = true;
+
+      console.log("💨 exhale smoke RELEASE END / dissipating");
+    }
+  }
+
+  // if nothing is active or dissipating, do nothing
+  if (!exhaleSmokeActive && !exhaleSmokeDissipating) return;
+
+  exhaleSmokeSphere.updateMatrixWorld(true);
+  exhaleSmokeSphere.getWorldPosition(exhaleSmokeSourceWorld);
+  exhaleSmokeSphere.getWorldQuaternion(exhaleSmokeQuatWorld);
+
+  exhaleSmokeSourceWorld.y += 0.15;
+
+  exhaleSmokePoints.position.copy(exhaleSmokeSourceWorld);
+  exhaleSmokePoints.quaternion.copy(exhaleSmokeQuatWorld);
+
+  const pos = exhaleSmokeGeo.attributes.position.array;
+  const t = performance.now() * 0.001;
+
+  let aliveCount = 0;
+  let maxFade = 0;
+
+  for (let i = 0; i < EXHALE_SMOKE_COUNT; i++) {
+    const p = exhaleSmokeData[i];
+    const i3 = i * 3;
+
+    p.age += dt;
+
+    const k = p.age / p.life;
+
+    if (k >= 1.0) {
+      pos[i3 + 0] = 9999;
+      pos[i3 + 1] = 9999;
+      pos[i3 + 2] = 9999;
+      continue;
+    }
+
+    aliveCount++;
+
+    const fadeStart = 1.0 - EXHALE_SMOKE_FADE_PORTION;
+
+    let fade = 1.0;
+    if (k > fadeStart) {
+      const u = (k - fadeStart) / EXHALE_SMOKE_FADE_PORTION;
+      fade = 1.0 - (u * u * (3.0 - 2.0 * u)); // smooth fade out
+    }
+
+    if (fade > maxFade) maxFade = fade;
+
+    const curl = 0.020 + k * 0.032;
+    const spread = 0.050 + k * 0.12;
+
+    p.x += p.vx * dt + Math.sin(t * 1.2 + p.swirl + k * 3.0) * curl * dt;
+    p.y += p.vy * dt * 0.95;
+    p.z += p.vz * dt + Math.cos(t * 1.1 + p.swirl + k * 3.0) * curl * dt;
+
+    // extra slowdown as particle dies
+    const dragMul = 0.985 - (1.0 - fade) * 0.02;
+    p.vx *= dragMul;
+    p.vy *= 0.997 - (1.0 - fade) * 0.01;
+    p.vz *= dragMul;
+
+    p.x *= (1.0 + spread * dt * 0.45);
+    p.z *= (1.0 + spread * dt * 0.45);
+
+   // keep particles spread out; only fade them visually
+    pos[i3 + 0] = p.x;
+    pos[i3 + 1] = p.y;
+    pos[i3 + 2] = p.z;
+  }
+
+  exhaleSmokeGeo.attributes.position.needsUpdate = true;
+
+  // smooth overall fade as the last visible particles die
+  if (exhaleSmokeMat) {
+    exhaleSmokeMat.opacity = 0.26 * maxFade;
+  }
+
+  // only hide the whole system after every particle has naturally died
+  if (exhaleSmokeDissipating && aliveCount === 0) {
+    exhaleSmokeDissipating = false;
+    exhaleSmokePoints.visible = false;
+
+    // restore default opacity for next puff
+    if (exhaleSmokeMat) {
+      exhaleSmokeMat.opacity = 0.26;
+    }
+
+    console.log("💨 exhale smoke fully dissipated");
+  }
+}
+
+function setupExhaleSmokeDebugRig() {
+  if (exhaleSmokeRoot) return;
+
+  if (!camera) {
+    console.warn("setupExhaleSmokeDebugRig: camera missing");
+    return;
+  }
+
+  exhaleSmokeRoot = new THREE.Group();
+  exhaleSmokeRoot.name = "ExhaleSmokeDebugRoot";
+
+  // attach to camera so it stays in front of you for testing
+  camera.add(exhaleSmokeRoot);
+
+  // KEEP POSITION STATIONARY
+  exhaleSmokeRoot.position.set(0.10, -0.20, -0.0);
+
+  // this is your existing "mouth plane" pitch
+  exhaleSmokeRoot.rotation.x = -Math.PI / 2;
+
+  // --------------------------------------------------
+  // AIM PIVOT
+  // rotate THIS to aim left/right without moving root
+  // --------------------------------------------------
+  exhaleSmokeAim = new THREE.Group();
+  exhaleSmokeAim.name = "ExhaleSmokeAim";
+  exhaleSmokeRoot.add(exhaleSmokeAim);
+
+  // rotate toward left shelving
+  exhaleSmokeAim.rotation.z = THREE.MathUtils.degToRad(19);
+
+  // green square (keep as invisible debug anchor)
+exhaleSmokeBox = new THREE.Mesh(
+  new THREE.BoxGeometry(0.25, 0.25, 0.02),
+  new THREE.MeshBasicMaterial({
+    color: 0x00ff00,
+    transparent: true,
+    opacity: 0.0,
+    depthTest: false,
+    depthWrite: false,
+  })
+);
+exhaleSmokeBox.visible = false;
+exhaleSmokeBox.renderOrder = 9999;
+exhaleSmokeAim.add(exhaleSmokeBox);
+
+// red sphere (keep as invisible emitter anchor)
+exhaleSmokeSphere = new THREE.Mesh(
+  new THREE.SphereGeometry(0.06, 16, 16),
+  new THREE.MeshBasicMaterial({
+    color: 0xff0000,
+    transparent: true,
+    opacity: 0.0,
+    depthTest: false,
+    depthWrite: false,
+  })
+);
+exhaleSmokeSphere.visible = false;
+exhaleSmokeSphere.position.set(0, 0.18, 0);
+exhaleSmokeSphere.renderOrder = 9999;
+exhaleSmokeAim.add(exhaleSmokeSphere);
+
+  buildExhaleSmoke(exhaleSmokeSphere);
+
+  console.log("✅ Exhale smoke debug rig created", {
+    exhaleSmokeRoot,
+    exhaleSmokeAim,
+    exhaleSmokeBox,
+    exhaleSmokeSphere,
+    exhaleSmokePoints
+  });
+}
+
 const cigaretteAshMat = (() => {
   const m = makePBR(
     {
@@ -8991,7 +9303,7 @@ m.emissiveIntensity = 3.2;
 const cigaretteEmberMat = new THREE.MeshStandardMaterial({
   color: 0x2a0500,
   emissive: 0xff5a10,
-  emissiveIntensity: 11.0,
+  emissiveIntensity: 140.0,
   roughness: 1.0,
   metalness: 0.0,
   side: THREE.DoubleSide,
@@ -9204,7 +9516,7 @@ let cigaretteSmokeMat = null;
 let cigaretteSmokeBuilt = false;
 let cigaretteSmokeStarted = false;
 let cigaretteSmokeStartTime = 0;
-const CIGARETTE_SMOKE_DELAY = 8.0;
+const CIGARETTE_SMOKE_DELAY = 0.0;
 let cigaretteSmokeTimerArmed = false;
 
 let smokeDebugRoot = null;
@@ -9214,6 +9526,35 @@ let smokeDebugSphere = null;
 const CIG_SMOKE_COUNT = 160;
 const cigaretteSmokeData = [];
 
+// ============================================================
+// EXHALE SMOKE DEBUG SYSTEM (separate from cigarette tip smoke)
+// ============================================================
+let exhaleSmokeRoot = null;
+let exhaleSmokeBox = null;
+let exhaleSmokeSphere = null;
+
+let exhaleSmokePoints = null;
+let exhaleSmokeGeo = null;
+let exhaleSmokeMat = null;
+let exhaleSmokeAim = null;
+let exhaleSmokeSourceWorld = new THREE.Vector3();
+
+let exhaleSmokeQuatWorld = new THREE.Quaternion();
+
+const EXHALE_SMOKE_COUNT = CIG_SMOKE_COUNT;
+const exhaleSmokeData = [];
+
+let exhaleSmokeDebugBuilt = false;
+
+let exhaleSmokeArmed = false;
+let exhaleSmokeActive = false;
+let exhaleSmokeDissipating = false;
+let exhaleSmokeStartTime = 0;
+
+const EXHALE_SMOKE_DELAY = 5.65;   // trigger 5.5s after cig animation starts
+const EXHALE_SMOKE_BURST = 1.2;   // how long the exhale lasts
+
+const EXHALE_SMOKE_FADE_PORTION = 0.45;
 
 let emberCrackle = 0.72;
 let emberCrackleTarget = 0.72;
@@ -9233,6 +9574,21 @@ const SMOKE_TIP_START_FRAME = 200;
 const SMOKE_TIP_FPS = 24;
 const SMOKE_TIP_START_TIME = SMOKE_TIP_START_FRAME / SMOKE_TIP_FPS;
 
+function triggerExhaleSmokeFromCigarette() {
+  exhaleSmokeArmed = true;
+  exhaleSmokeActive = false;
+  exhaleSmokeDissipating = false;
+  exhaleSmokeStartTime = performance.now() * 0.001;
+
+  if (exhaleSmokePoints) {
+    exhaleSmokePoints.visible = false;
+  }
+
+  resetAllExhaleSmokeParticlesToEmitter();
+
+  console.log("💨 exhale smoke armed");
+}
+
 function playCigaretteAnimation() {
   if (!cigaretteActions.length) {
     console.warn("⚠️ cigaretteActions missing");
@@ -9250,6 +9606,7 @@ function playCigaretteAnimation() {
   }
 
   console.log("▶️ cigarette animation triggered", cigaretteActions.map(a => a.getClip().name));
+  triggerExhaleSmokeFromCigarette();
 }
 
 function playSmokeTipAnimation() {
@@ -9306,19 +9663,19 @@ if (emberTipMatRef) {
     Math.max(0, Math.sin(now * 8.0)) * 0.42 +
     Math.max(0, Math.sin(now * 13.0)) * 0.24;
 
-  emberTipMatRef.emissive.setRGB(
-    1.8 + heat * 0.35,
-    0.16 + heat * 0.10 + flare * 0.10,
-    0.0
-  );
+emberTipMatRef.emissive.setRGB(
+  3.2 + heat * 0.9,
+  0.9 + heat * 0.45 + flare * 0.35,
+  0.08
+);
 
-  emberTipMatRef.emissiveIntensity = 24.0 + heat * 6.0 + flare * 3.0;
+emberTipMatRef.emissiveIntensity = 55.0 + heat * 18.0 + flare * 10.0;
 
-  emberTipMatRef.color.setRGB(
-    0.28 + heat * 0.10,
-    0.03,
-    0.0
-  );
+emberTipMatRef.color.setRGB(
+  0.85 + heat * 0.18,
+  0.18 + flare * 0.06,
+  0.03
+);
 
   emberTipMatRef.needsUpdate = true;
 }
@@ -9336,24 +9693,24 @@ if (ashMatRef) {
 
 if (emberLightRef) {
   const flare =
-    Math.max(0, Math.sin(now * 8.0)) * 0.12 +
-    Math.max(0, Math.sin(now * 13.0)) * 0.05;
+    Math.max(0, Math.sin(now * 8.0)) * 2.0 +
+    Math.max(0, Math.sin(now * 13.0)) * 1.0;
 
-  emberLightRef.intensity = 0.36 + heat * 0.20 + flare;
-  emberLightRef.distance = 0.10 + heat * 0.025;
+  emberLightRef.intensity = 12.0 + heat * 6.0 + flare;
+  emberLightRef.distance = 0.55 + heat * 0.14;
 
   emberLightRef.color.setRGB(
     1.0,
-    0.10 + heat * 0.03,
-    0.02
+    0.42 + heat * 0.10,
+    0.08
   );
 }
 
 if (emberHaloMatRef && emberHaloRef) {
-  emberHaloMatRef.opacity = 0.10 + heat * 0.08;
+  emberHaloMatRef.opacity = 1.1 + heat * 0.45;
 
-  const sx = 0.026 + heat * 0.008;
-  const sy = 0.014 + heat * 0.006;
+  const sx = 0.12 + heat * 0.035;
+  const sy = 0.07 + heat * 0.022;
   emberHaloRef.scale.set(sx, sy, 1.0);
 }
 }
@@ -11101,6 +11458,9 @@ cigaretteLoader.load(
 
     emberTipRef = o;
     emberTipMatRef = m;
+    m.emissive.setRGB(1.0, 0.5, 0.1);   // hot orange
+    m.emissiveIntensity = 40.0;           // 🔥 big jump (was basically nothing)
+    m.toneMapped = false;                // CRITICAL → makes it pop
     emberTipMatIndex = i;
 
     console.log("🔥 EMBER material captured:", {
@@ -11184,7 +11544,7 @@ if (matName.includes("ash")) {
     });
 
 if (emberTipRef && !emberLightRef) {
-  emberLightRef = new THREE.PointLight(0xff6024, 8.0, 0.9, 1.6);
+  emberLightRef = new THREE.PointLight(0xff6024, 18.0, 1.2, 1.6);
   emberLightRef.castShadow = false;
   emberTipRef.add(emberLightRef);
 
@@ -11564,6 +11924,11 @@ function animate() {
 
   const blocked = isIOSPortraitBlocked();
 
+  if (!exhaleSmokeDebugBuilt) {
+  setupExhaleSmokeDebugRig();
+  exhaleSmokeDebugBuilt = true;
+}
+
 if (bugMixer) bugMixer.update(dt);
 
 if (cigaretteMixer) cigaretteMixer.update(dt);
@@ -11588,6 +11953,7 @@ if (!blocked) {
   updatePress();
   updateCigaretteEmber();
   updateCigaretteSmoke(dt);
+  updateExhaleSmoke(dt);
 }
 
  // ✅ Throttle TV redraw so it doesn't hammer performance
