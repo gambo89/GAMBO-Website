@@ -1387,13 +1387,13 @@ const IOS_REMOTE_LIGHT = {
 const IOS_REMOTE_CAMERA_LIGHT = {
   enabled: true,
 
-  intensity: 70.0,
+  intensity: 90.0,
   distance: 30.0,
   decay: 2.0,
 
   // camera-local position
   // negative Z = in front of camera
-  x: 0.0,
+  x: 2.0,
   y: -0.35,
   z: 0.2,
 };
@@ -4043,8 +4043,463 @@ let menuIndex = 0;         // 0=Photo, 1=Video, 2=3D Model
 let blinkT0 = performance.now();
 let menuHover = false;
 let backHover = false;
+let tvLeftArrowHover = false;
+let tvRightArrowHover = false;
 
 let tvSubcategoryHoverFlipV = null;
+
+// ============================================================
+// TV MENU POLISH: animated highlight + bottom carousel
+// Insert directly below: let tvSubcategoryHoverFlipV = null;
+// ============================================================
+let tvHighlightY = null;
+let tvHighlightTargetY = null;
+let tvHighlightH = 108;
+let tvHighlightTargetH = 108;
+let tvHighlightW = null;
+let tvHighlightTargetW = null;
+
+let tvCarouselOffset = 0;
+let tvCarouselSpeed = 84; // px/sec on 1920 canvas
+let tvLastFrameMs = performance.now();
+
+const TV_MENU_LAYOUT = {
+  topTitleY: 0.16,
+  subTopTitleY: 0.13,
+  menuCenterY: 0.43,
+  subMenuCenterY: 0.41,
+  carouselY: 0.76,
+  menuGapDesktop: 132,
+  menuGapIOS: 146,
+  subGapDesktop: 118,
+  subGapIOS: 130,
+};
+
+const TV_CAROUSEL_STYLE = {
+  h: 108,
+  itemW: 168,
+  itemH: 84,
+  gap: 18,
+  edgeFadeW: 220,
+};
+
+const TV_PREVIEW_LABELS = {
+  PHOTO: {
+    portraits:     ["face", "studio", "close-up", "profile", "grain"],
+    surfaces:      ["metal", "wall", "texture", "paint", "detail"],
+    environments:  ["hall", "room", "street", "window", "interior"],
+  },
+  VIDEO: {
+    cinematic:     ["wide", "night", "tracking", "slow", "frame"],
+    commercial:    ["clean", "product", "brand", "cut", "shine"],
+    music:         ["performance", "flash", "beat", "crowd", "stage"],
+    experimental:  ["abstract", "glitch", "loop", "distort", "noise"],
+  },
+  "3D MODEL": {
+    boards:        ["deck", "truck", "wheel", "grip", "shape"],
+    objects:       ["prop", "asset", "form", "scan", "mesh"],
+    architecture:  ["facade", "stairs", "room", "tower", "frame"],
+  },
+};
+
+const TV_PREVIEW_IMAGES = {
+  PHOTO: {
+    portraits: [
+      "./assets/Photo/Portrait/01-Portrait.jpg",
+      "./assets/Photo/Portrait/02-Portrait.jpg",
+      "./assets/Photo/Portrait/03-Portrait.jpg",
+    ],
+    surfaces: [
+      "./assets/Photo/Surfaces/01-Surfaces.jpg",
+      "./assets/Photo/Surfaces/02-Surfaces.jpg",
+      "./assets/Photo/Surfaces/03-Surfaces.jpg",
+    ],
+    environments: [
+      "./assets/Photo/Environment/01-Environment.jpg",
+      "./assets/Photo/Environment/02-Environment.jpg",
+      "./assets/Photo/Environment/03-Environment.jpg",
+    ],
+  },
+
+  VIDEO: {
+    cinematic: [
+      "./assets/Video/Cinematic/01-Cinematic.jpg",
+      "./assets/Video/Cinematic/02-Cinematic.jpg",
+      "./assets/Video/Cinematic/03-Cinematic.jpg",
+    ],
+    commercial: [
+      "./assets/Video/Commercial/01-Commercial.jpg",
+      "./assets/Video/Commercial/02-Commercial.jpg",
+      "./assets/Video/Commercial/03-Commercial.jpg",
+    ],
+    music: [
+      "./assets/Video/Music/01-Music.mp4",
+      "./assets/Video/Music/02-Music.jpg",
+      "./assets/Video/Music/03-Music.jpg",
+    ],
+    experimental: [
+      "./assets/Video/Experimental/01-Experimental.jpg",
+      "./assets/Video/Experimental/02-Experimental.jpg",
+      "./assets/Video/Experimental/03-Experimental.jpg",
+    ],
+  },
+
+  "3D MODEL": {
+    boards: [
+      "./assets/3D Model/Boards/01-Boards.mp4",
+      "./assets/3D Model/Boards/02-Boards.mp4",
+      "./assets/3D Model/Boards/03-Boards.jpg",
+    ],
+    objects: [
+      "./assets/3D Model/Objects/01-Objects.mp4",
+      "./assets/3D Model/Objects/02-Objects.mp4",
+      "./assets/3D Model/Objects/03-Objects.mp4",
+      "./assets/3D Model/Objects/04-Objects.mp4",
+      "./assets/3D Model/Objects/05-Objects.mp4",
+      "./assets/3D Model/Objects/06-Objects.mp4",
+    ],
+    architecture: [
+      "./assets/3D Model/Architecture/01-Architecture.jpg",
+      "./assets/3D Model/Architecture/02-Architecture.jpg",
+      "./assets/3D Model/Architecture/03-Architecture.jpg",
+    ],
+  },
+};
+
+const tvCarouselImageCache = new Map();
+
+function loadTvCarouselImage(src) {
+  if (!src) return null;
+  if (tvCarouselImageCache.has(src)) return tvCarouselImageCache.get(src);
+
+  const img = new Image();
+
+  img.onload = () => {
+    // console.log("TV preview loaded:", src);
+  };
+
+  img.onerror = () => {
+    console.warn("TV preview failed to load:", src);
+  };
+
+  img.src = src;
+  tvCarouselImageCache.set(src, img);
+  return img;
+}
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+function easeOutCubic(t) {
+  return 1 - Math.pow(1 - t, 3);
+}
+
+function getActiveTvMenuItems() {
+  if (tvUiState === "MENU") return MENU_ITEMS;
+  if (tvUiState === "SUBCATEGORY_MENU") return SUBCATEGORY_ITEMS[tvParentCategory] || [];
+  return [];
+}
+
+function getActiveTvSelectionIndex() {
+  if (tvUiState === "MENU") return menuIndex;
+  if (tvUiState === "SUBCATEGORY_MENU") return subcategoryIndex;
+  return 0;
+}
+
+function getTvMenuLayout(state = tvUiState) {
+  const isIOS = isIOSDevice();
+
+  if (state === "SUBCATEGORY_MENU") {
+    return {
+  titleY: tvCanvas.height * TV_MENU_LAYOUT.subTopTitleY,
+  listCenterY: tvCanvas.height * TV_MENU_LAYOUT.subMenuCenterY,
+  gapY: isIOS ? TV_MENU_LAYOUT.subGapIOS : TV_MENU_LAYOUT.subGapDesktop,
+  font: isIOS ? "112px Arial" : "96px Arial",
+  titleFont: isIOS ? "bold 58px Arial" : "bold 50px Arial",
+  highlightW: tvCanvas.width * 0.42,
+  highlightH: isIOS ? 92 : 84,
+};
+  }
+return {
+  titleY: tvCanvas.height * TV_MENU_LAYOUT.topTitleY,
+  listCenterY: tvCanvas.height * TV_MENU_LAYOUT.menuCenterY,
+  gapY: isIOS ? TV_MENU_LAYOUT.menuGapIOS : TV_MENU_LAYOUT.menuGapDesktop,
+  font: isIOS ? "bold 116px Arial" : "bold 100px Arial",
+  titleFont: null,
+  highlightW: tvCanvas.width * 0.36,
+  highlightH: isIOS ? 96 : 88,
+};
+}
+
+function getMenuStartY(count, centerY, gapY) {
+  return centerY - ((count - 1) * gapY) * 0.5;
+}
+
+function syncTvHighlightToCurrentSelection(force = false) {
+  const items = getActiveTvMenuItems();
+  const index = getActiveTvSelectionIndex();
+  const layout = getTvMenuLayout();
+
+  if (!items.length) return;
+
+  const startY = getMenuStartY(items.length, layout.listCenterY, layout.gapY);
+  const targetY = startY + index * layout.gapY;
+
+  tvHighlightTargetY = targetY;
+  tvHighlightTargetH = layout.highlightH;
+  tvHighlightTargetW = layout.highlightW;
+
+  if (force || tvHighlightY == null) tvHighlightY = targetY;
+  if (force || tvHighlightH == null) tvHighlightH = layout.highlightH;
+  if (force || tvHighlightW == null) tvHighlightW = layout.highlightW;
+}
+
+function updateTvMenuFx(dt) {
+  if (tvUiState !== "MENU" && tvUiState !== "SUBCATEGORY_MENU") return;
+
+  syncTvHighlightToCurrentSelection(false);
+
+  const follow = 1.0 - Math.pow(0.0001, dt * 3.5);
+  if (tvHighlightTargetY != null) tvHighlightY = lerp(tvHighlightY ?? tvHighlightTargetY, tvHighlightTargetY, follow);
+  if (tvHighlightTargetH != null) tvHighlightH = lerp(tvHighlightH ?? tvHighlightTargetH, tvHighlightTargetH, follow);
+  if (tvHighlightTargetW != null) tvHighlightW = lerp(tvHighlightW ?? tvHighlightTargetW, tvHighlightTargetW, follow);
+
+  // continuous forward scroll
+  tvCarouselOffset += tvCarouselSpeed * dt;
+}
+
+function getCarouselLabels() {
+  if (tvUiState === "SUBCATEGORY_MENU") {
+    const items = SUBCATEGORY_ITEMS[tvParentCategory] || [];
+    const selected = items[subcategoryIndex];
+    return TV_PREVIEW_LABELS[tvParentCategory]?.[selected] || items;
+  }
+
+  if (tvUiState === "MENU") {
+    const selected = MENU_ITEMS[menuIndex];
+    return Object.keys(TV_PREVIEW_LABELS[selected] || {});
+  }
+
+  return [];
+}
+
+function drawCarouselStrip(ctx, w, h) {
+  const labels = getCarouselLabels();
+
+  let imagePool = [];
+
+  if (tvUiState === "SUBCATEGORY_MENU") {
+    const items = SUBCATEGORY_ITEMS[tvParentCategory] || [];
+    const selectedSubcategory = items[subcategoryIndex] || null;
+    imagePool = TV_PREVIEW_IMAGES[tvParentCategory]?.[selectedSubcategory] || [];
+  } else if (tvUiState === "MENU") {
+    const selectedCategory = MENU_ITEMS[menuIndex];
+    const subcats = Object.keys(TV_PREVIEW_LABELS[selectedCategory] || {});
+    imagePool = subcats.flatMap((subcat) => {
+      return TV_PREVIEW_IMAGES[selectedCategory]?.[subcat] || [];
+    });
+  }
+
+  // Build one unified carousel source array
+  const carouselItems =
+    imagePool.length > 0
+      ? imagePool.map((src, idx) => ({
+          src,
+          label: labels[idx % Math.max(1, labels.length)] || "",
+        }))
+      : labels.map((label) => ({
+          src: null,
+          label,
+        }));
+
+  if (!carouselItems.length) return;
+
+  const style = TV_CAROUSEL_STYLE;
+  const stripY = h * TV_MENU_LAYOUT.carouselY;
+  const stripX = w * 0.16;
+  const stripW = w * 0.68;
+  const stripH = style.h;
+
+  ctx.save();
+
+  // base strip
+  ctx.fillStyle = "rgba(255,255,255,0.035)";
+  roundRect(ctx, stripX, stripY - stripH * 0.5, stripW, stripH, 18);
+  ctx.fill();
+
+  // clip inside strip
+  ctx.beginPath();
+  roundRect(ctx, stripX, stripY - stripH * 0.5, stripW, stripH, 18);
+  ctx.clip();
+
+  const cycle = style.itemW + style.gap;
+  const total = Math.ceil(stripW / cycle) + 4;
+
+  // THIS is the important part:
+  // wholeSteps = how many full cards have scrolled by
+  // offsetInCycle = current in-between movement within one card width
+  const wholeSteps = Math.floor(tvCarouselOffset / cycle);
+  const offsetInCycle = tvCarouselOffset - wholeSteps * cycle;
+
+  for (let i = -1; i < total; i++) {
+    const itemIndex = ((wholeSteps + i) % carouselItems.length + carouselItems.length) % carouselItems.length;
+    const item = carouselItems[itemIndex];
+
+    const x = stripX - offsetInCycle + i * cycle;
+    const y = stripY - style.itemH * 0.5;
+
+    // ⭐ CENTER SCALE EFFECT
+    const cardCenterX = x + style.itemW * 0.5;
+    const stripCenterX = stripX + stripW * 0.5;
+
+    const dist = Math.abs(cardCenterX - stripCenterX);
+    const t = Math.max(0, 1 - dist / (stripW * 0.5));
+    const scale = 0.92 + t * 0.08;
+
+    const img = item.src ? loadTvCarouselImage(item.src) : null;
+    const imageReady =
+      !!img &&
+      img.complete === true &&
+      img.naturalWidth > 0 &&
+      img.naturalHeight > 0;
+
+    ctx.save();
+
+    // ⭐ APPLY SCALE FROM CENTER
+    ctx.translate(x + style.itemW * 0.5, y + style.itemH * 0.5);
+    ctx.scale(scale, scale);
+    ctx.translate(-(x + style.itemW * 0.5), -(y + style.itemH * 0.5));
+
+    // card shell
+    ctx.fillStyle = "rgba(255,255,255,0.08)";
+    roundRect(ctx, x, y, style.itemW, style.itemH, 12);
+    ctx.fill();
+
+    if (imageReady) {
+      ctx.save();
+
+      // clip image to rounded card
+      ctx.beginPath();
+      roundRect(ctx, x, y, style.itemW, style.itemH, 12);
+      ctx.clip();
+
+      const iw = img.naturalWidth;
+      const ih = img.naturalHeight;
+      const imageAspect = iw / ih;
+      const cardAspect = style.itemW / style.itemH;
+
+      let drawW = style.itemW;
+      let drawH = style.itemH;
+      let drawX = x;
+      let drawY = y;
+
+      if (imageAspect > cardAspect) {
+        drawH = style.itemH;
+        drawW = drawH * imageAspect;
+        drawX = x + (style.itemW - drawW) * 0.5;
+      } else {
+        drawW = style.itemW;
+        drawH = drawW / imageAspect;
+        drawY = y + (style.itemH - drawH) * 0.5;
+      }
+
+      ctx.drawImage(img, drawX, drawY, drawW, drawH);
+
+      // slight dark overlay
+      ctx.fillStyle = "rgba(0,0,0,0.24)";
+      ctx.fillRect(x, y, style.itemW, style.itemH);
+
+      ctx.restore();
+    } else {
+      // fallback placeholder
+      ctx.fillStyle = "rgba(255,255,255,0.05)";
+      ctx.fillRect(x + 10, y + 12, style.itemW - 20, 10);
+      ctx.fillRect(x + 10, y + 30, style.itemW * 0.55, 8);
+      ctx.fillRect(x + 10, y + 46, style.itemW * 0.72, 8);
+    }
+
+    // border
+    ctx.strokeStyle = "rgba(255,255,255,0.14)";
+    ctx.lineWidth = 2;
+    roundRect(ctx, x, y, style.itemW, style.itemH, 12);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  // edge fades
+  const leftFade = ctx.createLinearGradient(stripX, 0, stripX + style.edgeFadeW, 0);
+  leftFade.addColorStop(0, "rgba(17,17,17,1)");
+  leftFade.addColorStop(1, "rgba(17,17,17,0)");
+  ctx.fillStyle = leftFade;
+  ctx.fillRect(stripX, stripY - stripH * 0.5, style.edgeFadeW, stripH);
+
+  const rightFade = ctx.createLinearGradient(stripX + stripW - style.edgeFadeW, 0, stripX + stripW, 0);
+  rightFade.addColorStop(0, "rgba(17,17,17,0)");
+  rightFade.addColorStop(1, "rgba(17,17,17,1)");
+  ctx.fillStyle = rightFade;
+  ctx.fillRect(stripX + stripW - style.edgeFadeW, stripY - stripH * 0.5, style.edgeFadeW, stripH);
+
+  ctx.restore();
+}
+
+function drawAnimatedSelectionBar(ctx, w) {
+  if (tvHighlightY == null || tvHighlightW == null || tvHighlightH == null) return;
+
+  const t = performance.now() * 0.001;
+  const glow = 0.06 + 0.02 * Math.sin(t * 3.2);
+  const x = (w - tvHighlightW) * 0.5;
+  const y = tvHighlightY - tvHighlightH * 0.5;
+
+  ctx.save();
+  ctx.shadowColor = "rgba(255,255,255,0.08)";
+  ctx.shadowBlur = 6;
+
+  const grad = ctx.createLinearGradient(x, 0, x + tvHighlightW, 0);
+  grad.addColorStop(0.0, "rgba(255,255,255,0.04)");
+grad.addColorStop(0.18, `rgba(255,255,255,${0.08 + glow})`);
+grad.addColorStop(0.5, `rgba(255,255,255,${0.11 + glow})`);
+grad.addColorStop(0.82, `rgba(255,255,255,${0.08 + glow})`);
+grad.addColorStop(1.0, "rgba(255,255,255,0.04)");
+
+  ctx.fillStyle = grad;
+  roundRect(ctx, x, y, tvHighlightW, tvHighlightH, 12);
+  ctx.fill();
+
+  ctx.strokeStyle = "rgba(255,255,255,0.08)";
+  ctx.lineWidth = 2;
+  roundRect(ctx, x, y, tvHighlightW, tvHighlightH, 12);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawMenuItemsAnimated(ctx, items, startY, gapY, cx, selectedIndex) {
+  const t = performance.now() * 0.001;
+
+  for (let i = 0; i < items.length; i++) {
+    const y = startY + i * gapY;
+    const isSelected = i === selectedIndex;
+
+    const pulse = isSelected ? (0.5 + 0.5 * Math.sin(t * 7.0)) : 0;
+    const scale = isSelected ? (1.0 + 0.035 + pulse * 0.01) : 1.0;
+    const alpha = isSelected ? 1.0 : 0.84;
+
+    ctx.save();
+    ctx.translate(cx, y);
+    ctx.scale(scale, scale);
+    ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+
+    if (isSelected) {
+      ctx.shadowColor = "rgba(255,255,255,0.20)";
+      ctx.shadowBlur = 14;
+    }
+
+    ctx.fillText(items[i], 0, 0);
+    ctx.restore();
+  }
+}
 
 function getTvMenuBtn() {
   // Bigger button on iOS for easier tapping
@@ -4091,45 +4546,90 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
+function drawDesktopTvSideArrows(ctx, w, h) {
+  if (isIOSDevice()) return;
+  if (!tvOn) return;
+
+  if (
+    tvUiState !== "PHOTO" &&
+    tvUiState !== "VIDEO" &&
+    tvUiState !== "3D MODEL"
+  ) return;
+
+  ctx.save();
+
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = "bold 120px Arial";
+
+  const leftX = w * 0.05;
+  const rightX = w * 0.95;
+  const y = h * 0.52;
+
+  // side fades
+  const leftGrad = ctx.createLinearGradient(0, 0, w * 0.18, 0);
+  leftGrad.addColorStop(0, "rgba(0,0,0,0.22)");
+  leftGrad.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = leftGrad;
+  ctx.fillRect(0, 0, w * 0.18, h);
+
+  const rightGrad = ctx.createLinearGradient(w * 0.82, 0, w, 0);
+  rightGrad.addColorStop(0, "rgba(0,0,0,0)");
+  rightGrad.addColorStop(1, "rgba(0,0,0,0.22)");
+  ctx.fillStyle = rightGrad;
+  ctx.fillRect(w * 0.82, 0, w * 0.18, h);
+
+  // LEFT arrow
+  ctx.save();
+  if (tvLeftArrowHover) {
+    ctx.fillStyle = "rgba(255,255,255,0.92)";
+    ctx.shadowColor = "rgba(255,255,255,0.45)";
+    ctx.shadowBlur = 18;
+  } else {
+    ctx.fillStyle = "rgba(255,255,255,0.32)";
+  }
+  ctx.fillText("‹", leftX, y);
+  ctx.restore();
+
+  // RIGHT arrow
+  ctx.save();
+  if (tvRightArrowHover) {
+    ctx.fillStyle = "rgba(255,255,255,0.92)";
+    ctx.shadowColor = "rgba(255,255,255,0.45)";
+    ctx.shadowBlur = 18;
+  } else {
+    ctx.fillStyle = "rgba(255,255,255,0.32)";
+  }
+  ctx.fillText("›", rightX, y);
+  ctx.restore();
+
+  ctx.restore();
+}
 
 // simple menu renderer (we'll improve next steps)
 function drawTvMenu() {
   const w = tvCanvas.width;
   const h = tvCanvas.height;
 
-  // background
   tvCtx.clearRect(0, 0, w, h);
   tvCtx.fillStyle = "#111111";
   tvCtx.fillRect(0, 0, w, h);
 
-  const items = ["PHOTO", "VIDEO", "3D MODEL"];
+  const items = MENU_ITEMS;
+  const layout = getTvMenuLayout("MENU");
 
-  // vertical layout values
   tvCtx.textAlign = "center";
   tvCtx.textBaseline = "middle";
-  tvCtx.font = isIOSDevice()
-  ? "bold 118px Arial"
-  : "bold 102px Arial";
-  tvCtx.fillStyle = "white";
+  tvCtx.font = layout.font;
 
   const cx = w * 0.5;
-  const startY = isIOSDevice() ? h * 0.31 : h * 0.33;
-  const gapY   = isIOSDevice() ? 160     : 145;
+  const startY = getMenuStartY(items.length, layout.listCenterY, layout.gapY);
 
-   // blinking highlight ✅ (restored)
-  const t = (performance.now() - blinkT0) * 0.001; // seconds since last selection change
-  const speedHz = 0.5;                             // blink speed (try 0.8–2.0)
-  const alpha = 0.06 + 0.12 * (0.5 + 0.5 * Math.sin(t * Math.PI * 2 * speedHz));
+  syncTvHighlightToCurrentSelection(false);
+  drawAnimatedSelectionBar(tvCtx, w);
+  drawMenuItemsAnimated(tvCtx, items, startY, layout.gapY, cx, menuIndex);
+  drawCarouselStrip(tvCtx, w, h);
 
-  const selY = startY + menuIndex * gapY;
-  tvCtx.fillStyle = `rgba(255,255,255,${alpha})`;
-  tvCtx.fillRect(w * 0.22, selY - 55, w * 0.56, 110);
-
-  tvCtx.fillStyle = "white";
-  for (let i = 0; i < items.length; i++) {
-    tvCtx.fillText(items[i], cx, startY + i * gapY);
-  }
-  
   tvTex.needsUpdate = true;
 }
 
@@ -4156,112 +4656,91 @@ function drawTvSubcategoryMenu() {
   if (!tvParentCategory) return;
 
   const items = SUBCATEGORY_ITEMS[tvParentCategory] || [];
+  const layout = getTvMenuLayout("SUBCATEGORY_MENU");
 
   tvCtx.textAlign = "center";
   tvCtx.textBaseline = "middle";
 
-  // parent title
-  tvCtx.fillStyle = "rgba(255,255,255,0.75)";
-  tvCtx.font = isIOSDevice() ? "bold 58px Arial" : "bold 50px Arial";
-  tvCtx.fillText(tvParentCategory, w * 0.5, h * 0.16);
+  // parent title — slightly higher and cleaner
+  tvCtx.fillStyle = "rgba(255,255,255,0.78)";
+  tvCtx.font = layout.titleFont;
+  tvCtx.fillText(tvParentCategory, w * 0.5, layout.titleY);
 
-  // subcategory list
-tvCtx.font = isIOSDevice() ? "120px Arial" : "100px Arial";
-
+  // list
+  tvCtx.font = layout.font;
   const cx = w * 0.5;
-  const startY = isIOSDevice() ? h * 0.30 : h * 0.32;
-  const gapY   = isIOSDevice() ? 135 : 122;
+  const startY = getMenuStartY(items.length, layout.listCenterY, layout.gapY);
 
-  const t = (performance.now() - blinkT0) * 0.001;
-  const speedHz = 0.5;
-  const alpha = 0.06 + 0.12 * (0.5 + 0.5 * Math.sin(t * Math.PI * 2 * speedHz));
+  syncTvHighlightToCurrentSelection(false);
+  drawAnimatedSelectionBar(tvCtx, w);
+  drawMenuItemsAnimated(tvCtx, items, startY, layout.gapY, cx, subcategoryIndex);
+  drawCarouselStrip(tvCtx, w, h);
 
-  const selY = startY + subcategoryIndex * gapY;
-  tvCtx.fillStyle = `rgba(255,255,255,${alpha})`;
-  tvCtx.fillRect(w * 0.18, selY - 50, w * 0.64, 100);
+  // BACK button
+  const BACK = getTvBackBtn();
+  const backX = BACK.pad;
+  const backY = BACK.pad;
 
-  tvCtx.fillStyle = "white";
-  for (let i = 0; i < items.length; i++) {
-    tvCtx.fillText(items[i], cx, startY + i * gapY);
+  tvCtx.save();
+  if (backHover) {
+    tvCtx.shadowColor = "rgba(255,255,255,0.5)";
+    tvCtx.shadowBlur = 18;
+    tvCtx.globalAlpha = 1.0;
+  } else {
+    tvCtx.globalAlpha = 0.85;
   }
 
-  // ✅ BACK button (top-left)
-const BACK = getTvBackBtn();
-const backX = BACK.pad;
-const backY = BACK.pad;
+  tvCtx.fillStyle = "rgba(255,255,255,0.06)";
+  roundRect(tvCtx, backX, backY, BACK.w, BACK.h, 14);
+  tvCtx.fill();
 
-tvCtx.save();
+  tvCtx.strokeStyle = "rgba(255,255,255,0.25)";
+  tvCtx.lineWidth = 2;
+  roundRect(tvCtx, backX, backY, BACK.w, BACK.h, 14);
+  tvCtx.stroke();
 
-// hover = slight glow boost
-if (backHover) {
-  tvCtx.shadowColor = "rgba(255,255,255,0.5)";
-  tvCtx.shadowBlur = 18;
-  tvCtx.globalAlpha = 1.0;
-} else {
-  tvCtx.globalAlpha = 0.85;
-}
+  tvCtx.fillStyle = "#fff";
+  tvCtx.font = "46px Arial";
+  tvCtx.textAlign = "center";
+  tvCtx.textBaseline = "middle";
+  tvCtx.fillText("← back", backX + BACK.w * 0.5, backY + BACK.h * 0.52);
+  tvCtx.restore();
 
-// subtle background (lighter than MENU)
-tvCtx.fillStyle = "rgba(255,255,255,0.06)";
-roundRect(tvCtx, backX, backY, BACK.w, BACK.h, 14);
-tvCtx.fill();
+  // MENU button
+  const BTN = getTvMenuBtn();
+  const bx = w - BTN.pad - BTN.w;
+  const by = BTN.pad;
 
-// very light border
-tvCtx.strokeStyle = "rgba(255,255,255,0.25)";
-tvCtx.lineWidth = 2;
-roundRect(tvCtx, backX, backY, BACK.w, BACK.h, 14);
-tvCtx.stroke();
+  tvCtx.save();
+  if (menuHover) {
+    tvCtx.globalAlpha = 0.9;
+    tvCtx.fillStyle = "#222";
+    tvCtx.shadowColor = "rgba(255,255,255,0.5)";
+    tvCtx.shadowBlur = 25;
+  } else {
+    tvCtx.globalAlpha = 0.65;
+    tvCtx.fillStyle = "#000";
+  }
+  roundRect(tvCtx, bx, by, BTN.w, BTN.h, 18);
+  tvCtx.fill();
+  tvCtx.restore();
 
-// text
-tvCtx.fillStyle = "#fff";
-tvCtx.font = "46px Arial"; // 👈 bigger again
-tvCtx.textAlign = "center";
-tvCtx.textBaseline = "middle";
+  tvCtx.save();
+  tvCtx.globalAlpha = 0.35;
+  tvCtx.strokeStyle = "#fff";
+  tvCtx.lineWidth = 3;
+  roundRect(tvCtx, bx, by, BTN.w, BTN.h, 18);
+  tvCtx.stroke();
+  tvCtx.restore();
 
-tvCtx.fillText("← back", backX + BACK.w * 0.5, backY + BACK.h * 0.52);
-
-tvCtx.restore();
-
-  // ✅ MENU button (top-right)
-const BTN = getTvMenuBtn();
-const bx = w - BTN.pad - BTN.w;
-const by = BTN.pad;
-
-// background
-tvCtx.save();
-
-if (menuHover) {
-  tvCtx.globalAlpha = 0.9;
-  tvCtx.fillStyle = "#222";
-  tvCtx.shadowColor = "rgba(255,255,255,0.5)";
-  tvCtx.shadowBlur = 25;
-} else {
-  tvCtx.globalAlpha = 0.65;
-  tvCtx.fillStyle = "#000";
-}
-
-roundRect(tvCtx, bx, by, BTN.w, BTN.h, 18);
-tvCtx.fill();
-tvCtx.restore();
-
-// border
-tvCtx.save();
-tvCtx.globalAlpha = 0.35;
-tvCtx.strokeStyle = "#fff";
-tvCtx.lineWidth = 3;
-roundRect(tvCtx, bx, by, BTN.w, BTN.h, 18);
-tvCtx.stroke();
-tvCtx.restore();
-
-// text
-tvCtx.save();
-tvCtx.fillStyle = "#fff";
-tvCtx.globalAlpha = 0.92;
-tvCtx.font = "bold 46px Arial";
-tvCtx.textAlign = "center";
-tvCtx.textBaseline = "middle";
-tvCtx.fillText("MENU", bx + BTN.w * 0.5, by + BTN.h * 0.52);
-tvCtx.restore();
+  tvCtx.save();
+  tvCtx.fillStyle = "#fff";
+  tvCtx.globalAlpha = 0.92;
+  tvCtx.font = "bold 46px Arial";
+  tvCtx.textAlign = "center";
+  tvCtx.textBaseline = "middle";
+  tvCtx.fillText("MENU", bx + BTN.w * 0.5, by + BTN.h * 0.52);
+  tvCtx.restore();
 
   tvTex.needsUpdate = true;
 }
@@ -4273,7 +4752,8 @@ function moveMenuSelection(delta) {
     const n = MENU_ITEMS.length;
     menuIndex = (menuIndex + delta + n) % n;
 
-    blinkT0 = performance.now();
+   blinkT0 = performance.now();
+    syncTvHighlightToCurrentSelection(false);
     drawTvMenu();
 
     console.log("📺 menuIndex:", menuIndex, MENU_ITEMS[menuIndex]);
@@ -4288,6 +4768,7 @@ function moveMenuSelection(delta) {
     subcategoryIndex = (subcategoryIndex + delta + n) % n;
 
     blinkT0 = performance.now();
+    syncTvHighlightToCurrentSelection(false);
     drawTvSubcategoryMenu();
 
     console.log("📺 subcategoryIndex:", subcategoryIndex, items[subcategoryIndex]);
@@ -4309,7 +4790,8 @@ function confirmMenuSelection() {
     tvSubcategoryHoverFlipV = null;
 
     blinkT0 = performance.now();
-    drawTvSubcategoryMenu();
+syncTvHighlightToCurrentSelection(true);
+drawTvSubcategoryMenu();
     return;
   }
 
@@ -4371,6 +4853,7 @@ function goBackOnePage() {
   menuHover = false;
 
   blinkT0 = performance.now();
+  syncTvHighlightToCurrentSelection(true);
   drawTvSubcategoryMenu();
   return;
 }
@@ -4521,6 +5004,7 @@ function drawPhotoToTv(img) {
   const dy = (h - dh) * 0.5;
 
   tvCtx.drawImage(img, dx, dy, dw, dh);
+  drawDesktopTvSideArrows(tvCtx, w, h);
 
   if (tvOn && (tvUiState === "PHOTO" || tvUiState === "3D MODEL")) {
   const BACK = getTvBackBtn();
@@ -4821,6 +5305,7 @@ function drawVideoFrameToTv() {
 
   // draw the current frame
   tvCtx.drawImage(videoEl, dx, dy, dw, dh);
+  drawDesktopTvSideArrows(tvCtx, w, h);
 
   if (tvOn && tvUiState === "VIDEO") {
   const BACK = getTvBackBtn();
@@ -5149,6 +5634,7 @@ function drawModelFrameToTv() {
   const dy = (h - dh) * 0.5;
 
   tvCtx.drawImage(modelVideoEl, dx, dy, dw, dh);
+  drawDesktopTvSideArrows(tvCtx, w, h);
 
   if (tvOn && (tvUiState === "PHOTO" || tvUiState === "3D MODEL")) {
   const BACK = getTvBackBtn();
@@ -7503,9 +7989,10 @@ if (
   const pyB = (1 - v) * h;
 
   // these must match drawTvMenu()
-  const startY = h * 0.35;
-  const gapY = 170;
-  const n = MENU_ITEMS.length;
+const layout = getTvMenuLayout("MENU");
+const startY = getMenuStartY(MENU_ITEMS.length, layout.listCenterY, layout.gapY);
+const gapY = layout.gapY;
+const n = MENU_ITEMS.length;
 
   const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 
@@ -7553,10 +8040,11 @@ if (
   const pyB = (1 - v) * h;
 
   // MUST exactly match drawTvSubcategoryMenu()
-  const startY = isIOSDevice() ? h * 0.30 : h * 0.32;
-  const gapY   = isIOSDevice() ? 135 : 122;
-
   const items = SUBCATEGORY_ITEMS[tvParentCategory] || [];
+const layout = getTvMenuLayout("SUBCATEGORY_MENU");
+const startY = getMenuStartY(items.length, layout.listCenterY, layout.gapY);
+const gapY = layout.gapY;
+
   const n = items.length;
   if (!n) return;
 
@@ -7585,6 +8073,76 @@ if (
     subcategoryIndex = idx;
     blinkT0 = performance.now();
     drawTvSubcategoryMenu();
+  }
+}
+
+// ============================================================
+// ✅ DESKTOP: hover over media-page side arrows (CORRECT SPOT)
+// ============================================================
+tvLeftArrowHover = false;
+tvRightArrowHover = false;
+
+if (
+  tvOn &&
+  (tvUiState === "PHOTO" || tvUiState === "VIDEO" || tvUiState === "3D MODEL") &&
+  e.pointerType === "mouse" &&
+  tvScreenMeshRef &&
+  tvHoverHit &&
+  tvHoverHit.uv
+) {
+  const uv = tvHoverHit.uv;
+
+  const w = tvCanvas.width;
+  const h = tvCanvas.height;
+
+  let u = uv.x * (tvTex.repeat?.x ?? 1) + (tvTex.offset?.x ?? 0);
+  let v = uv.y * (tvTex.repeat?.y ?? 1) + (tvTex.offset?.y ?? 0);
+
+  u = ((u % 1) + 1) % 1;
+  v = ((v % 1) + 1) % 1;
+
+  const px = u * w;
+  const pyA = v * h;
+  const pyB = (1 - v) * h;
+
+  const leftArrowX = w * 0.05;
+  const rightArrowX = w * 0.95;
+  const arrowY = h * 0.52;
+
+  const hitHalfW = 28;
+  const hitHalfH = 44;
+
+  const overLeftA =
+    Math.abs(px - leftArrowX) <= hitHalfW &&
+    Math.abs(pyA - arrowY) <= hitHalfH;
+
+  const overLeftB =
+    Math.abs(px - leftArrowX) <= hitHalfW &&
+    Math.abs(pyB - arrowY) <= hitHalfH;
+
+  const overRightA =
+    Math.abs(px - rightArrowX) <= hitHalfW &&
+    Math.abs(pyA - arrowY) <= hitHalfH;
+
+  const overRightB =
+    Math.abs(px - rightArrowX) <= hitHalfW &&
+    Math.abs(pyB - arrowY) <= hitHalfH;
+
+  if (overLeftA || overLeftB) {
+    tvLeftArrowHover = true;
+  } else if (overRightA || overRightB) {
+    tvRightArrowHover = true;
+  }
+
+  // ⭐ FORCE REDRAW (THIS is what you were asking about)
+  if (tvUiState === "PHOTO" && photoImage) {
+    drawPhotoToTv(photoImage);
+  }
+  else if (tvUiState === "VIDEO" && videoReady && !tvVideoSuppressed) {
+    drawVideoFrameToTv();
+  }
+  else if (tvUiState === "3D MODEL" && modelReady && !tvModelSuppressed) {
+    drawModelToTv();
   }
 }
 
@@ -10302,11 +10860,11 @@ const IOS_CIGARETTE_ANIM_PUSH = {
   z: 9.4,
 
   // cigarette move-in timing
-  inStart: 0.18,
+  inStart: 0.09,
   inEnd: 0.42,
 
   // after smoke tip finishes, how long the return takes
-  returnDuration: 0.18,
+  returnDuration: 0.24,
 };
 
 let cigaretteBasePos = null;
@@ -12977,6 +13535,15 @@ if (!blocked) {
   updateExhaleSmoke(dt);
 }
 
+  // ✅ TV menu animation
+  updateTvMenuFx(dt);
+
+  if (tvOn && tvUiState === "MENU") {
+    drawTvMenu();
+  } else if (tvOn && tvUiState === "SUBCATEGORY_MENU") {
+    drawTvSubcategoryMenu();
+  }
+
  // ✅ Throttle TV redraw so it doesn't hammer performance
 if (!window.__tvRedrawAcc) window.__tvRedrawAcc = 0;
 window.__tvRedrawAcc += dt;
@@ -12984,13 +13551,7 @@ window.__tvRedrawAcc += dt;
 if (!blocked && tvOn && tvScreenMatRef && window.__tvRedrawAcc > (1 / 12)) {
   window.__tvRedrawAcc = 0;
 
-  if (tvUiState === "MENU") {
-    drawTvMenu();
-  } 
-  else if (tvUiState === "SUBCATEGORY_MENU") {
-    drawTvSubcategoryMenu();
-  }
-  else if (tvUiState === "PHOTO") {
+  if (tvUiState === "PHOTO") {
     if (!photoImage && !photoLoading) loadPhotoAt(photoIndex);
     if (photoImage) drawPhotoToTv(photoImage);
   }
@@ -13119,6 +13680,8 @@ function scheduleResize() {
 renderer.domElement.addEventListener("pointermove", (e) => {
   const usedWallDraw = continueWallDraw(e);
   if (usedWallDraw) return;
+
+
 });
 
 window.addEventListener("pointerup", () => {
