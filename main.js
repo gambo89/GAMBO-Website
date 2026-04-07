@@ -3746,7 +3746,7 @@ modelOverlayPrev.style.backdropFilter = "blur(6px)";
 const modelOverlayNext = document.createElement("button");
 modelOverlayNext.innerHTML = "&gt;";
 modelOverlayNext.style.position = "absolute";
-modelOverlayPrev.style.right = "18px";
+modelOverlayNext.style.right = "18px";
 modelOverlayNext.style.top = "50%";
 modelOverlayNext.style.transform = "translateY(-50%)";
 modelOverlayNext.style.width = "64px";
@@ -4108,6 +4108,10 @@ const TV_PREVIEW_IMAGES = {
       "./assets/Photo/Portrait/01-Portrait.jpg",
       "./assets/Photo/Portrait/02-Portrait.jpg",
       "./assets/Photo/Portrait/03-Portrait.jpg",
+      "./assets/Photo/Portrait/07-Portrait.jpg",
+      "./assets/Photo/Portrait/13-Portrait.jpg",
+      "./assets/Photo/Portrait/08-Portrait.jpg",
+      "./assets/Photo/Portrait/09-Portrait.jpg",
     ],
     surfaces: [
       "./assets/Photo/Surfaces/01-Surfaces.jpg",
@@ -4124,44 +4128,41 @@ const TV_PREVIEW_IMAGES = {
   VIDEO: {
     cinematic: [
       "./assets/Video/Cinematic/01-Cinematic.jpg",
-      "./assets/Video/Cinematic/02-Cinematic.jpg",
-      "./assets/Video/Cinematic/03-Cinematic.jpg",
     ],
     commercial: [
       "./assets/Video/Commercial/01-Commercial.jpg",
       "./assets/Video/Commercial/02-Commercial.jpg",
-      "./assets/Video/Commercial/03-Commercial.jpg",
     ],
     music: [
-      "./assets/Video/Music/01-Music.mp4",
+      "./assets/Video/Music/01-Music.jpg",
       "./assets/Video/Music/02-Music.jpg",
       "./assets/Video/Music/03-Music.jpg",
+      "./assets/Video/Music/04-Music.jpg",
+      "./assets/Video/Music/05-Music.jpg",
+      
     ],
     experimental: [
       "./assets/Video/Experimental/01-Experimental.jpg",
-      "./assets/Video/Experimental/02-Experimental.jpg",
-      "./assets/Video/Experimental/03-Experimental.jpg",
     ],
   },
 
   "3D MODEL": {
     boards: [
-      "./assets/3D Model/Boards/01-Boards.mp4",
-      "./assets/3D Model/Boards/02-Boards.mp4",
-      "./assets/3D Model/Boards/03-Boards.jpg",
+      "./assets/3D Model/Boards/01-Boards.jpg",
+      "./assets/3D Model/Boards/02-Boards.jpg",
     ],
     objects: [
-      "./assets/3D Model/Objects/01-Objects.mp4",
-      "./assets/3D Model/Objects/02-Objects.mp4",
-      "./assets/3D Model/Objects/03-Objects.mp4",
-      "./assets/3D Model/Objects/04-Objects.mp4",
-      "./assets/3D Model/Objects/05-Objects.mp4",
-      "./assets/3D Model/Objects/06-Objects.mp4",
+      "./assets/3D Model/Objects/01-Objects.jpg",
+      "./assets/3D Model/Objects/02-Objects.jpg",
+      "./assets/3D Model/Objects/03-Objects.jpg",
+      "./assets/3D Model/Objects/04-Objects.jpg",
+      "./assets/3D Model/Objects/05-Objects.jpg",
+      "./assets/3D Model/Objects/06-Objects.jpg",
+      "./assets/3D Model/Objects/07-Objects.jpg",
+      "./assets/3D Model/Objects/08-Objects.jpg",
     ],
     architecture: [
       "./assets/3D Model/Architecture/01-Architecture.jpg",
-      "./assets/3D Model/Architecture/02-Architecture.jpg",
-      "./assets/3D Model/Architecture/03-Architecture.jpg",
     ],
   },
 };
@@ -4896,6 +4897,15 @@ const PHOTO_CATEGORIES = {
     "./assets/Photo/Portrait/03-Portrait.jpg",
     "./assets/Photo/Portrait/04-Portrait.jpg",
     "./assets/Photo/Portrait/05-Portrait.jpg",
+    "./assets/Photo/Portrait/06-Portrait.jpg",
+    "./assets/Photo/Portrait/07-Portrait.jpg",
+    "./assets/Photo/Portrait/08-Portrait.jpg",
+    "./assets/Photo/Portrait/09-Portrait.jpg",
+    "./assets/Photo/Portrait/10-Portrait.jpg",
+    "./assets/Photo/Portrait/11-Portrait.jpg",
+    "./assets/Photo/Portrait/12-Portrait.jpg",
+    "./assets/Photo/Portrait/13-Portrait.jpg",
+    "./assets/Photo/Portrait/14-Portrait.jpg",
   ],
 
   SURFACES: [
@@ -4912,12 +4922,23 @@ const PHOTO_CATEGORIES = {
 };
 
 const VIDEO_CATEGORIES = {
-  CINEMATIC: [],
-  COMMERCIAL: [],
+  CINEMATIC: [
+    "./assets/Video/Cinematic/01-Cinematic.mp4",
+  ],
+  COMMERCIAL: [
+    "./assets/Video/Commercial/01-Commercial.mp4",
+    "./assets/Video/Commercial/02-Commercial.mp4",
+  ],
   MUSIC: [
     "./assets/Video/Music/01-Music.mp4",
+    "./assets/Video/Music/02-Music.mp4",
+    "./assets/Video/Music/03-Music.mp4",
+    "./assets/Video/Music/04-Music.mp4",
+    "./assets/Video/Music/05-Music.mp4",
   ],
-  EXPERIMENTAL: [],
+  EXPERIMENTAL: [
+    "./assets/Video/Experimental/01-Experimental.mp4",
+  ],
 };
 
 const MODEL_CATEGORIES = {
@@ -4933,6 +4954,8 @@ const MODEL_CATEGORIES = {
     "./assets/3D Model/Objects/04-Objects.mp4",
     "./assets/3D Model/Objects/05-Objects.mp4",
     "./assets/3D Model/Objects/06-Objects.mp4",
+    "./assets/3D Model/Objects/07-Objects.mp4",
+    "./assets/3D Model/Objects/08-Objects.mp4",
   ],
 
   ARCHITECTURE: [],
@@ -5257,28 +5280,27 @@ async function overlayNextVideo(delta) {
   if (!videoOverlayOpen) return;
   if (tvUiState !== "VIDEO") return;
 
-  // move index (wrap)
-  const n = VIDEO_PATHS.length;
+  const key = (selectedSubcategory || "").toUpperCase();
+  const list = VIDEO_CATEGORIES[key] || [];
+  if (!list.length) return;
+
+  const n = list.length;
   videoIndex = (videoIndex + delta + n) % n;
 
-  const url = VIDEO_PATHS[videoIndex];
+  const url = list[videoIndex];
 
-  // 1) Update the TV video source (keep it paused while overlay is open)
-  // (This keeps your app state consistent when you exit overlay.)
+  // keep TV state in sync, but paused while overlay is open
   loadVideoAt(videoIndex, { autoPlay: false });
 
-  // 2) Update the overlay player source + keep playing
   try {
     videoOverlayEl.pause();
     videoOverlayEl.src = url;
     videoOverlayEl.currentTime = 0;
     videoOverlayEl.load();
 
-    try { await videoOverlayEl.play(); } catch (err) {
-      console.warn("Overlay play blocked:", err);
-    }
-  } catch (e) {
-    console.warn("overlayNextVideo failed:", e);
+    await videoOverlayEl.play();
+  } catch (err) {
+    console.warn("overlayNextVideo play blocked:", err);
   }
 }
 
