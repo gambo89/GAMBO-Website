@@ -5977,7 +5977,7 @@ function startSmokeChirpCycle() {
     // then every 30s forever
     smokeChirpInterval = setInterval(() => {
       playSmokeChirp();
-    }, 45000);
+    }, 75000);
   }, 15000);
 }
 
