@@ -4408,20 +4408,23 @@ function goBackToTvMenu() {
 // ============================================================
 const PHOTO_CATEGORIES = {
   PORTRAITS: [
-    "./assets/Photo/01-sweet.jpg",
-    "./assets/Photo/02-carti.jpg",
-    "./assets/Photo/03-james.jpg",
-    "./assets/Photo/06-nyc.jpg",
-    "./assets/Photo/07-nardo.jpg",
+    "./assets/Photo/Portrait/01-Portrait.jpg",
+    "./assets/Photo/Portrait/02-Portrait.jpg",
+    "./assets/Photo/Portrait/03-Portrait.jpg",
+    "./assets/Photo/Portrait/04-Portrait.jpg",
+    "./assets/Photo/Portrait/05-Portrait.jpg",
   ],
 
   SURFACES: [
-    "./assets/Photo/04-roof.jpg",
-    "./assets/Photo/05-scan.jpg",
+    "./assets/Photo/Surfaces/01-Surfaces.jpg",
+    "./assets/Photo/Surfaces/02-Surfaces.jpg",
+    "./assets/Photo/Surfaces/03-Surfaces.jpg",
+    "./assets/Photo/Surfaces/04-Surfaces.jpg",
   ],
 
   ENVIRONMENTS: [
-    "./assets/Photo/08-room.jpg",
+    "./assets/Photo/Environment/01-Environment.JPEG",
+    "./assets/Photo/Environment/02-Environment.jpg",
   ],
 };
 
@@ -4429,24 +4432,24 @@ const VIDEO_CATEGORIES = {
   CINEMATIC: [],
   COMMERCIAL: [],
   MUSIC: [
-    "./assets/Video/01-sweet93-OG.mp4",
+    "./assets/Video/Music/01-Music.mp4",
   ],
   EXPERIMENTAL: [],
 };
 
 const MODEL_CATEGORIES = {
   BOARDS: [
-    "./assets/3D Model/02-Skateboard.mp4",
-    "./assets/3D Model/03-Skateboard-2.mp4",
+    "./assets/3D Model/Boards/01-Boards.mp4",
+    "./assets/3D Model/Boards/02-Boards.mp4",
   ],
 
   OBJECTS: [
-    "./assets/3D Model/01-Gate.mp4",
-    "./assets/3D Model/04-UAP.mp4",
-    "./assets/3D Model/05-Morningstar.mp4",
-    "./assets/3D Model/06-Bat.mp4",
-    "./assets/3D Model/07-Chainsaw.mp4",
-    "./assets/3D Model/08-Granade1.mp4",
+    "./assets/3D Model/Objects/01-Objects.mp4",
+    "./assets/3D Model/Objects/02-Objects.mp4",
+    "./assets/3D Model/Objects/03-Objects.mp4",
+    "./assets/3D Model/Objects/04-Objects.mp4",
+    "./assets/3D Model/Objects/05-Objects.mp4",
+    "./assets/3D Model/Objects/06-Objects.mp4",
   ],
 
   ARCHITECTURE: [],
