@@ -923,6 +923,63 @@ function applyIOSLampTransform() {
   });
 }
 
+function applyIOSCigaretteTransform() {
+  if (!isIOSDevice()) return;
+  if (!IOS_CIGARETTE_TWEAK.enabled) return;
+
+  // cigarette root
+  if (cigaretteRoot) {
+    if (!cigaretteRoot.userData.__iosCigBase) {
+      cigaretteRoot.userData.__iosCigBase = {
+        position: cigaretteRoot.position.clone(),
+        scale: cigaretteRoot.scale.clone(),
+      };
+    }
+
+    const base = cigaretteRoot.userData.__iosCigBase;
+
+    cigaretteRoot.position.set(
+      base.position.x + IOS_CIGARETTE_TWEAK.x,
+      base.position.y + IOS_CIGARETTE_TWEAK.y,
+      base.position.z + IOS_CIGARETTE_TWEAK.z
+    );
+
+    cigaretteRoot.scale.set(
+      base.scale.x * IOS_CIGARETTE_TWEAK.scale,
+      base.scale.y * IOS_CIGARETTE_TWEAK.scale,
+      base.scale.z * IOS_CIGARETTE_TWEAK.scale
+    );
+
+    cigaretteRoot.updateMatrixWorld(true);
+  }
+
+  // smoke tip root
+  if (smokeTipRoot) {
+    if (!smokeTipRoot.userData.__iosSmokeTipBase) {
+      smokeTipRoot.userData.__iosSmokeTipBase = {
+        position: smokeTipRoot.position.clone(),
+        scale: smokeTipRoot.scale.clone(),
+      };
+    }
+
+    const base = smokeTipRoot.userData.__iosSmokeTipBase;
+
+    smokeTipRoot.position.set(
+      base.position.x + IOS_CIGARETTE_TWEAK.x,
+      base.position.y + IOS_CIGARETTE_TWEAK.y,
+      base.position.z + IOS_CIGARETTE_TWEAK.z
+    );
+
+    smokeTipRoot.scale.set(
+      base.scale.x * IOS_CIGARETTE_TWEAK.scale,
+      base.scale.y * IOS_CIGARETTE_TWEAK.scale,
+      base.scale.z * IOS_CIGARETTE_TWEAK.scale
+    );
+
+    smokeTipRoot.updateMatrixWorld(true);
+  }
+}
+
 // ============================================================
 // ✅ FIXED CAMERA BASELINE (never changes after boot)
 // ============================================================
@@ -1147,6 +1204,7 @@ let nightLights = null;
 let remoteMeshRef = null;
 let remoteRootRef = null;
 let remoteFillLightRef = null;
+let remoteCameraLightRef = null;
 let skateboardMeshRef = null;
 
 let lampMeshRef = null; 
@@ -1300,6 +1358,46 @@ const IOS_REMOTE_TWEAK = {
   offsetZ: 6.6,
 };
 
+const IOS_CIGARETTE_TWEAK = {
+  enabled: true,
+
+  // main controls
+  x: 0.0,
+  y: 0.0,
+  z: 0.0,   // ← this is the main one to tweak first
+
+  scale: 1.0,
+};
+
+// ============================================================
+// ✅ iOS REMOTE LIGHT (brightness control)
+// ============================================================
+const IOS_REMOTE_LIGHT = {
+  enabled: false,
+
+  intensity: 18.0,   // 🔥 main brightness (try 8 → 20)
+  distance: 8.0,     // how far light reaches
+  decay: 2.0,        // realistic falloff (keep 2)
+
+  offsetX: 0.0,      // move light right/left
+  offsetY: 0.8,      // move up/down
+  offsetZ: 1.2,      // move forward/back (VERY important)
+};
+
+const IOS_REMOTE_CAMERA_LIGHT = {
+  enabled: true,
+
+  intensity: 70.0,
+  distance: 30.0,
+  decay: 2.0,
+
+  // camera-local position
+  // negative Z = in front of camera
+  x: 0.0,
+  y: -0.35,
+  z: 0.2,
+};
+
 const IOS_REMOTE_BUTTON_TWEAK = {
   enabled: true,
 
@@ -1316,7 +1414,6 @@ const IOS_REMOTE_BUTTON_TWEAK = {
   contact: { x: 0, y: 0, z: 0 },
   tiktok:    { x: 0, y: 0, z: 0 },
 };
-
 
 function pushMeshAwayFromCamera(mesh, amount) {
   if (!mesh || !mesh.parent || !camera) return;
@@ -1483,26 +1580,51 @@ function applyIOSRemoteTweaks() {
 
 function updateIOSRemoteFillLight(maxDim) {
   if (!isIOSDevice()) return;
+  if (!IOS_REMOTE_LIGHT.enabled) return;
   if (!remoteRootRef) return;
 
   const remotePos = new THREE.Vector3();
   remoteRootRef.getWorldPosition(remotePos);
 
+  // create once
   if (!remoteFillLightRef) {
-    remoteFillLightRef = new THREE.PointLight(0xffe6c8, 6.5, maxDim * 1.2, 2);
+    remoteFillLightRef = new THREE.PointLight(0xffffff, 1, 1, 2);
     scene.add(remoteFillLightRef);
   }
 
-  remoteFillLightRef.intensity = 6.5;
-  remoteFillLightRef.distance = maxDim * 1.2;
-  remoteFillLightRef.decay = 2;
+  // ✅ use LOCAL values, not maxDim-scaled room values
+  remoteFillLightRef.intensity = IOS_REMOTE_LIGHT.intensity;
+  remoteFillLightRef.distance  = IOS_REMOTE_LIGHT.distance;
+  remoteFillLightRef.decay     = IOS_REMOTE_LIGHT.decay;
 
+  // ✅ keep the light very close to the remote
   remoteFillLightRef.position.copy(remotePos).add(
     new THREE.Vector3(
-      maxDim * 0.22,
-      maxDim * 0.08,
-      maxDim * 0.18
+      IOS_REMOTE_LIGHT.offsetX,
+      IOS_REMOTE_LIGHT.offsetY,
+      IOS_REMOTE_LIGHT.offsetZ
     )
+  );
+}
+
+function updateIOSRemoteCameraLight() {
+  if (!isIOSDevice()) return;
+  if (!IOS_REMOTE_CAMERA_LIGHT.enabled) return;
+  if (!camera) return;
+
+  if (!remoteCameraLightRef) {
+    remoteCameraLightRef = new THREE.PointLight(0xffffff, 1, 1, 2);
+    camera.add(remoteCameraLightRef);
+  }
+
+  remoteCameraLightRef.intensity = IOS_REMOTE_CAMERA_LIGHT.intensity;
+  remoteCameraLightRef.distance  = IOS_REMOTE_CAMERA_LIGHT.distance;
+  remoteCameraLightRef.decay     = IOS_REMOTE_CAMERA_LIGHT.decay;
+
+  remoteCameraLightRef.position.set(
+    IOS_REMOTE_CAMERA_LIGHT.x,
+    IOS_REMOTE_CAMERA_LIGHT.y,
+    IOS_REMOTE_CAMERA_LIGHT.z
   );
 }
 
@@ -3917,10 +4039,12 @@ tvTex.flipY = false;
 
 // UI state
 let tvUiState = "MENU";    // MENU for now
-
 let menuIndex = 0;         // 0=Photo, 1=Video, 2=3D Model
 let blinkT0 = performance.now();
 let menuHover = false;
+let backHover = false;
+
+let tvSubcategoryHoverFlipV = null;
 
 function getTvMenuBtn() {
   // Bigger button on iOS for easier tapping
@@ -3940,6 +4064,9 @@ function getTvMenuBtn() {
   };
 }
 
+function getTvBackBtn() {
+  return getTvMenuBtn();
+}
 
 // ============================================================
 // ✅ Canvas helper: rounded rectangle
@@ -4008,58 +4135,253 @@ function drawTvMenu() {
 
 const MENU_ITEMS = ["PHOTO", "VIDEO", "3D MODEL"];
 
+const SUBCATEGORY_ITEMS = {
+  PHOTO: ["portraits", "surfaces", "environments"],
+  VIDEO: ["cinematic", "commercial", "music", "experimental"],
+  "3D MODEL": ["boards", "objects", "architecture"],
+};
+
+let tvParentCategory = null;
+let subcategoryIndex = 0;
+let selectedSubcategory = null;
+
+function drawTvSubcategoryMenu() {
+  const w = tvCanvas.width;
+  const h = tvCanvas.height;
+
+  tvCtx.clearRect(0, 0, w, h);
+  tvCtx.fillStyle = "#111111";
+  tvCtx.fillRect(0, 0, w, h);
+
+  if (!tvParentCategory) return;
+
+  const items = SUBCATEGORY_ITEMS[tvParentCategory] || [];
+
+  tvCtx.textAlign = "center";
+  tvCtx.textBaseline = "middle";
+
+  // parent title
+  tvCtx.fillStyle = "rgba(255,255,255,0.75)";
+  tvCtx.font = isIOSDevice() ? "bold 58px Arial" : "bold 50px Arial";
+  tvCtx.fillText(tvParentCategory, w * 0.5, h * 0.16);
+
+  // subcategory list
+tvCtx.font = isIOSDevice() ? "120px Arial" : "100px Arial";
+
+  const cx = w * 0.5;
+  const startY = isIOSDevice() ? h * 0.30 : h * 0.32;
+  const gapY   = isIOSDevice() ? 135 : 122;
+
+  const t = (performance.now() - blinkT0) * 0.001;
+  const speedHz = 0.5;
+  const alpha = 0.06 + 0.12 * (0.5 + 0.5 * Math.sin(t * Math.PI * 2 * speedHz));
+
+  const selY = startY + subcategoryIndex * gapY;
+  tvCtx.fillStyle = `rgba(255,255,255,${alpha})`;
+  tvCtx.fillRect(w * 0.18, selY - 50, w * 0.64, 100);
+
+  tvCtx.fillStyle = "white";
+  for (let i = 0; i < items.length; i++) {
+    tvCtx.fillText(items[i], cx, startY + i * gapY);
+  }
+
+  // ✅ BACK button (top-left)
+const BACK = getTvBackBtn();
+const backX = BACK.pad;
+const backY = BACK.pad;
+
+tvCtx.save();
+
+// hover = slight glow boost
+if (backHover) {
+  tvCtx.shadowColor = "rgba(255,255,255,0.5)";
+  tvCtx.shadowBlur = 18;
+  tvCtx.globalAlpha = 1.0;
+} else {
+  tvCtx.globalAlpha = 0.85;
+}
+
+// subtle background (lighter than MENU)
+tvCtx.fillStyle = "rgba(255,255,255,0.06)";
+roundRect(tvCtx, backX, backY, BACK.w, BACK.h, 14);
+tvCtx.fill();
+
+// very light border
+tvCtx.strokeStyle = "rgba(255,255,255,0.25)";
+tvCtx.lineWidth = 2;
+roundRect(tvCtx, backX, backY, BACK.w, BACK.h, 14);
+tvCtx.stroke();
+
+// text
+tvCtx.fillStyle = "#fff";
+tvCtx.font = "46px Arial"; // 👈 bigger again
+tvCtx.textAlign = "center";
+tvCtx.textBaseline = "middle";
+
+tvCtx.fillText("← back", backX + BACK.w * 0.5, backY + BACK.h * 0.52);
+
+tvCtx.restore();
+
+  // ✅ MENU button (top-right)
+const BTN = getTvMenuBtn();
+const bx = w - BTN.pad - BTN.w;
+const by = BTN.pad;
+
+// background
+tvCtx.save();
+
+if (menuHover) {
+  tvCtx.globalAlpha = 0.9;
+  tvCtx.fillStyle = "#222";
+  tvCtx.shadowColor = "rgba(255,255,255,0.5)";
+  tvCtx.shadowBlur = 25;
+} else {
+  tvCtx.globalAlpha = 0.65;
+  tvCtx.fillStyle = "#000";
+}
+
+roundRect(tvCtx, bx, by, BTN.w, BTN.h, 18);
+tvCtx.fill();
+tvCtx.restore();
+
+// border
+tvCtx.save();
+tvCtx.globalAlpha = 0.35;
+tvCtx.strokeStyle = "#fff";
+tvCtx.lineWidth = 3;
+roundRect(tvCtx, bx, by, BTN.w, BTN.h, 18);
+tvCtx.stroke();
+tvCtx.restore();
+
+// text
+tvCtx.save();
+tvCtx.fillStyle = "#fff";
+tvCtx.globalAlpha = 0.92;
+tvCtx.font = "bold 46px Arial";
+tvCtx.textAlign = "center";
+tvCtx.textBaseline = "middle";
+tvCtx.fillText("MENU", bx + BTN.w * 0.5, by + BTN.h * 0.52);
+tvCtx.restore();
+
+  tvTex.needsUpdate = true;
+}
+
 function moveMenuSelection(delta) {
-  if (!tvOn) return;               // only when TV is on
-  if (tvUiState !== "MENU") return;
+  if (!tvOn) return;
 
-  const n = MENU_ITEMS.length;
-  menuIndex = (menuIndex + delta + n) % n;
+  if (tvUiState === "MENU") {
+    const n = MENU_ITEMS.length;
+    menuIndex = (menuIndex + delta + n) % n;
 
-  // reset blink so highlight feels responsive
-  blinkT0 = performance.now();
+    blinkT0 = performance.now();
+    drawTvMenu();
 
-  // draw immediately so it feels instant on click
-  drawTvMenu();
+    console.log("📺 menuIndex:", menuIndex, MENU_ITEMS[menuIndex]);
+    return;
+  }
 
-  console.log("📺 menuIndex:", menuIndex, MENU_ITEMS[menuIndex]);
+  if (tvUiState === "SUBCATEGORY_MENU") {
+    const items = SUBCATEGORY_ITEMS[tvParentCategory] || [];
+    const n = items.length;
+    if (!n) return;
+
+    subcategoryIndex = (subcategoryIndex + delta + n) % n;
+
+    blinkT0 = performance.now();
+    drawTvSubcategoryMenu();
+
+    console.log("📺 subcategoryIndex:", subcategoryIndex, items[subcategoryIndex]);
+  }
 }
 
 function confirmMenuSelection() {
   if (!tvOn) return;
-  if (tvUiState !== "MENU") return;
 
-  const selected = MENU_ITEMS[menuIndex];
-  console.log("✅ OK pressed. Selected:", selected);
+  // TOP LEVEL -> SUBCATEGORY SCREEN
+  if (tvUiState === "MENU") {
+    const selected = MENU_ITEMS[menuIndex];
+    console.log("✅ Top-level selected:", selected);
 
-  // switch UI state
-  tvUiState = selected; // "PHOTO" | "VIDEO" | "3D MODEL"
+   tvParentCategory = selected;
+    subcategoryIndex = 0;
+    selectedSubcategory = null;
+    tvUiState = "SUBCATEGORY_MENU";
+    tvSubcategoryHoverFlipV = null;
 
-  if (tvUiState === "PHOTO") {
-    photoImage = null;
-    photoLoading = false;
-    loadPhotoAt(0);
-
-    popIosFullscreenHint();
+    blinkT0 = performance.now();
+    drawTvSubcategoryMenu();
     return;
   }
 
-  if (tvUiState === "VIDEO") {
-    ensureVideoEl();
-    loadVideoAt(0, { autoPlay: true });
+  // SUBCATEGORY SCREEN -> ACTUAL CONTENT
+  if (tvUiState === "SUBCATEGORY_MENU") {
+    const items = SUBCATEGORY_ITEMS[tvParentCategory] || [];
+    const selected = items[subcategoryIndex];
 
-    popIosFullscreenHint();
-    return;
-  }
+    selectedSubcategory = selected;
+    tvUiState = tvParentCategory; // "PHOTO" | "VIDEO" | "3D MODEL"
 
-  if (tvUiState === "3D MODEL") {
-    ensureModelVideoEl();
-    loadModelAt(0, { autoPlay: true });
+    photoIndex = 0;
+    videoIndex = 0;
+    modelIndex = 0;
 
-    popIosFullscreenHint();
-    return;
+    console.log("✅ Subcategory selected:", tvParentCategory, selectedSubcategory);
+
+    if (tvUiState === "PHOTO") {
+      photoImage = null;
+      photoLoading = false;
+      loadPhotoAt(0);
+
+      popIosFullscreenHint();
+      return;
+    }
+
+if (tvUiState === "VIDEO") {
+  stopVideoCompletely();
+  videoIndex = 0;
+  loadVideoAt(0, { autoPlay: true });
+  popIosFullscreenHint();
+  return;
+}
+
+    if (tvUiState === "3D MODEL") {
+      ensureModelVideoEl();
+      loadModelAt(0, { autoPlay: true });
+
+      popIosFullscreenHint();
+      return;
+    }
   }
 
   drawTvMenu();
+}
+
+function goBackOnePage() {
+  if (!tvOn) return;
+
+  if (tvUiState === "PHOTO" || tvUiState === "VIDEO" || tvUiState === "3D MODEL") {
+  if (tvUiState === "VIDEO") stopVideoCompletely();
+  if (tvUiState === "3D MODEL") stopModelCompletely();
+
+  tvUiState = "SUBCATEGORY_MENU";
+
+  // keep the current selected row and hover orientation
+  // so the submenu does not re-lock in the wrong direction
+  backHover = false;
+  menuHover = false;
+
+  blinkT0 = performance.now();
+  drawTvSubcategoryMenu();
+  return;
+}
+
+  // subcategory page -> top-level menu
+  if (tvUiState === "SUBCATEGORY_MENU") {
+    backHover = false;
+    menuHover = false;
+    goBackToTvMenu();
+    return;
+  }
 }
 
 function goBackToTvMenu() {
@@ -4070,24 +4392,65 @@ function goBackToTvMenu() {
   if (tvUiState === "3D MODEL") stopModelCompletely();
 
   tvUiState = "MENU";
+  tvParentCategory = null;
+  selectedSubcategory = null;
+  subcategoryIndex = 0;
+
   blinkT0 = performance.now();
-  tvMenuHoverFlipV = null; // ✅ re-detect mapping next time we hover menu
+  menuHover = false;
+  backHover = false;
+  tvSubcategoryHoverFlipV = null;
   drawTvMenu();
 }
-
 
 // ============================================================
 // PHOTO GALLERY (draw images to the TV canvas)
 // ============================================================
-const PHOTO_PATHS = [
-  "./assets/Photo/01-sweet.jpg",
-  "./assets/Photo/02-carti.jpg",
-  "./assets/Photo/03-james.jpg",
-  "./assets/Photo/04-roof.jpg",
-  "./assets/Photo/05-scan.jpg",
-  "./assets/Photo/06-nyc.jpg",
-  "./assets/Photo/07-nardo.jpg",
-];
+const PHOTO_CATEGORIES = {
+  PORTRAITS: [
+    "./assets/Photo/01-sweet.jpg",
+    "./assets/Photo/02-carti.jpg",
+    "./assets/Photo/03-james.jpg",
+    "./assets/Photo/06-nyc.jpg",
+    "./assets/Photo/07-nardo.jpg",
+  ],
+
+  SURFACES: [
+    "./assets/Photo/04-roof.jpg",
+    "./assets/Photo/05-scan.jpg",
+  ],
+
+  ENVIRONMENTS: [
+    "./assets/Photo/08-room.jpg",
+  ],
+};
+
+const VIDEO_CATEGORIES = {
+  CINEMATIC: [],
+  COMMERCIAL: [],
+  MUSIC: [
+    "./assets/Video/01-sweet93-OG.mp4",
+  ],
+  EXPERIMENTAL: [],
+};
+
+const MODEL_CATEGORIES = {
+  BOARDS: [
+    "./assets/3D Model/02-Skateboard.mp4",
+    "./assets/3D Model/03-Skateboard-2.mp4",
+  ],
+
+  OBJECTS: [
+    "./assets/3D Model/01-Gate.mp4",
+    "./assets/3D Model/04-UAP.mp4",
+    "./assets/3D Model/05-Morningstar.mp4",
+    "./assets/3D Model/06-Bat.mp4",
+    "./assets/3D Model/07-Chainsaw.mp4",
+    "./assets/3D Model/08-Granade1.mp4",
+  ],
+
+  ARCHITECTURE: [],
+};
 
 const imgLoader = new THREE.ImageLoader();
 imgLoader.setCrossOrigin("anonymous");
@@ -4101,10 +4464,17 @@ function loadPhotoAt(index) {
   if (!tvOn) return;
   if (tvUiState !== "PHOTO") return;
 
-  const n = PHOTO_PATHS.length;
+  const key = (selectedSubcategory || "").toUpperCase();
+  const list = PHOTO_CATEGORIES[key] || [];
+  if (!list.length) {
+    console.warn("❌ No photos for subcategory:", selectedSubcategory, key);
+    return;
+  }
+
+  const n = list.length;
   photoIndex = (index + n) % n;
 
-  const url = PHOTO_PATHS[photoIndex];
+  const url = list[photoIndex];
   currentPhotoUrl = url;
   photoLoading = true;
 
@@ -4149,9 +4519,43 @@ function drawPhotoToTv(img) {
 
   tvCtx.drawImage(img, dx, dy, dw, dh);
 
+  if (tvOn && (tvUiState === "PHOTO" || tvUiState === "3D MODEL")) {
+  const BACK = getTvBackBtn();
+  const backX = BACK.pad;
+  const backY = BACK.pad;
+
+  tvCtx.save();
+
+  if (backHover) {
+    tvCtx.globalAlpha = 1.0;
+    tvCtx.fillStyle = "rgba(255,255,255,0.06)";
+    tvCtx.shadowColor = "rgba(255,255,255,0.5)";
+    tvCtx.shadowBlur = 18;
+  } else {
+    tvCtx.globalAlpha = 0.85;
+    tvCtx.fillStyle = "rgba(255,255,255,0.06)";
+  }
+
+  roundRect(tvCtx, backX, backY, BACK.w, BACK.h, 14);
+  tvCtx.fill();
+
+  tvCtx.strokeStyle = "rgba(255,255,255,0.25)";
+  tvCtx.lineWidth = 2;
+  roundRect(tvCtx, backX, backY, BACK.w, BACK.h, 14);
+  tvCtx.stroke();
+
+  tvCtx.fillStyle = "#fff";
+  tvCtx.font = "46px Arial";
+  tvCtx.textAlign = "center";
+  tvCtx.textBaseline = "middle";
+  tvCtx.fillText("← back", backX + BACK.w * 0.5, backY + BACK.h * 0.52);
+
+  tvCtx.restore();
+}
+
 if (tvOn && (tvUiState === "PHOTO" || tvUiState === "3D MODEL")) {
   const BTN = getTvMenuBtn();
-  const bx = w - BTN.pad - BTN.w + 8;
+  const bx = w - BTN.pad - BTN.w;
   const by = BTN.pad;
 
   tvCtx.save();
@@ -4253,52 +4657,58 @@ function loadVideoAt(index, { autoPlay = false } = {}) {
 
   ensureVideoEl();
 
-  const n = VIDEO_PATHS.length;
+  const key = (selectedSubcategory || "").toUpperCase();
+  const list = VIDEO_CATEGORIES[key] || [];
+
+  if (!list.length) {
+    console.warn("❌ No videos for:", selectedSubcategory, key);
+    clearTvScreen();
+    return;
+  }
+
+  const n = list.length;
   videoIndex = (index + n) % n;
 
-  const url = VIDEO_PATHS[videoIndex];
+  const url = list[videoIndex];
 
   console.log("🎬 Loading video:", url);
 
   videoReady = false;
   videoPlaying = false;
 
-const __endVid = () => {}; // ✅ don't count video in loader
+  const __endVid = () => {};
 
-
-  // IMPORTANT: stop current playback before swapping src
   try {
     videoEl.pause();
     videoEl.currentTime = 0;
- } catch {}
+  } catch {}
 
-videoEl.src = url;
-videoEl.load();
+  videoEl.src = url;
+  videoEl.load();
 
-let ended = false; // ✅ NEW: prevents double-calling
+  let ended = false;
 
-const done = () => {
-  if (ended) return;          // ✅ NEW
-  ended = true;               // ✅ NEW
+  const done = () => {
+    if (ended) return;
+    ended = true;
 
-  __endVid();
-  videoEl.removeEventListener("loadedmetadata", done);
-  videoEl.removeEventListener("error", done);
-};
+    __endVid();
+    videoEl.removeEventListener("loadeddata", done);
+    videoEl.removeEventListener("canplay", done);
+    videoEl.removeEventListener("error", done);
+  };
 
-videoEl.addEventListener("loadeddata", done, { once: true });   // ✅ first frame decodable
-videoEl.addEventListener("canplay", done, { once: true });      // ✅ fallback
-videoEl.addEventListener("error", done, { once: true });
+  videoEl.addEventListener("loadeddata", done, { once: true });
+  videoEl.addEventListener("canplay", done, { once: true });
+  videoEl.addEventListener("error", done, { once: true });
 
-setTimeout(done, 8000); // ✅ give big mp4 time, still guarantees finish
+  setTimeout(done, 8000);
 
+  clearTvScreen();
 
-// show black while loading
-clearTvScreen();
-
-if (autoPlay) {
-  playVideo();
-}
+  if (autoPlay) {
+    playVideo();
+  }
 }
 
 async function playVideo() {
@@ -4408,6 +4818,40 @@ function drawVideoFrameToTv() {
 
   // draw the current frame
   tvCtx.drawImage(videoEl, dx, dy, dw, dh);
+
+  if (tvOn && tvUiState === "VIDEO") {
+  const BACK = getTvBackBtn();
+  const backX = BACK.pad;
+  const backY = BACK.pad;
+
+  tvCtx.save();
+
+  if (backHover) {
+    tvCtx.globalAlpha = 1.0;
+    tvCtx.fillStyle = "rgba(255,255,255,0.06)";
+    tvCtx.shadowColor = "rgba(255,255,255,0.5)";
+    tvCtx.shadowBlur = 18;
+  } else {
+    tvCtx.globalAlpha = 0.85;
+    tvCtx.fillStyle = "rgba(255,255,255,0.06)";
+  }
+
+  roundRect(tvCtx, backX, backY, BACK.w, BACK.h, 14);
+  tvCtx.fill();
+
+  tvCtx.strokeStyle = "rgba(255,255,255,0.25)";
+  tvCtx.lineWidth = 2;
+  roundRect(tvCtx, backX, backY, BACK.w, BACK.h, 14);
+  tvCtx.stroke();
+
+  tvCtx.fillStyle = "#fff";
+  tvCtx.font = "46px Arial";
+  tvCtx.textAlign = "center";
+  tvCtx.textBaseline = "middle";
+  tvCtx.fillText("← back", backX + BACK.w * 0.5, backY + BACK.h * 0.52);
+
+  tvCtx.restore();
+}
 
 if (tvOn && tvUiState === "VIDEO") {
   const BTN = getTvMenuBtn();
@@ -4549,10 +4993,19 @@ function loadModelAt(index, { autoPlay = false } = {}) {
   if (!tvOn) return;
   if (tvUiState !== "3D MODEL") return;
 
-  const n = MODEL_PATHS.length;
+  const key = (selectedSubcategory || "").toUpperCase();
+  const list = MODEL_CATEGORIES[key] || [];
+
+  if (!list.length) {
+    console.warn("❌ No 3D model media for:", selectedSubcategory, key);
+    clearTvScreen();
+    return;
+  }
+
+  const n = list.length;
   modelIndex = (index + n) % n;
 
-  const url = MODEL_PATHS[modelIndex];
+  const url = list[modelIndex];
   currentModelUrl = url;
 
   modelReady = false;
@@ -4561,23 +5014,22 @@ function loadModelAt(index, { autoPlay = false } = {}) {
   // show black while loading
   clearTvScreen();
 
- if (isImageUrl(url)) {
-  modelMediaType = "image";
-  ensureModelImageEl();
+  if (isImageUrl(url)) {
+    modelMediaType = "image";
+    ensureModelImageEl();
 
-  // ✅ STOP ANY PREVIOUS MODEL VIDEO (prevents flicker/glitch)
-  if (modelVideoEl) {
-    try { modelVideoEl.pause(); } catch {}
-  }
-  modelPlaying = false;
+    if (modelVideoEl) {
+      try { modelVideoEl.pause(); } catch {}
+    }
+    modelPlaying = false;
 
-  modelImageLoading = true;
-  modelImageEl.onload = () => {
-
+    modelImageLoading = true;
+    modelImageEl.onload = () => {
       modelImageLoading = false;
       modelReady = true;
-      drawModelToTv(); // this function should handle both image/video
+      drawModelToTv();
     };
+
     modelImageEl.onerror = (e) => {
       modelImageLoading = false;
       console.warn("❌ Model image failed to load:", url, e);
@@ -4695,6 +5147,40 @@ function drawModelFrameToTv() {
 
   tvCtx.drawImage(modelVideoEl, dx, dy, dw, dh);
 
+  if (tvOn && (tvUiState === "PHOTO" || tvUiState === "3D MODEL")) {
+  const BACK = getTvBackBtn();
+  const backX = BACK.pad;
+  const backY = BACK.pad;
+
+  tvCtx.save();
+
+  if (backHover) {
+    tvCtx.globalAlpha = 1.0;
+    tvCtx.fillStyle = "rgba(255,255,255,0.06)";
+    tvCtx.shadowColor = "rgba(255,255,255,0.5)";
+    tvCtx.shadowBlur = 18;
+  } else {
+    tvCtx.globalAlpha = 0.85;
+    tvCtx.fillStyle = "rgba(255,255,255,0.06)";
+  }
+
+  roundRect(tvCtx, backX, backY, BACK.w, BACK.h, 14);
+  tvCtx.fill();
+
+  tvCtx.strokeStyle = "rgba(255,255,255,0.25)";
+  tvCtx.lineWidth = 2;
+  roundRect(tvCtx, backX, backY, BACK.w, BACK.h, 14);
+  tvCtx.stroke();
+
+  tvCtx.fillStyle = "#fff";
+  tvCtx.font = "46px Arial";
+  tvCtx.textAlign = "center";
+  tvCtx.textBaseline = "middle";
+  tvCtx.fillText("← back", backX + BACK.w * 0.5, backY + BACK.h * 0.52);
+
+  tvCtx.restore();
+}
+  
   // ✅ MENU button (top-right)
   if (tvOn && tvUiState === "3D MODEL") {
     const BTN = getTvMenuBtn();
@@ -5258,7 +5744,6 @@ async function playBackgroundAudio() {
   if (!bgAudioEnabled) return;
 
   const bg = ensureBackgroundAudio();
-  const lamp = ensureLampAudio();
 
   try {
     if (bg.paused) {
@@ -5267,16 +5752,6 @@ async function playBackgroundAudio() {
     }
   } catch (err) {
     console.warn("Background ambience play blocked:", err);
-  }
-
-  try {
-    applyLampAudioVolume(lamp);
-    if (lamp.paused) {
-      await lamp.play();
-      console.log("💡 Lamp ambience playing");
-    }
-  } catch (err) {
-    console.warn("Lamp ambience play blocked:", err);
   }
 }
 
@@ -5309,7 +5784,6 @@ async function tryAutoStartBackgroundAudio() {
   if (!bgAudioEnabled) return;
 
   const bg = ensureBackgroundAudio();
-  const lamp = ensureLampAudio();
 
   let startedAnything = false;
 
@@ -5593,10 +6067,12 @@ if (!tvOn) {
 
  // MENU button area (top-right) works in all states that show it
 const BTN = getTvMenuBtn();   // ✅ ADD THIS
-
 const bx = w - BTN.pad - BTN.w;
 const by = BTN.pad;
 
+const BACK = getTvBackBtn();
+const backX = BACK.pad;
+const backY = BACK.pad;
 
   // ✅ Robust hit test: some meshes have V flipped, some don’t.
   // We check BOTH possibilities so the MENU button is always clickable.
@@ -5617,6 +6093,21 @@ if (inMenuBtnA || inMenuBtnB) {
   return true;
 }
 
+const inBackBtnA =
+  px >= backX && px <= backX + BACK.w &&
+  pyA >= backY && pyA <= backY + BACK.h;
+
+const inBackBtnB =
+  px >= backX && px <= backX + BACK.w &&
+  pyB >= backY && pyB <= backY + BACK.h;
+
+// BACK only exists on non-top-level pages
+if (tvUiState !== "MENU" && (inBackBtnA || inBackBtnB)) {
+  if (isIOSDevice()) tvIgnoreNextPointerUp = true;
+  goBackOnePage();
+  return true;
+}
+
   // ✅ Double-tap anywhere else = fullscreen overlay (when relevant)
   const now = performance.now();
   const isDoubleTap = (now - lastTvTapTime) < TV_DOUBLE_TAP_MS;
@@ -5625,21 +6116,11 @@ if (inMenuBtnA || inMenuBtnB) {
   const x01 = px / w;  // 0..1
   const y01 = pyA / h; // 0..1  ✅ use primary mapping, not raw py
 
-if (tvUiState === "MENU") {
-  // ✅ iOS uses EDIT 2 swipe/tap on pointerup
+if (tvUiState === "MENU" || tvUiState === "SUBCATEGORY_MENU") {
+  // iOS still uses pointerup swipe/tap logic
   if (isIOSDevice()) return false;
 
-  // ✅ Desktop/non-iOS: tap zones on the TV screen
-  // top third = up, bottom third = down, middle = OK
-  if (y01 < 0.33) {
-    moveMenuSelection(-1);
-    return true;
-  }
-  if (y01 > 0.66) {
-    moveMenuSelection(+1);
-    return true;
-  }
-
+  // Desktop: hover already controls selection, so click should only confirm
   confirmMenuSelection();
   return true;
 }
@@ -5808,7 +6289,7 @@ if (!tvOn) {
   applyTvTextureEnabled(true);
 
   if (tvScreenMatRef) {
-    tvScreenMatRef.emissiveIntensity = 0.12;
+    tvScreenMatRef.emissiveIntensity = 0.03;
     tvScreenMatRef.needsUpdate = true;
   }
 
@@ -5872,7 +6353,7 @@ function updateTv() {
 
   // emissive animation (OFF -> ON)
   const offI = 0.0;
-  const onI = 1.25;
+  const onI = 0.7;
 
   const pop = a * (1 - a) * 4;
   let intensity = offI + (onI - offI) * a + 0.35 * pop;
@@ -6590,7 +7071,7 @@ if (powerButtonMeshRef && isInHierarchy(hit, powerButtonMeshRef)) {
 
 // REMOTE MENU BUTTONS (UP / DOWN / OK)
 // --------------------------------------------------
-if (tvOn && tvUiState === "MENU") {
+if (tvOn && (tvUiState === "MENU" || tvUiState === "SUBCATEGORY_MENU")) {
   if (downArrowMeshRef && isInHierarchy(hit, downArrowMeshRef)) {
     trackSceneClick("remote_down_click", {
       tv_ui_state: tvUiState,
@@ -6627,6 +7108,7 @@ if (tvOn && tvUiState === "MENU") {
     return;
   }
 }
+
 // PHOTO MODE (LEFT / RIGHT to change photos)
 // --------------------------------------------------
 if (tvOn && tvUiState === "PHOTO") {
@@ -6776,7 +7258,8 @@ if (tvIgnoreNextPointerUp) {
   if (overlayOpen || videoOverlayOpen || modelOverlayOpen) return;
 
   // only applies while TV is ON and in MENU
-  if (!tvOn || tvUiState !== "MENU") return;
+if (!tvOn) return;
+if (tvUiState !== "MENU" && tvUiState !== "SUBCATEGORY_MENU") return;
 
   const dx = e.clientX - tvTouchStartX;
   const dy = e.clientY - tvTouchStartY;
@@ -7031,16 +7514,74 @@ if (
   const centerA = startY + idxA * gapY;
   const centerB = startY + idxB * gapY;
 
-  const distA = Math.abs(pyA - centerA);
-  const distB = Math.abs(pyB - centerB);
-
-  const py = tvMenuHoverFlipV ? pyB : pyA;
-  const idx = clamp(Math.round((py - startY) / gapY), 0, n - 1);
+const py = pyA;
+const idx = clamp(Math.round((py - startY) / gapY), 0, n - 1);
 
   if (idx !== menuIndex) {
     menuIndex = idx;
     blinkT0 = performance.now();
     drawTvMenu();
+  }
+}
+
+// ============================================================
+// ✅ DESKTOP: hover over SUBCATEGORY rows (stable)
+// ============================================================
+if (
+  tvOn &&
+  tvUiState === "SUBCATEGORY_MENU" &&
+  e.pointerType === "mouse" &&
+  tvScreenMeshRef &&
+  tvHoverHit &&
+  tvHoverHit.uv
+) {
+  const uv = tvHoverHit.uv;
+
+  const w = tvCanvas.width;
+  const h = tvCanvas.height;
+
+  let u = uv.x * (tvTex.repeat?.x ?? 1) + (tvTex.offset?.x ?? 0);
+  let v = uv.y * (tvTex.repeat?.y ?? 1) + (tvTex.offset?.y ?? 0);
+
+  u = ((u % 1) + 1) % 1;
+  v = ((v % 1) + 1) % 1;
+
+  const pyA = v * h;
+  const pyB = (1 - v) * h;
+
+  // MUST exactly match drawTvSubcategoryMenu()
+  const startY = isIOSDevice() ? h * 0.30 : h * 0.32;
+  const gapY   = isIOSDevice() ? 135 : 122;
+
+  const items = SUBCATEGORY_ITEMS[tvParentCategory] || [];
+  const n = items.length;
+  if (!n) return;
+
+  const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+
+  const idxA = clamp(Math.round((pyA - startY) / gapY), 0, n - 1);
+  const idxB = clamp(Math.round((pyB - startY) / gapY), 0, n - 1);
+
+  const centerA = startY + idxA * gapY;
+  const centerB = startY + idxB * gapY;
+
+  const distA = Math.abs(pyA - centerA);
+  const distB = Math.abs(pyB - centerB);
+
+  if (tvSubcategoryHoverFlipV == null) {
+    tvSubcategoryHoverFlipV = distB < distA;
+  }
+
+  const py =
+  (tvParentCategory === "VIDEO" || tvParentCategory === "3D MODEL")
+    ? (tvSubcategoryHoverFlipV ? pyA : pyB)
+    : (tvSubcategoryHoverFlipV ? pyB : pyA);
+  const idx = clamp(Math.round((py - startY) / gapY), 0, n - 1);
+
+  if (idx !== subcategoryIndex) {
+    subcategoryIndex = idx;
+    blinkT0 = performance.now();
+    drawTvSubcategoryMenu();
   }
 }
 
@@ -7096,22 +7637,28 @@ if (tvScreenMeshRef && isInHierarchy(hit, tvScreenMeshRef)) {
  // ---------------------------------------------
 // MENU hover detection (robust)
 // ---------------------------------------------
-const prevMenuHover = menuHover;
+ const prevMenuHover = menuHover;
+const prevBackHover = backHover;
 menuHover = false;
+backHover = false;
 
 if (
   tvOn &&
-  (tvUiState === "PHOTO" || tvUiState === "VIDEO" || tvUiState === "3D MODEL") &&
+  (
+    tvUiState === "PHOTO" ||
+    tvUiState === "VIDEO" ||
+    tvUiState === "3D MODEL" ||
+    tvUiState === "SUBCATEGORY_MENU"
+  ) &&
   tvScreenMeshRef &&
-isInHierarchy(hit, tvScreenMeshRef) &&
-(tvHoverHit ?? hits[0]).uv
+  isInHierarchy(hit, tvScreenMeshRef) &&
+  (tvHoverHit ?? hits[0]).uv
 ) {
   const uv = (tvHoverHit ?? hits[0]).uv;
 
   const w = tvCanvas.width;
   const h = tvCanvas.height;
 
-  // match the same mapping rules as click logic (repeat/offset + normalize)
   let u = uv.x * (tvTex.repeat?.x ?? 1) + (tvTex.offset?.x ?? 0);
   let v = uv.y * (tvTex.repeat?.y ?? 1) + (tvTex.offset?.y ?? 0);
 
@@ -7119,25 +7666,37 @@ isInHierarchy(hit, tvScreenMeshRef) &&
   v = ((v % 1) + 1) % 1;
 
   const px = u * w;
-
-  // ✅ check both vertical interpretations
   const pyA = v * h;
   const pyB = (1 - v) * h;
 
-const BTN = getTvMenuBtn();   // ✅ ADD THIS
+  const BTN = getTvMenuBtn();
+  const bx = w - BTN.pad - BTN.w;
+  const by = BTN.pad;
 
-const bx = w - BTN.pad - BTN.w;
-const by = BTN.pad;
-
-const inBtnA = px >= bx && px <= bx + BTN.w && pyA >= by && pyA <= by + BTN.h;
-const inBtnB = px >= bx && px <= bx + BTN.w && pyB >= by && pyB <= by + BTN.h;
+  const inBtnA = px >= bx && px <= bx + BTN.w && pyA >= by && pyA <= by + BTN.h;
+  const inBtnB = px >= bx && px <= bx + BTN.w && pyB >= by && pyB <= by + BTN.h;
 
   menuHover = (inBtnA || inBtnB);
+
+  const BACK = getTvBackBtn();
+const backX = BACK.pad;
+const backY = BACK.pad;
+
+const inBackA =
+  px >= backX && px <= backX + BACK.w &&
+  pyA >= backY && pyA <= backY + BACK.h;
+
+const inBackB =
+  px >= backX && px <= backX + BACK.w &&
+  pyB >= backY && pyB <= backY + BACK.h;
+
+backHover = tvUiState !== "MENU" && (inBackA || inBackB);
 }
 
-// ✅ PHOTO + 3D-image do not redraw every frame, so force redraw when hover changes
-if (menuHover !== prevMenuHover) {
-  if (tvOn && tvUiState === "PHOTO" && photoImage) {
+if (menuHover !== prevMenuHover || backHover !== prevBackHover) {
+  if (tvOn && tvUiState === "SUBCATEGORY_MENU") {
+    drawTvSubcategoryMenu();
+  } else if (tvOn && tvUiState === "PHOTO" && photoImage) {
     drawPhotoToTv(photoImage);
   } else if (tvOn && tvUiState === "3D MODEL" && modelMediaType === "image" && modelImageEl && modelReady) {
     drawPhotoToTv(modelImageEl);
@@ -9732,6 +10291,25 @@ let cigaretteActions = [];
 let smokeTipMixer = null;
 let smokeTipActions = [];
 
+const IOS_CIGARETTE_ANIM_PUSH = {
+  enabled: true,
+
+  x: -0.5,
+  y: 0.12,
+  z: 9.4,
+
+  // cigarette move-in timing
+  inStart: 0.18,
+  inEnd: 0.42,
+
+  // after smoke tip finishes, how long the return takes
+  returnDuration: 0.18,
+};
+
+let cigaretteBasePos = null;
+let smokeTipBasePos = null;
+let iosCigReturnStartTime = null;
+
 const CIG_START_FRAME = 200;
 const CIG_FPS = 24;
 const CIG_START_TIME = CIG_START_FRAME / CIG_FPS;
@@ -9761,6 +10339,8 @@ function playCigaretteAnimation() {
     return;
   }
 
+  iosCigReturnStartTime = null;
+
   for (const action of cigaretteActions) {
     action.enabled = true;
     action.paused = false;
@@ -9780,6 +10360,8 @@ function playSmokeTipAnimation() {
     console.warn("⚠️ smokeTipActions missing");
     return;
   }
+
+  iosCigReturnStartTime = null;
 
   for (const action of smokeTipActions) {
     action.enabled = true;
@@ -10167,8 +10749,17 @@ if (n === "pasted_remote" && o.material) {
 
   o.material = o.material.clone();
 
+  // ✅ iOS only: brighten the actual remote body a bit
+  if (isIOS && o.material.color) {
+    o.material.color.multiplyScalar(1.45);
+    o.material.color.r *= 1.03;
+    o.material.color.g *= 1.02;
+    o.material.color.b *= 0.96;
+  }
+
+  // ✅ keep some shape response so light can actually show
   if ("roughness" in o.material) {
-    o.material.roughness = Math.max(o.material.roughness ?? 0.6, 0.92);
+    o.material.roughness = isIOS ? 0.72 : Math.max(o.material.roughness ?? 0.6, 0.92);
   }
 
   if ("metalness" in o.material) {
@@ -10176,15 +10767,16 @@ if (n === "pasted_remote" && o.material) {
   }
 
   if ("envMapIntensity" in o.material) {
-    o.material.envMapIntensity = 0.0;
+    o.material.envMapIntensity = isIOS ? 0.03 : 0.0;
   }
 
+  // ✅ tiny warm lift instead of crushing it back to black
   if ("emissive" in o.material) {
-    o.material.emissive.setHex(0x000000);
+    o.material.emissive.setHex(isIOS ? 0x1a120c : 0x000000);
   }
 
   if ("emissiveIntensity" in o.material) {
-    o.material.emissiveIntensity = 0.0;
+    o.material.emissiveIntensity = isIOS ? 0.35 : 0.0;
   }
 
   o.material.needsUpdate = true;
@@ -10633,7 +11225,12 @@ setTimeout(() => {
   // ✅ iOS only: fix remote body perspective after camera/layout settle
   applyIOSRemoteTweaks();
   applyIOSLampTransform();
+
+  // old remote-tied light
   updateIOSRemoteFillLight(maxDim);
+
+  // ✅ new camera-tied debug light
+  updateIOSRemoteCameraLight();
 
 }, 260);
 
@@ -11820,6 +12417,7 @@ if (emberTipRef && !emberHaloRef) {
 }
 
     cigaretteRoot.updateMatrixWorld(true);
+    cigaretteBasePos = cigaretteRoot.position.clone();
 
 if (gltf.animations && gltf.animations.length > 0) {
   cigaretteMixer = new THREE.AnimationMixer(cigaretteRoot);
@@ -11884,6 +12482,9 @@ smokeTipLoader.load(
     smokeTipRoot.rotation.set(0, 0, 0);
     smokeTipRoot.scale.set(1, 1, 1);
     smokeTipRoot.updateMatrixWorld(true);
+    smokeTipBasePos = smokeTipRoot.position.clone();
+
+    applyIOSCigaretteTransform();
 
     console.log("======== SMOKE TIP GLB DUMP ========");
 
@@ -12238,6 +12839,98 @@ function iosHandleWallTapGesture() {
   }, IOS_WALL_TRIPLE_TAP_MS);
 }
 
+function smooth01(a, b, x) {
+  const t = THREE.MathUtils.clamp((x - a) / Math.max(1e-5, (b - a)), 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
+function updateIOSCigaretteAnimPush() {
+  if (!isIOSDevice()) return;
+  if (!IOS_CIGARETTE_ANIM_PUSH.enabled) return;
+  if (!cigaretteRoot || !smokeTipRoot) return;
+  if (!cigaretteBasePos || !smokeTipBasePos) return;
+  if (!cigaretteActions.length || !smokeTipActions.length) return;
+
+  const cigAction = cigaretteActions[0];
+  const cigClip = cigAction.getClip();
+  if (!cigClip) return;
+
+  const smokeAction = smokeTipActions[0];
+  const smokeClip = smokeAction.getClip();
+  if (!smokeClip) return;
+
+  // ----------------------------------------------------------
+  // 1) cigarette controls the move IN
+  // ----------------------------------------------------------
+  const cigPlayableDur = Math.max(1e-5, cigClip.duration - CIG_START_TIME);
+  const cigLocalT = THREE.MathUtils.clamp(
+    cigAction.time - CIG_START_TIME,
+    0,
+    cigPlayableDur
+  );
+  const cigU = cigLocalT / cigPlayableDur;
+
+  const inStart = IOS_CIGARETTE_ANIM_PUSH.inStart;
+  const inEnd = IOS_CIGARETTE_ANIM_PUSH.inEnd;
+
+  // ----------------------------------------------------------
+  // 2) smoke tip controls when the cigarette is allowed to return
+  // ----------------------------------------------------------
+  const smokePlayableDur = Math.max(1e-5, smokeClip.duration - SMOKE_TIP_START_TIME);
+  const smokeLocalT = THREE.MathUtils.clamp(
+    smokeAction.time - SMOKE_TIP_START_TIME,
+    0,
+    smokePlayableDur
+  );
+  const smokeDone = smokeLocalT >= (smokePlayableDur - 0.001);
+
+  let amt = 0;
+
+  // before move-in starts
+  if (cigU < inStart) {
+    amt = 0;
+  }
+  // move cigarette from resting -> close position
+  else if (cigU < inEnd) {
+    amt = smooth01(inStart, inEnd, cigU);
+  }
+  // once it reaches the close position, HOLD there until smoke tip is done
+  else if (!smokeDone) {
+    amt = 1;
+  }
+  // after smoke tip is done, return back to rest
+  else {
+    if (iosCigReturnStartTime == null) {
+  iosCigReturnStartTime = performance.now() * 0.001;
+}
+
+const returnDuration = Math.max(0.001, IOS_CIGARETTE_ANIM_PUSH.returnDuration);
+const now = performance.now() * 0.001;
+const returnT = THREE.MathUtils.clamp(
+  (now - iosCigReturnStartTime) / returnDuration,
+  0,
+  1
+);
+
+amt = 1.0 - smooth01(0, 1, returnT);
+  }
+
+  cigaretteRoot.position.set(
+    cigaretteBasePos.x + IOS_CIGARETTE_ANIM_PUSH.x * amt,
+    cigaretteBasePos.y + IOS_CIGARETTE_ANIM_PUSH.y * amt,
+    cigaretteBasePos.z + IOS_CIGARETTE_ANIM_PUSH.z * amt
+  );
+
+  smokeTipRoot.position.set(
+    smokeTipBasePos.x + IOS_CIGARETTE_ANIM_PUSH.x * amt,
+    smokeTipBasePos.y + IOS_CIGARETTE_ANIM_PUSH.y * amt,
+    smokeTipBasePos.z + IOS_CIGARETTE_ANIM_PUSH.z * amt
+  );
+
+  cigaretteRoot.updateMatrixWorld(true);
+  smokeTipRoot.updateMatrixWorld(true);
+}
+
 //ANIMATE
 const clock = new THREE.Clock();
 function animate() {
@@ -12256,6 +12949,8 @@ if (bugMixer) bugMixer.update(dt);
 
 if (cigaretteMixer) cigaretteMixer.update(dt);
 if (smokeTipMixer) smokeTipMixer.update(dt);
+
+updateIOSCigaretteAnimPush();
 
 if (
   !blocked &&
@@ -12289,17 +12984,19 @@ if (!blocked && tvOn && tvScreenMatRef && window.__tvRedrawAcc > (1 / 12)) {
   if (tvUiState === "MENU") {
     drawTvMenu();
   } 
+  else if (tvUiState === "SUBCATEGORY_MENU") {
+    drawTvSubcategoryMenu();
+  }
   else if (tvUiState === "PHOTO") {
     if (!photoImage && !photoLoading) loadPhotoAt(photoIndex);
     if (photoImage) drawPhotoToTv(photoImage);
   }
- else if (tvUiState === "VIDEO") {
-  // ✅ if user fullscreened the overlay video, freeze TV screen (no redraws)
-  if (videoReady && !tvVideoSuppressed) drawVideoFrameToTv();
-}
-else if (tvUiState === "3D MODEL") {
-  if (modelReady && !tvModelSuppressed) drawModelToTv();
-}
+  else if (tvUiState === "VIDEO") {
+    if (videoReady && !tvVideoSuppressed) drawVideoFrameToTv();
+  }
+  else if (tvUiState === "3D MODEL") {
+    if (modelReady && !tvModelSuppressed) drawModelToTv();
+  }
 }
 
 renderer.setScissorTest(false);
