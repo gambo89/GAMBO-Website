@@ -4655,6 +4655,39 @@ return items.map((item, i) => {
 });
 }
 
+function getTvSocialIndexFromHover() {
+  return TV_SOCIAL_ITEMS.findIndex((item) => item.id === tvSocialHoverId);
+}
+
+function selectTvSocialByIndex(index) {
+  const n = TV_SOCIAL_ITEMS.length;
+  if (!n) return;
+
+  const wrapped = ((index % n) + n) % n;
+  tvSocialHoverId = TV_SOCIAL_ITEMS[wrapped].id;
+
+  blinkT0 = performance.now();
+  drawTvMenu();
+}
+
+function clearTvSocialSelection() {
+  if (tvSocialHoverId === null) return;
+
+  tvSocialHoverId = null;
+  blinkT0 = performance.now();
+  drawTvMenu();
+}
+
+function moveTvSocialSelection(delta) {
+  if (!tvOn) return;
+  if (tvUiState !== "MENU") return;
+
+  const idx = getTvSocialIndexFromHover();
+  if (idx === -1) return;
+
+  selectTvSocialByIndex(idx + delta);
+}
+
 function drawTvSocialRow(ctx, w, h) {
   const rects = getTvSocialRowRects(w, h);
 
@@ -4925,10 +4958,37 @@ function moveMenuSelection(delta) {
   if (!tvOn) return;
 
   if (tvUiState === "MENU") {
+    const socialIndex = getTvSocialIndexFromHover();
+
+    // If a social icon is currently selected:
+    if (socialIndex !== -1) {
+      // UP from socials goes back to 3D MODEL
+      if (delta < 0) {
+        tvSocialHoverId = null;
+        menuIndex = MENU_ITEMS.length - 1;
+
+        blinkT0 = performance.now();
+        syncTvHighlightToCurrentSelection(false);
+        drawTvMenu();
+
+        console.log("📺 returned from social row to:", MENU_ITEMS[menuIndex]);
+      }
+
+      // DOWN while already on socials does nothing
+      return;
+    }
+
+    // DOWN from 3D MODEL enters the social row at EMAIL
+    if (delta > 0 && menuIndex === MENU_ITEMS.length - 1) {
+      selectTvSocialByIndex(0);
+      console.log("📺 entered social row:", TV_SOCIAL_ITEMS[0].id);
+      return;
+    }
+
     const n = MENU_ITEMS.length;
     menuIndex = (menuIndex + delta + n) % n;
 
-   blinkT0 = performance.now();
+    blinkT0 = performance.now();
     syncTvHighlightToCurrentSelection(false);
     drawTvMenu();
 
@@ -4956,21 +5016,31 @@ function confirmMenuSelection() {
 
   // TOP LEVEL -> SUBCATEGORY SCREEN
   if (tvUiState === "MENU") {
-  tvSocialHoverId = null;
-  const selected = MENU_ITEMS[menuIndex];
-    console.log("✅ Top-level selected:", selected);
+  const socialIndex = getTvSocialIndexFromHover();
 
-   tvParentCategory = selected;
-    subcategoryIndex = 0;
-    selectedSubcategory = null;
-    tvUiState = "SUBCATEGORY_MENU";
-    tvSubcategoryHoverFlipV = null;
-
-    blinkT0 = performance.now();
-syncTvHighlightToCurrentSelection(true);
-drawTvSubcategoryMenu();
+  // If a social icon is selected, OK should open that social link
+  if (socialIndex !== -1) {
+    const selectedSocial = TV_SOCIAL_ITEMS[socialIndex];
+    console.log("✅ Social selected:", selectedSocial.id);
+    activateTvSocialHit(selectedSocial);
     return;
   }
+
+  const selected = MENU_ITEMS[menuIndex];
+  console.log("✅ Top-level selected:", selected);
+
+  tvSocialHoverId = null;
+  tvParentCategory = selected;
+  subcategoryIndex = 0;
+  selectedSubcategory = null;
+  tvUiState = "SUBCATEGORY_MENU";
+  tvSubcategoryHoverFlipV = null;
+
+  blinkT0 = performance.now();
+  syncTvHighlightToCurrentSelection(true);
+  drawTvSubcategoryMenu();
+  return;
+}
 
   // SUBCATEGORY SCREEN -> ACTUAL CONTENT
   if (tvUiState === "SUBCATEGORY_MENU") {
@@ -7850,6 +7920,37 @@ if (tvOn && (tvUiState === "MENU" || tvUiState === "SUBCATEGORY_MENU")) {
     console.log("⬆️ Up/Top arrow pressed");
     moveMenuSelection(-1);
     return;
+  }
+
+  // LEFT / RIGHT now move across socials when a social icon is selected
+  if (tvUiState === "MENU" && leftArrowMeshRef && isInHierarchy(hit, leftArrowMeshRef)) {
+    const socialIndex = getTvSocialIndexFromHover();
+    if (socialIndex !== -1) {
+      trackSceneClick("remote_left_click", {
+        tv_ui_state: tvUiState,
+        object_name: hit.name || "unknown",
+      });
+
+      playRemoteButtonSound();
+      console.log("⬅️ Left arrow pressed → previous social");
+      moveTvSocialSelection(-1);
+      return;
+    }
+  }
+
+  if (tvUiState === "MENU" && rightArrowMeshRef && isInHierarchy(hit, rightArrowMeshRef)) {
+    const socialIndex = getTvSocialIndexFromHover();
+    if (socialIndex !== -1) {
+      trackSceneClick("remote_right_click", {
+        tv_ui_state: tvUiState,
+        object_name: hit.name || "unknown",
+      });
+
+      playRemoteButtonSound();
+      console.log("➡️ Right arrow pressed → next social");
+      moveTvSocialSelection(+1);
+      return;
+    }
   }
 
   if (okButtonMeshRef && isInHierarchy(hit, okButtonMeshRef)) {
