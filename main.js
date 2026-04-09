@@ -4233,6 +4233,186 @@ return {
 };
 }
 
+// ============================================================
+// TV FULL-SCREEN GHOST PREVIEW
+// ============================================================
+const tvGhostPreviewCache = new Map();
+
+let tvGhostCurrentSrc = null;
+let tvGhostCurrentImg = null;
+let tvGhostCurrentAlpha = 0;
+
+let tvGhostPrevSrc = null;
+let tvGhostPrevImg = null;
+let tvGhostPrevAlpha = 0;
+
+// NEW: cycle state
+let tvGhostPool = [];
+let tvGhostPoolKey = "";
+let tvGhostPoolIndex = 0;
+let tvGhostCycleTimer = 0;
+
+const TV_GHOST_PREVIEW = {
+  baseAlpha: 0.46,
+  fadeLerp: 0.09,
+  zoom: 1.035,
+  cycleInterval: 3.5, // seconds between image changes
+};
+
+function getGhostPreviewPoolForCurrentSelection() {
+  if (tvUiState === "MENU") {
+    const selectedCategory = MENU_ITEMS[menuIndex];
+    const subcats = SUBCATEGORY_ITEMS[selectedCategory] || [];
+
+    // TOP LEVEL:
+    // combine ALL previews from all subcategories inside PHOTO / VIDEO / 3D MODEL
+    return subcats.flatMap((subcat) => {
+      return TV_PREVIEW_IMAGES[selectedCategory]?.[subcat] || [];
+    });
+  }
+
+  if (tvUiState === "SUBCATEGORY_MENU") {
+    const items = SUBCATEGORY_ITEMS[tvParentCategory] || [];
+    const selected = items[subcategoryIndex] || null;
+
+    // SUBCATEGORY LEVEL:
+    // use everything inside the hovered subcategory
+    return TV_PREVIEW_IMAGES[tvParentCategory]?.[selected] || [];
+  }
+
+  return [];
+}
+
+function getGhostPreviewImage(src) {
+  if (!src) return null;
+
+  if (tvGhostPreviewCache.has(src)) {
+    return tvGhostPreviewCache.get(src);
+  }
+
+  const img = new Image();
+  img.src = src;
+  tvGhostPreviewCache.set(src, img);
+  return img;
+}
+
+function updateGhostPreviewFx(dt) {
+  if (tvUiState !== "MENU" && tvUiState !== "SUBCATEGORY_MENU") {
+    tvGhostCurrentAlpha = 0;
+    tvGhostPrevAlpha = 0;
+    tvGhostCycleTimer = 0;
+    tvGhostPool = [];
+    tvGhostPoolKey = "";
+    return;
+  }
+
+  const pool = getGhostPreviewPoolForCurrentSelection().filter(Boolean);
+  const poolKey = JSON.stringify(pool);
+
+  // selection changed -> reset pool + restart cycle from first image
+  if (poolKey !== tvGhostPoolKey) {
+    tvGhostPool = pool;
+    tvGhostPoolKey = poolKey;
+    tvGhostPoolIndex = 0;
+    tvGhostCycleTimer = 0;
+
+    const firstSrc = tvGhostPool[0] || null;
+
+    if (firstSrc !== tvGhostCurrentSrc) {
+      tvGhostPrevSrc = tvGhostCurrentSrc;
+      tvGhostPrevImg = tvGhostCurrentImg;
+      tvGhostPrevAlpha = tvGhostCurrentAlpha;
+
+      tvGhostCurrentSrc = firstSrc;
+      tvGhostCurrentImg = getGhostPreviewImage(firstSrc);
+      tvGhostCurrentAlpha = 0;
+    }
+  }
+
+  // auto-cycle through all images in current pool
+  if (tvGhostPool.length > 1) {
+    tvGhostCycleTimer += dt;
+
+    if (tvGhostCycleTimer >= TV_GHOST_PREVIEW.cycleInterval) {
+      tvGhostCycleTimer = 0;
+      tvGhostPoolIndex = (tvGhostPoolIndex + 1) % tvGhostPool.length;
+
+      const nextSrc = tvGhostPool[tvGhostPoolIndex] || null;
+
+      if (nextSrc !== tvGhostCurrentSrc) {
+        tvGhostPrevSrc = tvGhostCurrentSrc;
+        tvGhostPrevImg = tvGhostCurrentImg;
+        tvGhostPrevAlpha = tvGhostCurrentAlpha;
+
+        tvGhostCurrentSrc = nextSrc;
+        tvGhostCurrentImg = getGhostPreviewImage(nextSrc);
+        tvGhostCurrentAlpha = 0;
+      }
+    }
+  }
+
+  tvGhostCurrentAlpha = lerp(
+    tvGhostCurrentAlpha,
+    TV_GHOST_PREVIEW.baseAlpha,
+    TV_GHOST_PREVIEW.fadeLerp
+  );
+
+  tvGhostPrevAlpha = lerp(
+    tvGhostPrevAlpha,
+    0,
+    TV_GHOST_PREVIEW.fadeLerp
+  );
+}
+
+function drawOneGhostImage(ctx, img, alpha, w, h) {
+  if (!img || !img.complete || alpha <= 0.001) return;
+
+ctx.save();
+ctx.globalAlpha = alpha;
+ctx.filter = "blur(4px)";
+
+  const scale = Math.max(
+    (w * TV_GHOST_PREVIEW.zoom) / img.width,
+    (h * TV_GHOST_PREVIEW.zoom) / img.height
+  );
+
+  const dw = img.width * scale;
+  const dh = img.height * scale;
+  const dx = (w - dw) * 0.5;
+  const dy = (h - dh) * 0.5;
+
+  ctx.drawImage(img, dx, dy, dw, dh);
+  ctx.restore();
+}
+
+function drawFullscreenGhostPreview(ctx, w, h) {
+  drawOneGhostImage(ctx, tvGhostPrevImg, tvGhostPrevAlpha, w, h);
+  drawOneGhostImage(ctx, tvGhostCurrentImg, tvGhostCurrentAlpha, w, h);
+
+  // dark cinematic veil so text stays readable
+  ctx.save();
+
+  const wash = ctx.createLinearGradient(0, 0, 0, h);
+  wash.addColorStop(0.0, "rgba(0,0,0,0.42)");
+  wash.addColorStop(0.25, "rgba(0,0,0,0.28)");
+  wash.addColorStop(0.75, "rgba(0,0,0,0.30)");
+  wash.addColorStop(1.0, "rgba(0,0,0,0.46)");
+  ctx.fillStyle = wash;
+  ctx.fillRect(0, 0, w, h);
+
+  const vignette = ctx.createRadialGradient(
+    w * 0.5, h * 0.48, h * 0.10,
+    w * 0.5, h * 0.48, h * 0.82
+  );
+  vignette.addColorStop(0.0, "rgba(0,0,0,0.00)");
+  vignette.addColorStop(0.72, "rgba(0,0,0,0.10)");
+  vignette.addColorStop(1.0, "rgba(0,0,0,0.34)");
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, w, h);
+
+  ctx.restore();
+}
+
 function getMenuStartY(count, centerY, gapY) {
   return centerY - ((count - 1) * gapY) * 0.5;
 }
@@ -4266,184 +4446,9 @@ function updateTvMenuFx(dt) {
   if (tvHighlightTargetH != null) tvHighlightH = lerp(tvHighlightH ?? tvHighlightTargetH, tvHighlightTargetH, follow);
   if (tvHighlightTargetW != null) tvHighlightW = lerp(tvHighlightW ?? tvHighlightTargetW, tvHighlightTargetW, follow);
 
-  // continuous forward scroll
-  tvCarouselOffset += tvCarouselSpeed * dt;
+    updateGhostPreviewFx(dt);
 }
 
-function getCarouselLabels() {
-  if (tvUiState === "SUBCATEGORY_MENU") {
-    const items = SUBCATEGORY_ITEMS[tvParentCategory] || [];
-    const selected = items[subcategoryIndex];
-    return TV_PREVIEW_LABELS[tvParentCategory]?.[selected] || items;
-  }
-
-  if (tvUiState === "MENU") {
-    const selected = MENU_ITEMS[menuIndex];
-    return Object.keys(TV_PREVIEW_LABELS[selected] || {});
-  }
-
-  return [];
-}
-
-function drawCarouselStrip(ctx, w, h) {
-  const labels = getCarouselLabels();
-
-  let imagePool = [];
-
-  if (tvUiState === "SUBCATEGORY_MENU") {
-    const items = SUBCATEGORY_ITEMS[tvParentCategory] || [];
-    const selectedSubcategory = items[subcategoryIndex] || null;
-    imagePool = TV_PREVIEW_IMAGES[tvParentCategory]?.[selectedSubcategory] || [];
-  } else if (tvUiState === "MENU") {
-    const selectedCategory = MENU_ITEMS[menuIndex];
-    const subcats = Object.keys(TV_PREVIEW_LABELS[selectedCategory] || {});
-    imagePool = subcats.flatMap((subcat) => {
-      return TV_PREVIEW_IMAGES[selectedCategory]?.[subcat] || [];
-    });
-  }
-
-  // Build one unified carousel source array
-  const carouselItems =
-    imagePool.length > 0
-      ? imagePool.map((src, idx) => ({
-          src,
-          label: labels[idx % Math.max(1, labels.length)] || "",
-        }))
-      : labels.map((label) => ({
-          src: null,
-          label,
-        }));
-
-  if (!carouselItems.length) return;
-
-  const style = TV_CAROUSEL_STYLE;
-  const stripY = h * TV_MENU_LAYOUT.carouselY;
-  const stripX = w * 0.16;
-  const stripW = w * 0.68;
-  const stripH = style.h;
-
-  ctx.save();
-
-  // base strip
-  ctx.fillStyle = "rgba(255,255,255,0.035)";
-  roundRect(ctx, stripX, stripY - stripH * 0.5, stripW, stripH, 18);
-  ctx.fill();
-
-  // clip inside strip
-  ctx.beginPath();
-  roundRect(ctx, stripX, stripY - stripH * 0.5, stripW, stripH, 18);
-  ctx.clip();
-
-  const cycle = style.itemW + style.gap;
-  const total = Math.ceil(stripW / cycle) + 4;
-
-  // THIS is the important part:
-  // wholeSteps = how many full cards have scrolled by
-  // offsetInCycle = current in-between movement within one card width
-  const wholeSteps = Math.floor(tvCarouselOffset / cycle);
-  const offsetInCycle = tvCarouselOffset - wholeSteps * cycle;
-
-  for (let i = -1; i < total; i++) {
-    const itemIndex = ((wholeSteps + i) % carouselItems.length + carouselItems.length) % carouselItems.length;
-    const item = carouselItems[itemIndex];
-
-    const x = stripX - offsetInCycle + i * cycle;
-    const y = stripY - style.itemH * 0.5;
-
-    // ⭐ CENTER SCALE EFFECT
-    const cardCenterX = x + style.itemW * 0.5;
-    const stripCenterX = stripX + stripW * 0.5;
-
-    const dist = Math.abs(cardCenterX - stripCenterX);
-    const t = Math.max(0, 1 - dist / (stripW * 0.5));
-    const scale = 0.92 + t * 0.08;
-
-    const img = item.src ? loadTvCarouselImage(item.src) : null;
-    const imageReady =
-      !!img &&
-      img.complete === true &&
-      img.naturalWidth > 0 &&
-      img.naturalHeight > 0;
-
-    ctx.save();
-
-    // ⭐ APPLY SCALE FROM CENTER
-    ctx.translate(x + style.itemW * 0.5, y + style.itemH * 0.5);
-    ctx.scale(scale, scale);
-    ctx.translate(-(x + style.itemW * 0.5), -(y + style.itemH * 0.5));
-
-    // card shell
-    ctx.fillStyle = "rgba(255,255,255,0.08)";
-    roundRect(ctx, x, y, style.itemW, style.itemH, 12);
-    ctx.fill();
-
-    if (imageReady) {
-      ctx.save();
-
-      // clip image to rounded card
-      ctx.beginPath();
-      roundRect(ctx, x, y, style.itemW, style.itemH, 12);
-      ctx.clip();
-
-      const iw = img.naturalWidth;
-      const ih = img.naturalHeight;
-      const imageAspect = iw / ih;
-      const cardAspect = style.itemW / style.itemH;
-
-      let drawW = style.itemW;
-      let drawH = style.itemH;
-      let drawX = x;
-      let drawY = y;
-
-      if (imageAspect > cardAspect) {
-        drawH = style.itemH;
-        drawW = drawH * imageAspect;
-        drawX = x + (style.itemW - drawW) * 0.5;
-      } else {
-        drawW = style.itemW;
-        drawH = drawW / imageAspect;
-        drawY = y + (style.itemH - drawH) * 0.5;
-      }
-
-      ctx.drawImage(img, drawX, drawY, drawW, drawH);
-
-      // slight dark overlay
-      ctx.fillStyle = "rgba(0,0,0,0.24)";
-      ctx.fillRect(x, y, style.itemW, style.itemH);
-
-      ctx.restore();
-    } else {
-      // fallback placeholder
-      ctx.fillStyle = "rgba(255,255,255,0.05)";
-      ctx.fillRect(x + 10, y + 12, style.itemW - 20, 10);
-      ctx.fillRect(x + 10, y + 30, style.itemW * 0.55, 8);
-      ctx.fillRect(x + 10, y + 46, style.itemW * 0.72, 8);
-    }
-
-    // border
-    ctx.strokeStyle = "rgba(255,255,255,0.14)";
-    ctx.lineWidth = 2;
-    roundRect(ctx, x, y, style.itemW, style.itemH, 12);
-    ctx.stroke();
-
-    ctx.restore();
-  }
-
-  // edge fades
-  const leftFade = ctx.createLinearGradient(stripX, 0, stripX + style.edgeFadeW, 0);
-  leftFade.addColorStop(0, "rgba(17,17,17,1)");
-  leftFade.addColorStop(1, "rgba(17,17,17,0)");
-  ctx.fillStyle = leftFade;
-  ctx.fillRect(stripX, stripY - stripH * 0.5, style.edgeFadeW, stripH);
-
-  const rightFade = ctx.createLinearGradient(stripX + stripW - style.edgeFadeW, 0, stripX + stripW, 0);
-  rightFade.addColorStop(0, "rgba(17,17,17,0)");
-  rightFade.addColorStop(1, "rgba(17,17,17,1)");
-  ctx.fillStyle = rightFade;
-  ctx.fillRect(stripX + stripW - style.edgeFadeW, stripY - stripH * 0.5, style.edgeFadeW, stripH);
-
-  ctx.restore();
-}
 
 function drawAnimatedSelectionBar(ctx, w) {
   if (tvHighlightY == null || tvHighlightW == null || tvHighlightH == null) return;
@@ -4607,6 +4612,132 @@ function drawDesktopTvSideArrows(ctx, w, h) {
   ctx.restore();
 }
 
+function getTvSocialRowRects(w, h) {
+  const items = TV_SOCIAL_ITEMS;
+
+  const boxW = 180;
+  const boxH = 108;
+  const gap = 28;
+
+  const totalW = items.length * boxW + (items.length - 1) * gap;
+  const startX = (w - totalW) * 0.5;
+
+  // keep this row under the vertical PHOTO / VIDEO / 3D MODEL list
+  const layout = getTvMenuLayout("MENU");
+  const startY = getMenuStartY(MENU_ITEMS.length, layout.listCenterY, layout.gapY);
+  const lastMenuY = startY + (MENU_ITEMS.length - 1) * layout.gapY;
+
+  const y = lastMenuY + 150;
+
+return items.map((item, i) => {
+  let baseX = startX + i * (boxW + gap);
+
+  // optical balancing by icon
+  if (item.id === "email") {
+    baseX += 8;
+  } else if (item.id === "instagram") {
+    baseX += 2;
+  } else if (item.id === "youtube") {
+    baseX -= 2;
+  } else if (item.id === "tiktok") {
+    baseX -= 14;
+  }
+
+  return {
+    ...item,
+    x: baseX,
+    y,
+    w: boxW,
+    h: boxH,
+    cx: baseX + boxW * 0.5,
+    cy: y + boxH * 0.5,
+  };
+});
+}
+
+function drawTvSocialRow(ctx, w, h) {
+  const rects = getTvSocialRowRects(w, h);
+
+  rects.forEach((r) => {
+    const isHovered = tvSocialHoverId === r.id;
+
+    ctx.save();
+
+    const img = tvSocialIconImages[r.id];
+    if (!img) {
+      ctx.restore();
+      return;
+    }
+
+    // larger icons, preserve aspect ratio
+    const baseHeight = isHovered ? 86 : 76;
+    const aspect = img.width / img.height || 1;
+
+const drawHeight = baseHeight;
+
+// base width from aspect ratio
+let drawWidth = baseHeight * aspect;
+
+// 👇 make Instagram slightly wider
+if (r.id === "instagram") {
+  drawWidth *= 1.2; // adjust between 1.1 → 1.3 if needed
+}
+
+    // same glow treatment for every icon
+    ctx.globalAlpha = isHovered ? 1.0 : 0.76;
+
+    if (isHovered) {
+      ctx.shadowColor = "rgba(245,248,255,0.95)";
+      ctx.shadowBlur = 20;
+    } else {
+      ctx.shadowColor = "transparent";
+      ctx.shadowBlur = 0;
+    }
+
+    ctx.drawImage(
+      img,
+      r.cx - drawWidth / 2,
+      r.cy - drawHeight / 2,
+      drawWidth,
+      drawHeight
+    );
+
+    ctx.restore();
+  });
+}
+
+function getTvSocialHit(px, py, w, h) {
+  const rects = getTvSocialRowRects(w, h);
+
+  for (const r of rects) {
+    if (
+      px >= r.x &&
+      px <= r.x + r.w &&
+      py >= r.y &&
+      py <= r.y + r.h
+    ) {
+      return r;
+    }
+  }
+
+  return null;
+}
+
+function activateTvSocialHit(hit) {
+  if (!hit) return false;
+
+  const url = typeof hit.url === "function" ? hit.url() : hit.url;
+  if (!url) return false;
+
+  trackSceneClick("tv_social_click", {
+    social_id: hit.id,
+    tv_ui_state: tvUiState,
+  });
+
+  openExternal(url);
+  return true;
+}
+
 // simple menu renderer (we'll improve next steps)
 function drawTvMenu() {
   const w = tvCanvas.width;
@@ -4626,10 +4757,21 @@ function drawTvMenu() {
   const cx = w * 0.5;
   const startY = getMenuStartY(items.length, layout.listCenterY, layout.gapY);
 
-  syncTvHighlightToCurrentSelection(false);
-  drawAnimatedSelectionBar(tvCtx, w);
-  drawMenuItemsAnimated(tvCtx, items, startY, layout.gapY, cx, menuIndex);
-  drawCarouselStrip(tvCtx, w, h);
+  drawFullscreenGhostPreview(tvCtx, w, h);
+
+  const socialHoverActive = !!tvSocialHoverId;
+
+  // ✅ only show ONE selection system at a time
+  if (!socialHoverActive) {
+    syncTvHighlightToCurrentSelection(false);
+    drawAnimatedSelectionBar(tvCtx, w);
+    drawMenuItemsAnimated(tvCtx, items, startY, layout.gapY, cx, menuIndex);
+  } else {
+    // no vertical selection while a social icon is hovered
+    drawMenuItemsAnimated(tvCtx, items, startY, layout.gapY, cx, -1);
+  }
+
+  drawTvSocialRow(tvCtx, w, h);
 
   tvTex.needsUpdate = true;
 }
@@ -4642,9 +4784,41 @@ const SUBCATEGORY_ITEMS = {
   "3D MODEL": ["boards", "objects", "architecture"],
 };
 
+const TV_SOCIAL_ITEMS = [
+  {
+    id: "email",
+    iconSrc: "assets/Social Icons/Email.png",
+    url: () => getContactMailtoUrl()
+  },
+  {
+    id: "instagram",
+    iconSrc: "assets/Social Icons/Instagram1.png",
+    url: () => getContactProfileUrl()
+  },
+  {
+    id: "youtube",
+    iconSrc: "assets/Social Icons/Youtube.png",
+    url: () => getYoutubeProfileUrl()
+  },
+  {
+    id: "tiktok",
+    iconSrc: "assets/Social Icons/TikTok.png",
+    url: () => getTikTokProfileUrl()
+  }
+];
+
+const tvSocialIconImages = {};
+
+TV_SOCIAL_ITEMS.forEach((item) => {
+  const img = new Image();
+  img.src = item.iconSrc;
+  tvSocialIconImages[item.id] = img;
+});
+
 let tvParentCategory = null;
 let subcategoryIndex = 0;
 let selectedSubcategory = null;
+let tvSocialHoverId = null;
 
 function drawTvSubcategoryMenu() {
   const w = tvCanvas.width;
@@ -4653,6 +4827,8 @@ function drawTvSubcategoryMenu() {
   tvCtx.clearRect(0, 0, w, h);
   tvCtx.fillStyle = "#111111";
   tvCtx.fillRect(0, 0, w, h);
+
+  drawFullscreenGhostPreview(tvCtx, w, h);
 
   if (!tvParentCategory) return;
 
@@ -4675,7 +4851,6 @@ function drawTvSubcategoryMenu() {
   syncTvHighlightToCurrentSelection(false);
   drawAnimatedSelectionBar(tvCtx, w);
   drawMenuItemsAnimated(tvCtx, items, startY, layout.gapY, cx, subcategoryIndex);
-  drawCarouselStrip(tvCtx, w, h);
 
   // BACK button
   const BACK = getTvBackBtn();
@@ -4781,7 +4956,8 @@ function confirmMenuSelection() {
 
   // TOP LEVEL -> SUBCATEGORY SCREEN
   if (tvUiState === "MENU") {
-    const selected = MENU_ITEMS[menuIndex];
+  tvSocialHoverId = null;
+  const selected = MENU_ITEMS[menuIndex];
     console.log("✅ Top-level selected:", selected);
 
    tvParentCategory = selected;
@@ -4855,6 +5031,7 @@ function goBackOnePage() {
 
   blinkT0 = performance.now();
   syncTvHighlightToCurrentSelection(true);
+  tvSocialHoverId = null;
   drawTvSubcategoryMenu();
   return;
 }
@@ -4864,6 +5041,7 @@ function goBackOnePage() {
     backHover = false;
     menuHover = false;
     goBackToTvMenu();
+    tvSocialHoverId = null;
     return;
   }
 }
@@ -4884,6 +5062,7 @@ function goBackToTvMenu() {
   menuHover = false;
   backHover = false;
   tvSubcategoryHoverFlipV = null;
+  tvSocialHoverId = null;
   drawTvMenu();
 }
 
@@ -5981,32 +6160,73 @@ function startSmokeChirpCycle() {
   }, 15000);
 }
 
-let tvOnSound = null;
+const TV_ON_SOUND_SRC = "./assets/Audio/Tv On Sound1-01.mp3";
+const TV_OFF_SOUND_SRC = "./assets/Audio/Tv Off Sound-01.mp3";
+
+let tvOnSoundPreload = null;
+let tvOffSoundPreload = null;
+
+let tvOnSoundActive = null;
+let tvOffSoundActive = null;
 
 function ensureTvOnSound() {
-  if (tvOnSound) return tvOnSound;
+  if (tvOnSoundPreload) return tvOnSoundPreload;
 
-  tvOnSound = new Audio("./assets/Audio/Tv On Sound1-01.mp3");
-  tvOnSound.preload = "metadata";
-  tvOnSound.crossOrigin = "anonymous";
-  tvOnSound.playsInline = true;
-  tvOnSound.setAttribute?.("webkit-playsinline", "");
-  tvOnSound.load();
+  tvOnSoundPreload = new Audio(TV_ON_SOUND_SRC);
+  tvOnSoundPreload.preload = "auto";
+  tvOnSoundPreload.crossOrigin = "anonymous";
+  tvOnSoundPreload.playsInline = true;
+  tvOnSoundPreload.setAttribute?.("webkit-playsinline", "");
+  tvOnSoundPreload.load();
 
-  return tvOnSound;
+  return tvOnSoundPreload;
+}
+
+function ensureTvOffSound() {
+  if (tvOffSoundPreload) return tvOffSoundPreload;
+
+  tvOffSoundPreload = new Audio(TV_OFF_SOUND_SRC);
+  tvOffSoundPreload.preload = "auto";
+  tvOffSoundPreload.crossOrigin = "anonymous";
+  tvOffSoundPreload.playsInline = true;
+  tvOffSoundPreload.setAttribute?.("webkit-playsinline", "");
+  tvOffSoundPreload.load();
+
+  return tvOffSoundPreload;
+}
+
+function stopTvPowerSounds() {
+  if (tvOnSoundActive) {
+    try {
+      tvOnSoundActive.pause();
+      tvOnSoundActive.currentTime = 0;
+    } catch {}
+    tvOnSoundActive = null;
+  }
+
+  if (tvOffSoundActive) {
+    try {
+      tvOffSoundActive.pause();
+      tvOffSoundActive.currentTime = 0;
+    } catch {}
+    tvOffSoundActive = null;
+  }
 }
 
 function playTvOnSound() {
-  const base = ensureTvOnSound();
+  ensureTvOnSound();
+  stopTvPowerSounds();
 
   try {
-    const s = base.cloneNode(true);
+    const s = new Audio(TV_ON_SOUND_SRC);
     s.preload = "auto";
     s.crossOrigin = "anonymous";
     s.playsInline = true;
     s.setAttribute?.("webkit-playsinline", "");
-    s.volume = 0.45; // TV ON volume
+    s.volume = 0.45;
     s.currentTime = 0;
+
+    tvOnSoundActive = s;
 
     const p = s.play();
     if (p?.catch) {
@@ -6015,38 +6235,30 @@ function playTvOnSound() {
       });
     }
 
+    s.onended = () => {
+      if (tvOnSoundActive === s) tvOnSoundActive = null;
+    };
+
     console.log("🔊 TV on sound played");
   } catch (err) {
     console.warn("TV on sound play failed:", err);
   }
 }
 
-let tvOffSound = null;
-
-function ensureTvOffSound() {
-  if (tvOffSound) return tvOffSound;
-
-  tvOffSound = new Audio("./assets/Audio/Tv Off Sound-01.mp3");
-  tvOffSound.preload = "metadata";
-  tvOffSound.crossOrigin = "anonymous";
-  tvOffSound.playsInline = true;
-  tvOffSound.setAttribute?.("webkit-playsinline", "");
-  tvOffSound.load();
-
-  return tvOffSound;
-}
-
 function playTvOffSound() {
-  const base = ensureTvOffSound();
+  ensureTvOffSound();
+  stopTvPowerSounds();
 
   try {
-    const s = base.cloneNode(true);
+    const s = new Audio(TV_OFF_SOUND_SRC);
     s.preload = "auto";
     s.crossOrigin = "anonymous";
     s.playsInline = true;
     s.setAttribute?.("webkit-playsinline", "");
-    s.volume = 0.35; // TV OFF volume
+    s.volume = 0.35;
     s.currentTime = 0;
+
+    tvOffSoundActive = s;
 
     const p = s.play();
     if (p?.catch) {
@@ -6054,6 +6266,10 @@ function playTvOffSound() {
         console.warn("TV off sound play blocked:", err);
       });
     }
+
+    s.onended = () => {
+      if (tvOffSoundActive === s) tvOffSoundActive = null;
+    };
 
     console.log("🔉 TV off sound played");
   } catch (err) {
@@ -6567,14 +6783,12 @@ function handleIOSTvTap(uv) {
 
   const { w, h, px, py } = pos;
   
-// ✅ If TV is OFF, any tap on the screen turns it ON and shows MENU
 if (!tvOn) {
+  playTvOnSound();
   setTvPower(true);
-
   showIosMenuControlsHintOnce();
   return true;
 }
-
 
  // MENU button area (top-right) works in all states that show it
 const BTN = getTvMenuBtn();   // ✅ ADD THIS
@@ -6627,11 +6841,42 @@ if (tvUiState !== "MENU" && (inBackBtnA || inBackBtnB)) {
   const x01 = px / w;  // 0..1
   const y01 = pyA / h; // 0..1  ✅ use primary mapping, not raw py
 
-if (tvUiState === "MENU" || tvUiState === "SUBCATEGORY_MENU") {
-  // iOS still uses pointerup swipe/tap logic
+if (tvUiState === "MENU") {
+  // 1) direct hit on social tile
+  const socialHit = getTvSocialHit(px, pyA, w, h);
+
+  if (socialHit) {
+    if (isIOSDevice()) tvIgnoreNextPointerUp = true;
+    tvSocialHoverId = socialHit.id;
+    drawTvMenu();
+    activateTvSocialHit(socialHit);
+    return true;
+  }
+
+  // 2) desktop fallback: if a social icon is currently highlighted, activate it
+  if (!isIOSDevice() && tvSocialHoverId) {
+    const hoveredSocial = TV_SOCIAL_ITEMS.find((item) => item.id === tvSocialHoverId);
+    if (hoveredSocial) {
+      activateTvSocialHit(hoveredSocial);
+      return true;
+    }
+  }
+
+  // 3) not a social click -> clear social hover and continue normal menu flow
+  if (tvSocialHoverId !== null) {
+    tvSocialHoverId = null;
+    drawTvMenu();
+  }
+
   if (isIOSDevice()) return false;
 
-  // Desktop: hover already controls selection, so click should only confirm
+  confirmMenuSelection();
+  return true;
+}
+
+if (tvUiState === "SUBCATEGORY_MENU") {
+  if (isIOSDevice()) return false;
+
   confirmMenuSelection();
   return true;
 }
@@ -7991,47 +8236,62 @@ if (
   tvUiState === "MENU" &&
   e.pointerType === "mouse" &&
   tvScreenMeshRef &&
-  tvHoverHit &&                      // ✅ must be hovering the TV mesh
-  tvHoverHit.uv                      // ✅ must have uv
+  tvHoverHit &&
+  tvHoverHit.uv
 ) {
-  const uv = tvHoverHit.uv;          // ✅ IMPORTANT: use TV hit uv, not hits[0].uv
+  const uv = tvHoverHit.uv;
 
   const w = tvCanvas.width;
   const h = tvCanvas.height;
 
-  // match mapping rules (repeat/offset + normalize)
   let u = uv.x * (tvTex.repeat?.x ?? 1) + (tvTex.offset?.x ?? 0);
   let v = uv.y * (tvTex.repeat?.y ?? 1) + (tvTex.offset?.y ?? 0);
 
   u = ((u % 1) + 1) % 1;
   v = ((v % 1) + 1) % 1;
 
-  // two possible vertical interpretations
-  const pyA = v * h;
-  const pyB = (1 - v) * h;
+  const px = u * w;
+  const py = v * h;
 
-  // these must match drawTvMenu()
-const layout = getTvMenuLayout("MENU");
-const startY = getMenuStartY(MENU_ITEMS.length, layout.listCenterY, layout.gapY);
-const gapY = layout.gapY;
-const n = MENU_ITEMS.length;
+  const socialHit = getTvSocialHit(px, py, w, h);
+
+  // ----------------------------------------------------------
+  // social icon hovered
+  // ----------------------------------------------------------
+  if (socialHit) {
+    if (tvSocialHoverId !== socialHit.id) {
+      tvSocialHoverId = socialHit.id;
+      blinkT0 = performance.now();
+      drawTvMenu();
+    }
+    return;
+  }
+
+  // ----------------------------------------------------------
+  // no social icon hovered anymore
+  // ----------------------------------------------------------
+  let needsRedraw = false;
+
+  if (tvSocialHoverId !== null) {
+    tvSocialHoverId = null;
+    needsRedraw = true;
+  }
+
+  const layout = getTvMenuLayout("MENU");
+  const startY = getMenuStartY(MENU_ITEMS.length, layout.listCenterY, layout.gapY);
+  const gapY = layout.gapY;
+  const n = MENU_ITEMS.length;
 
   const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
-
-  // candidate index for both py versions
-  const idxA = clamp(Math.round((pyA - startY) / gapY), 0, n - 1);
-  const idxB = clamp(Math.round((pyB - startY) / gapY), 0, n - 1);
-
-  // distance to nearest row center (so we pick correct orientation)
-  const centerA = startY + idxA * gapY;
-  const centerB = startY + idxB * gapY;
-
-const py = pyA;
-const idx = clamp(Math.round((py - startY) / gapY), 0, n - 1);
+  const idx = clamp(Math.round((py - startY) / gapY), 0, n - 1);
 
   if (idx !== menuIndex) {
     menuIndex = idx;
     blinkT0 = performance.now();
+    needsRedraw = true;
+  }
+
+  if (needsRedraw) {
     drawTvMenu();
   }
 }
@@ -10316,23 +10576,23 @@ function buildExhaleSmoke(emitterParent) {
     new THREE.BufferAttribute(positions, 3)
   );
 
-  exhaleSmokeMat = new THREE.PointsMaterial({
-    color: 0xf0f0f0,
-    map: cigaretteSmokeTex,
-    alphaMap: cigaretteSmokeTex,
-    transparent: true,
-    opacity: 0.39,
-    size: 0.50,
-    sizeAttenuation: true,
-    depthTest: false,
-    depthWrite: false,
-    blending: THREE.NormalBlending,
-    fog: true
-  });
+exhaleSmokeMat = new THREE.PointsMaterial({
+  color: 0xf0f0f0,
+  map: cigaretteSmokeTex,
+  alphaMap: cigaretteSmokeTex,
+  transparent: true,
+  opacity: 0.26,
+  size: 0.40,
+  sizeAttenuation: true,
+  depthTest: true,
+  depthWrite: false,
+  blending: THREE.NormalBlending,
+  fog: true
+});
 
 exhaleSmokePoints = new THREE.Points(exhaleSmokeGeo, exhaleSmokeMat);
 exhaleSmokePoints.frustumCulled = false;
-exhaleSmokePoints.renderOrder = 999;
+exhaleSmokePoints.renderOrder = 0;
 exhaleSmokePoints.visible = false;
 
   worldRoot.add(exhaleSmokePoints);
@@ -11038,10 +11298,10 @@ if (emberLightRef) {
 }
 
 if (emberHaloMatRef && emberHaloRef) {
-  emberHaloMatRef.opacity = 1.1 + heat * 0.45;
+  emberHaloMatRef.opacity = 0.28 + heat * 0.18;
 
-  const sx = 0.12 + heat * 0.035;
-  const sy = 0.07 + heat * 0.022;
+  const sx = 0.08 + heat * 0.02;
+  const sy = 0.05 + heat * 0.012;
   emberHaloRef.scale.set(sx, sy, 1.0);
 }
 }
@@ -12967,7 +13227,7 @@ if (matName.includes("ash")) {
     });
 
 if (emberTipRef && !emberLightRef) {
-  emberLightRef = new THREE.PointLight(0xff6024, 18.0, 1.2, 1.6);
+  emberLightRef = new THREE.PointLight(0xff6024, 8.0, 0.65, 2.0);
   emberLightRef.castShadow = false;
   emberTipRef.add(emberLightRef);
 
@@ -12982,21 +13242,19 @@ if (emberTipRef && !emberHaloRef) {
     map: emberHaloTex,
     color: 0xff5a1f,
     transparent: true,
-    opacity: 1.0,
+    opacity: 0.45,
     depthWrite: false,
-    depthTest: false,
-    blending: THREE.AdditiveBlending,
-    toneMapped: false,
+    depthTest: true,
+    blending: THREE.NormalBlending,
+    toneMapped: true,
   });
 
   emberHaloRef = new THREE.Sprite(emberHaloMatRef);
   emberTipRef.add(emberHaloRef);
 
   emberHaloRef.position.set(0.0, 0.0, 0.016);
-  emberHaloRef.scale.set(0.14, 0.08, 1.0);
-  emberHaloRef.renderOrder = 999;
-
-  console.log("🔥 ember halo sprite created on:", emberTipRef.name);
+  emberHaloRef.scale.set(0.10, 0.06, 1.0);
+  emberHaloRef.renderOrder = 0;
 }
 
     cigaretteRoot.updateMatrixWorld(true);
@@ -13777,7 +14035,6 @@ renderer.domElement.addEventListener("dblclick", (e) => {
   raycaster.intersectObject(wallDrawPlaneRef, false, wallHits);
 
   if (!wallHits.length) return;
-
   clearWallDrawing();
   endWallDraw();
 });
