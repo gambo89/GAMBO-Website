@@ -218,36 +218,6 @@ body.ios .loader-logo-wrap {
   height: 100%;
   object-fit: contain;
 }
-
-    /* ✅ iOS LANDSCAPE-ONLY OVERLAY */
-    #ios-rotate-lock {
-      position: fixed;
-      inset: 0;
-      background: #000;
-      color: #fff;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 10000;
-      font-family: monospace;
-      text-align: center;
-      padding: 24px;
-    }
-
-    #ios-rotate-lock .box {
-      max-width: 520px;
-      line-height: 1.4;
-    }
-
-    #ios-rotate-lock .title {
-      font-size: 26px;
-      margin-bottom: 10px;
-    }
-
-    #ios-rotate-lock .sub {
-      opacity: 0.8;
-      font-size: 16px;
-    }
   </style>
 </head>
 
@@ -275,13 +245,6 @@ body.ios .loader-logo-wrap {
   </div>
 </div>
 
-  <!-- ✅ iOS rotate-to-landscape lock -->
-  <div id="ios-rotate-lock">
-    <div class="box">
-      <div class="title">rotate your phone</div>
-    </div>
-  </div>
-
   <canvas id="c"></canvas>
 
   <!-- Import map so main.js can import "three" -->
@@ -294,45 +257,18 @@ body.ios .loader-logo-wrap {
     }
   </script>
 
-  <!-- ✅ iOS portrait blocker logic -->
   <script>
-    function isIOS() {
-      return (
-        /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-        (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
-      );
-    }
+  function isIOS() {
+    return (
+      /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+    );
+  }
 
-    function isLandscape() {
-      return window.matchMedia("(orientation: landscape)").matches;
-    }
-
-    function updateIOSRotateLock() {
-      const lock = document.getElementById("ios-rotate-lock");
-      if (!lock) return;
-
-      if (!isIOS()) {
-        lock.style.display = "none";
-        return;
-      }
-
-      lock.style.display = isLandscape() ? "none" : "flex";
-    }
-
-    updateIOSRotateLock();
-
-    if (isIOS()) {
-  document.body.classList.add("ios");
-}
-
-    window.addEventListener("orientationchange", () => {
-      setTimeout(updateIOSRotateLock, 150);
-    });
-
-    window.addEventListener("resize", () => {
-      setTimeout(updateIOSRotateLock, 150);
-    });
-  </script>
+  if (isIOS()) {
+    document.body.classList.add("ios");
+  }
+</script>
 
   <!-- ✅ iOS viewport height fix (handles Safari tabs/address bar changing) -->
   <script>

@@ -829,62 +829,221 @@ function setInitialCameraFraming() {
   baseCamPos = camera.position.clone();
 }
 
+function applyIOSCameraOffset() {
+  if (!isIOSDevice()) return;
+  if (!IOS_CAM.enabled) return;
+
+  // position offset from desktop framing
+  camera.position.x += IOS_CAM.x;
+  camera.position.y += IOS_CAM.y;
+  camera.position.z += IOS_CAM.z;
+
+  // aim offset from desktop target
+  if (baseCamTarget0) {
+    const target = baseCamTarget0.clone().add(
+      new THREE.Vector3(
+        IOS_CAM.targetX,
+        IOS_CAM.targetY,
+        IOS_CAM.targetZ
+      )
+    );
+    camera.lookAt(target);
+  }
+
+  // optional FOV tweak
+  if (IOS_CAM.fovOffset !== 0) {
+    camera.fov += IOS_CAM.fovOffset;
+    camera.updateProjectionMatrix();
+  }
+
+  baseCamPos = camera.position.clone();
+}
+
 // iOS Camera Values ONLY (desktop untouched)
 // Change these numbers to move iOS camera on X / Y / Z
 // ============================================================
 const IOS_CAM = {
-    fov: 20.0,
+  enabled: true,
 
-  x: 0.02,    // + = right,  - = left
-  y: -0.059,   // + = up,     - = down
-  z: 0.1899,    // + = farther, - = closer
+  // iOS camera POSITION offsets from desktop framing
+  x: 0.3,   // + = right, - = left
+  y: 0.0,   // + = up,    - = down
+  z: 4.5,   // + = farther, - = closer
 
-  targetX: 1.18,
-  targetY: -0.150, // multiplied by maxDim below
-  targetZ: 0,
+  // iOS camera AIM offsets from desktop target
+  targetX: -0.2, // + = look right, - = look left
+  targetY: 8.5, // + = look up,    - = look down
+  targetZ: 0.0,
+
+  // optional iOS-only FOV adjustment
+  fovOffset: 0.0
 };
+
+// ============================================================
+// ✅ iOS HORIZONTAL CAMERA DRAG
+// - user lands at current iOS framing
+// - then can drag left/right within bounds
+// ============================================================
+const IOS_CAM_DRAG = {
+  enabled: true,
+
+  // how far user can move from the iOS landing position
+  minOffsetX: -16.0,
+  maxOffsetX:  14.0,
+
+  // drag sensitivity
+  pxToWorld: 0.018,
+
+  // smoothing (0 = none, higher = smoother)
+  lerp: 0.14,
+};
+
+let iosCamBaseCaptured = false;
+let iosCamBasePos = null;
+let iosCamBaseTarget = null;
+
+let iosCamUserOffsetX = 0;
+let iosCamUserOffsetXTarget = 0;
+
+let iosCamDragActive = false;
+let iosCamDragPointerId = null;
+let iosCamDragStartClientX = 0;
+let iosCamDragStartOffsetX = 0;
+let iosCamDragged = false;
 
 const IOS_LAMP = {
   scale: 1.0,
-  x: 2.0,
-  y: 0.5,
+  x: 10.5,
+  y: 3.5,
   z: 4.0,
 };
 
 function setIOSCameraFraming(maxDim) {
-  camera.fov = IOS_CAM.fov;
+  // start from the exact desktop framing
+  setInitialCameraFraming();
+
+  // then apply iOS-only offsets
+  applyIOSCameraOffset();
+}
+
+function applyFinalIOSCameraFraming() {
+  if (!isIOSDevice()) return;
+  if (!IOS_CAM.enabled) return;
+
+  // apply from the current final camera state only once per settle pass
+  if (!camera.userData.__finalIOSCamBase) {
+    camera.userData.__finalIOSCamBase = {
+      position: camera.position.clone(),
+      fov: camera.fov,
+      target: baseCamTarget0 ? baseCamTarget0.clone() : new THREE.Vector3(0, 0, 0),
+    };
+  }
+
+  const base = camera.userData.__finalIOSCamBase;
+
+  camera.position.copy(base.position);
+  camera.position.x += IOS_CAM.x;
+  camera.position.y += IOS_CAM.y;
+  camera.position.z += IOS_CAM.z;
+
+  const target = base.target.clone().add(
+    new THREE.Vector3(
+      IOS_CAM.targetX,
+      IOS_CAM.targetY,
+      IOS_CAM.targetZ
+    )
+  );
+  camera.lookAt(target);
+
+  camera.fov = base.fov + IOS_CAM.fovOffset;
   camera.updateProjectionMatrix();
 
-  const fov = camera.fov * (Math.PI / 180);
-  const baseDist = maxDim / (2 * Math.tan(fov / 2));
-
-  // current iOS camera position
-  const camX = maxDim * IOS_CAM.x;
-  const camY = maxDim * IOS_CAM.y;
-  const camZ = baseDist * IOS_CAM.z;
-
-  // ORIGINAL iOS baseline values
-  const baseCamX = maxDim * 0.030;
-  const baseCamY = maxDim * -0.146;
-
-  const baseTargetX = 1.18;
-  const baseTargetY = maxDim * -0.186;
-  const baseTargetZ = 0;
-
-  // how far you moved the camera from baseline
-  const dx = camX - baseCamX;
-  const dy = camY - baseCamY;
-
-  // move target by same amount so aim stays the same
-  const targetX = baseTargetX + dx;
-  const targetY = baseTargetY + dy;
-  const targetZ = baseTargetZ;
-
-  camera.position.set(camX, camY, camZ);
-  camera.lookAt(targetX, targetY, targetZ);
-
-  baseCamTarget0 = new THREE.Vector3(targetX, targetY, targetZ);
   baseCamPos = camera.position.clone();
+}
+
+function captureIOSCameraDragBase() {
+  if (!isIOSDevice()) return;
+  if (!IOS_CAM_DRAG.enabled) return;
+
+  iosCamBasePos = camera.position.clone();
+
+  iosCamBaseTarget = baseCamTarget0
+    ? baseCamTarget0.clone().add(
+        new THREE.Vector3(
+          IOS_CAM.targetX,
+          IOS_CAM.targetY,
+          IOS_CAM.targetZ
+        )
+      )
+    : new THREE.Vector3(0, 0, 0);
+
+  iosCamBaseCaptured = true;
+}
+
+function applyIOSCameraDragNow() {
+  if (!isIOSDevice()) return;
+  if (!IOS_CAM_DRAG.enabled) return;
+  if (!iosCamBaseCaptured || !iosCamBasePos || !iosCamBaseTarget) return;
+
+  camera.position.copy(iosCamBasePos);
+  camera.position.x += iosCamUserOffsetX;
+
+  const target = iosCamBaseTarget.clone();
+  target.x += iosCamUserOffsetX;
+  camera.lookAt(target);
+
+  baseCamPos = camera.position.clone();
+}
+
+function updateIOSCameraDrag() {
+  if (!isIOSDevice()) return;
+  if (!IOS_CAM_DRAG.enabled) return;
+  if (!iosCamBaseCaptured) return;
+
+  iosCamUserOffsetX +=
+    (iosCamUserOffsetXTarget - iosCamUserOffsetX) * IOS_CAM_DRAG.lerp;
+
+  applyIOSCameraDragNow();
+}
+
+function resetIOSCameraDragBaseFromCurrentFraming() {
+  if (!isIOSDevice()) return;
+  if (!IOS_CAM_DRAG.enabled) return;
+
+  captureIOSCameraDragBase();
+  applyIOSCameraDragNow();
+}
+
+function isInteractiveHitForIOSCameraDrag(hits) {
+  if (!hits || !hits.length) return false;
+
+  return hits.some((h) => {
+    const obj = h.object;
+
+    return (
+      (tvScreenMeshRef && isInHierarchy(obj, tvScreenMeshRef)) ||
+      (powerButtonMeshRef && isInHierarchy(obj, powerButtonMeshRef)) ||
+      (okButtonMeshRef && isInHierarchy(obj, okButtonMeshRef)) ||
+      (upArrowMeshRef && isInHierarchy(obj, upArrowMeshRef)) ||
+      (downArrowMeshRef && isInHierarchy(obj, downArrowMeshRef)) ||
+      (leftArrowMeshRef && isInHierarchy(obj, leftArrowMeshRef)) ||
+      (rightArrowMeshRef && isInHierarchy(obj, rightArrowMeshRef)) ||
+      (socialTikTokMeshRef && isInHierarchy(obj, socialTikTokMeshRef)) ||
+      (socialInstagramMeshRef && isInHierarchy(obj, socialInstagramMeshRef)) ||
+      (socialYoutubeMeshRef && isInHierarchy(obj, socialYoutubeMeshRef)) ||
+      (socialContactMeshRef && isInHierarchy(obj, socialContactMeshRef)) ||
+      hitIsPicture1(obj) ||
+      hitIsDoor4(obj) ||
+      hitIsDogTag1(obj) ||
+      hitIsBook4(obj) ||
+      hitIsAllDvd(obj) ||
+      hitIsDvdPlayer1(obj) ||
+      hitIsLamp(obj) ||
+      hitIsSpeaker(obj) ||
+      hitIsCigarette(obj) ||
+      hitIsFrontWall1(obj)
+    );
+  });
 }
 
 function applyIOSLampTransform() {
@@ -3538,11 +3697,8 @@ function refitCameraAfterViewportChange() {
 
   applyVisibleViewportToRendererAndCamera();
 
-  if (isIOSDevice()) {
-    setIOSCameraFraming(__roomMaxDimForCamera);
-  } else {
-    setInitialCameraFraming(__roomMaxDimForCamera);
-  }
+  // desktop + iOS now share the same camera framing
+  setInitialCameraFraming();
 }
 
 if (isIOS && window.visualViewport) {
@@ -6703,7 +6859,7 @@ function isLandscapeNow() {
 }
 
 function isIOSPortraitBlocked() {
-  return isIOSDevice() && !isLandscapeNow();
+  return false;
 }
 
 function isInHierarchy(obj, target) {
@@ -7510,6 +7666,28 @@ if (interactivesRootRef) {
   hits = hits.concat(raycaster.intersectObject(interactivesRootRef, true));
 }
 
+  // ============================================================
+  // ✅ iOS horizontal camera drag start
+  // - only when touch begins on NON-interactive scene space
+  // ============================================================
+  if (
+    isIOSDevice() &&
+    IOS_CAM_DRAG.enabled &&
+    !overlayOpen &&
+    !videoOverlayOpen &&
+    !modelOverlayOpen
+  ) {
+    const touchingInteractive = isInteractiveHitForIOSCameraDrag(hits);
+
+    if (!touchingInteractive) {
+      iosCamDragActive = true;
+      iosCamDragPointerId = e.pointerId;
+      iosCamDragStartClientX = e.clientX;
+      iosCamDragStartOffsetX = iosCamUserOffsetXTarget;
+      iosCamDragged = false;
+    }
+  }
+
 hits = hits.concat(raycaster.intersectObject(anchor, true));
 
 // ✅ choose the closest hit overall
@@ -8095,6 +8273,24 @@ if (speakerMeshRef && isInHierarchy(hit, speakerMeshRef)) {
 // Paste this OUTSIDE onPointerDown, directly after it ends.
 // ============================================================
 async function onPointerUp(e) {
+  // ✅ end iOS horizontal camera drag first
+  if (
+    isIOSDevice() &&
+    IOS_CAM_DRAG.enabled &&
+    iosCamDragActive &&
+    e.pointerId === iosCamDragPointerId
+  ) {
+    iosCamDragActive = false;
+    iosCamDragPointerId = null;
+
+    // if it was a drag, do not also treat it like a tap
+    if (iosCamDragged) {
+      iosCamDragged = false;
+      clearAllButtonPresses();
+      return;
+    }
+  }
+
   if (!tvTouchActive) return;
   tvTouchActive = false;
 
@@ -8169,6 +8365,11 @@ if (isTap) {
 // ============================================================
 function onPointerCancel() {
   tvTouchActive = false;
+
+  iosCamDragActive = false;
+  iosCamDragPointerId = null;
+  iosCamDragged = false;
+
   setHoverKey(null);
   clearAllButtonGlows();
   clearAllButtonPresses();
@@ -8224,12 +8425,44 @@ window.addEventListener("pointercancel", () => {
   clearAllButtonPresses();
 });
 
+renderer.domElement.addEventListener("pointermove", (e) => {
+  if (!isIOSDevice()) return;
+  if (!IOS_CAM_DRAG.enabled) return;
+  if (!iosCamDragActive) return;
+  if (e.pointerId !== iosCamDragPointerId) return;
+  if (overlayOpen || videoOverlayOpen || modelOverlayOpen) return;
+  if (isIOSPortraitBlocked()) return;
+
+  const dx = e.clientX - iosCamDragStartClientX;
+
+  if (Math.abs(dx) > 4) {
+    iosCamDragged = true;
+  }
+
+  const nextOffset =
+    iosCamDragStartOffsetX + dx * IOS_CAM_DRAG.pxToWorld;
+
+  iosCamUserOffsetXTarget = THREE.MathUtils.clamp(
+    nextOffset,
+    IOS_CAM_DRAG.minOffsetX,
+    IOS_CAM_DRAG.maxOffsetX
+  );
+}, { passive: true });
+
 // ============================================================
 // HOVER DETECTION (TV fullscreen hint + Speaker play hint)
 // ============================================================
 
 renderer.domElement.addEventListener("pointermove", (e) => {
   if (isIOSPortraitBlocked()) return;
+
+  if (iosCamDragActive) {
+    setHoverKey(null);
+    clearAllButtonGlows();
+    clearAllButtonPresses();
+    return;
+  }
+
   if (overlayOpen || videoOverlayOpen || modelOverlayOpen) {
     setHoverKey(null);
     clearAllButtonGlows();
@@ -12163,7 +12396,12 @@ setTimeout(scheduleResize, 120);
 setTimeout(() => {
   scheduleResize();
 
-  // ✅ NOW that the final resize has happened, lock the “never move” camera
+  // ✅ apply iOS camera AFTER final resize/layout settle
+  applyFinalIOSCameraFraming();
+
+  resetIOSCameraDragBaseFromCurrentFraming();
+
+  // ✅ NOW lock the final camera
   captureFixedCameraBaseline();
 
   // ✅ iOS only: fix remote body perspective after camera/layout settle
@@ -13906,6 +14144,7 @@ if (
 }
 
 if (!blocked) {
+  updateIOSCameraDrag();
   updateTv();
   updateLampFlicker();
   updateDust(dt);
@@ -14026,8 +14265,12 @@ renderer.setPixelRatio(Math.min(dpr, MOBILE_PROFILE.maxDpr));
   camera.updateProjectionMatrix();
 
   if (isIOSDevice()) {
-  updateIOSRemoteFillLight(roomMaxDim);
-}
+    camera.userData.__finalIOSCamBase = null;
+    applyFinalIOSCameraFraming();
+    
+    resetIOSCameraDragBaseFromCurrentFraming();
+    updateIOSRemoteFillLight(roomMaxDim);
+  }
 
   if (composer) composer.setSize(w, h);
   if (nightVisionPass?.uniforms?.uResolution?.value) {
