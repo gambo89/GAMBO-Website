@@ -892,10 +892,10 @@ const IOS_CAM_DRAG = {
   maxOffsetX:  18.0,
 
   // drag sensitivity
-  pxToWorld: 0.018,
+  pxToWorld: 0.022,
 
   // smoothing (0 = none, higher = smoother)
-  lerp: 0.14,
+  lerp: 0.07,
 };
 
 let iosCamBaseCaptured = false;
@@ -4186,6 +4186,17 @@ const tvTex = new THREE.CanvasTexture(tvCanvas);
 tvTex.colorSpace = THREE.SRGBColorSpace;
 tvTex.flipY = false;
 
+// ============================================================
+// ✅ iOS-only TV canvas texture stability fix
+// Prevents small menu text from disappearing / shimmering on iOS
+// ============================================================
+if (isIOSDevice()) {
+  tvTex.generateMipmaps = false;
+  tvTex.minFilter = THREE.LinearFilter;
+  tvTex.magFilter = THREE.LinearFilter;
+  tvTex.anisotropy = 1;
+}
+
 // UI state
 let tvUiState = "MENU";    // MENU for now
 let menuIndex = 0;         // 0=Photo, 1=Video, 2=3D Model
@@ -4588,6 +4599,16 @@ function syncTvHighlightToCurrentSelection(force = false) {
 function updateTvMenuFx(dt) {
   if (tvUiState !== "MENU" && tvUiState !== "SUBCATEGORY_MENU") return;
 
+  // ============================================================
+  // iOS: do NOT animate / lerp the highlight
+  // keep it locked to the active selection at all times
+  // ============================================================
+  if (isIOSDevice()) {
+    syncTvHighlightToCurrentSelection(true);
+    updateGhostPreviewFx(dt);
+    return;
+  }
+
   syncTvHighlightToCurrentSelection(false);
 
   const follow = 1.0 - Math.pow(0.0001, dt * 3.5);
@@ -4595,28 +4616,59 @@ function updateTvMenuFx(dt) {
   if (tvHighlightTargetH != null) tvHighlightH = lerp(tvHighlightH ?? tvHighlightTargetH, tvHighlightTargetH, follow);
   if (tvHighlightTargetW != null) tvHighlightW = lerp(tvHighlightW ?? tvHighlightTargetW, tvHighlightTargetW, follow);
 
-    updateGhostPreviewFx(dt);
+  updateGhostPreviewFx(dt);
 }
-
 
 function drawAnimatedSelectionBar(ctx, w) {
   if (tvHighlightY == null || tvHighlightW == null || tvHighlightH == null) return;
 
-  const t = performance.now() * 0.001;
-  const glow = 0.06 + 0.02 * Math.sin(t * 3.2);
   const x = (w - tvHighlightW) * 0.5;
   const y = tvHighlightY - tvHighlightH * 0.5;
 
   ctx.save();
   ctx.shadowColor = "rgba(255,255,255,0.08)";
-  ctx.shadowBlur = 6;
+  ctx.shadowBlur = isIOSDevice() ? 0 : 6;
+
+  // ============================================================
+  // iOS: use a stable solid highlight so it never fades away
+  // Desktop: keep your animated gradient
+  // ============================================================
+  if (isIOSDevice()) {
+  ctx.globalAlpha = 1.0;
+  ctx.filter = "none";
+  ctx.shadowColor = "transparent";
+  ctx.shadowBlur = 0;
+  ctx.globalCompositeOperation = "source-over";
+
+  // base fill
+  ctx.fillStyle = "rgba(255,255,255,0.22)";
+  roundRect(ctx, x, y, tvHighlightW, tvHighlightH, 12);
+  ctx.fill();
+
+  // inner reinforcement so it stays clearly visible
+  ctx.fillStyle = "rgba(255,255,255,0.10)";
+  roundRect(ctx, x + 2, y + 2, tvHighlightW - 4, tvHighlightH - 4, 10);
+  ctx.fill();
+
+  // crisp border
+  ctx.strokeStyle = "rgba(255,255,255,0.28)";
+  ctx.lineWidth = 2;
+  roundRect(ctx, x, y, tvHighlightW, tvHighlightH, 12);
+  ctx.stroke();
+
+  ctx.restore();
+  return;
+}
+
+  const t = performance.now() * 0.001;
+  const glow = 0.06 + 0.02 * Math.sin(t * 3.2);
 
   const grad = ctx.createLinearGradient(x, 0, x + tvHighlightW, 0);
   grad.addColorStop(0.0, "rgba(255,255,255,0.04)");
-grad.addColorStop(0.18, `rgba(255,255,255,${0.08 + glow})`);
-grad.addColorStop(0.5, `rgba(255,255,255,${0.11 + glow})`);
-grad.addColorStop(0.82, `rgba(255,255,255,${0.08 + glow})`);
-grad.addColorStop(1.0, "rgba(255,255,255,0.04)");
+  grad.addColorStop(0.18, `rgba(255,255,255,${0.08 + glow})`);
+  grad.addColorStop(0.5, `rgba(255,255,255,${0.11 + glow})`);
+  grad.addColorStop(0.82, `rgba(255,255,255,${0.08 + glow})`);
+  grad.addColorStop(1.0, "rgba(255,255,255,0.04)");
 
   ctx.fillStyle = grad;
   roundRect(ctx, x, y, tvHighlightW, tvHighlightH, 12);
@@ -4630,8 +4682,43 @@ grad.addColorStop(1.0, "rgba(255,255,255,0.04)");
   ctx.restore();
 }
 
+function drawTvTextListIOSStable(ctx, items, startY, gapY, cx, selectedIndex) {
+  for (let i = 0; i < items.length; i++) {
+    const y = startY + i * gapY;
+    const isSelected = i === selectedIndex;
+
+    ctx.save();
+
+    // hard reset text state every row for Safari canvas stability
+    ctx.globalAlpha = 1.0;
+    ctx.filter = "none";
+    ctx.shadowColor = "transparent";
+    ctx.shadowBlur = 0;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    // slightly stronger opacity so non-selected rows stay visible
+    const alpha = isSelected ? 1.0 : 0.96;
+    ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+
+    // IMPORTANT: no transform scaling on iOS text
+    ctx.fillText(items[i], cx, y);
+
+    ctx.restore();
+  }
+}
+
 function drawMenuItemsAnimated(ctx, items, startY, gapY, cx, selectedIndex) {
   const t = performance.now() * 0.001;
+
+  // ============================================================
+  // iOS: use a stable text path only
+  // Desktop: keep the original animated path
+  // ============================================================
+  if (isIOSDevice()) {
+    drawTvTextListIOSStable(ctx, items, startY, gapY, cx, selectedIndex);
+    return;
+  }
 
   for (let i = 0; i < items.length; i++) {
     const y = startY + i * gapY;
@@ -4892,11 +4979,27 @@ function getTvSocialHit(px, py, w, h) {
   const rects = getTvSocialRowRects(w, h);
 
   for (const r of rects) {
+    let hitX = r.x;
+    let hitY = r.y;
+    let hitW = r.w;
+    let hitH = r.h;
+
+    // ✅ Instagram icon is drawn wider, so make its tap target wider too
+    if (r.id === "instagram") {
+      const extraW = 36;   // adjust 24–48 if needed
+      const extraH = 8;
+
+      hitX -= extraW * 0.5;
+      hitW += extraW;
+      hitY -= extraH * 0.5;
+      hitH += extraH;
+    }
+
     if (
-      px >= r.x &&
-      px <= r.x + r.w &&
-      py >= r.y &&
-      py <= r.y + r.h
+      px >= hitX &&
+      px <= hitX + hitW &&
+      py >= hitY &&
+      py <= hitY + hitH
     ) {
       return r;
     }
@@ -4908,16 +5011,34 @@ function getTvSocialHit(px, py, w, h) {
 function activateTvSocialHit(hit) {
   if (!hit) return false;
 
-  const url = typeof hit.url === "function" ? hit.url() : hit.url;
-  if (!url) return false;
-
   trackSceneClick("tv_social_click", {
     social_id: hit.id,
     tv_ui_state: tvUiState,
   });
 
-  openExternal(url);
-  return true;
+  // ✅ Use the SAME Safari-safe / app-opening flow as the remote buttons:
+  // queue pendingExternalUrl, let pointerup handle the actual open.
+  if (hit.id === "instagram") {
+    pendingExternalUrl = getInstagramProfileUrl();
+    return true;
+  }
+
+  if (hit.id === "youtube") {
+    pendingExternalUrl = getYoutubeProfileUrl();
+    return true;
+  }
+
+  if (hit.id === "tiktok") {
+    pendingExternalUrl = getTikTokProfileUrl();
+    return true;
+  }
+
+  if (hit.id === "email") {
+    pendingExternalUrl = getContactMailtoUrl();
+    return true;
+  }
+
+  return false;
 }
 
 // simple menu renderer (we'll improve next steps)
@@ -4945,13 +5066,12 @@ function drawTvMenu() {
 
   // ✅ only show ONE selection system at a time
   if (!socialHoverActive) {
-    syncTvHighlightToCurrentSelection(false);
-    drawAnimatedSelectionBar(tvCtx, w);
-    drawMenuItemsAnimated(tvCtx, items, startY, layout.gapY, cx, menuIndex);
-  } else {
-    // no vertical selection while a social icon is hovered
-    drawMenuItemsAnimated(tvCtx, items, startY, layout.gapY, cx, -1);
-  }
+  syncTvHighlightToCurrentSelection(isIOSDevice());
+  drawAnimatedSelectionBar(tvCtx, w);
+  drawMenuItemsAnimated(tvCtx, items, startY, layout.gapY, cx, menuIndex);
+} else {
+  drawMenuItemsAnimated(tvCtx, items, startY, layout.gapY, cx, -1);
+}
 
   drawTvSocialRow(tvCtx, w, h);
 
@@ -4975,7 +5095,7 @@ const TV_SOCIAL_ITEMS = [
   {
     id: "instagram",
     iconSrc: "assets/Social Icons/Instagram1.png",
-    url: () => getContactProfileUrl()
+    url: () => getInstagramProfileUrl()
   },
   {
     id: "youtube",
@@ -5026,13 +5146,14 @@ function drawTvSubcategoryMenu() {
   tvCtx.fillText(tvParentCategory, w * 0.5, layout.titleY);
 
   // list
-  tvCtx.font = layout.font;
-  const cx = w * 0.5;
-  const startY = getMenuStartY(items.length, layout.listCenterY, layout.gapY);
+ tvCtx.font = layout.font;
 
-  syncTvHighlightToCurrentSelection(false);
-  drawAnimatedSelectionBar(tvCtx, w);
-  drawMenuItemsAnimated(tvCtx, items, startY, layout.gapY, cx, subcategoryIndex);
+const cx = w * 0.5;
+const startY = getMenuStartY(items.length, layout.listCenterY, layout.gapY);
+
+syncTvHighlightToCurrentSelection(isIOSDevice());
+drawAnimatedSelectionBar(tvCtx, w);
+drawMenuItemsAnimated(tvCtx, items, startY, layout.gapY, cx, subcategoryIndex);
 
   // BACK button
   const BACK = getTvBackBtn();
@@ -5042,7 +5163,7 @@ function drawTvSubcategoryMenu() {
   tvCtx.save();
   if (backHover) {
     tvCtx.shadowColor = "rgba(255,255,255,0.5)";
-    tvCtx.shadowBlur = 18;
+    tvCtx.shadowBlur = isIOSDevice() ? 0 : 18;
     tvCtx.globalAlpha = 1.0;
   } else {
     tvCtx.globalAlpha = 0.85;
@@ -7182,6 +7303,10 @@ function getTikTokProfileUrl() {
 
 const INSTAGRAM_PROFILE_URL = "https://www.instagram.com/g_a_m_b_o/";
 
+function getInstagramProfileUrl() {
+  return INSTAGRAM_PROFILE_URL;
+}
+
 function getContactProfileUrl() {
   return INSTAGRAM_PROFILE_URL;
 }
@@ -8433,8 +8558,8 @@ renderer.domElement.addEventListener("pointermove", (e) => {
     iosCamDragged = true;
   }
 
-  const nextOffset =
-    iosCamDragStartOffsetX + dx * IOS_CAM_DRAG.pxToWorld;
+const nextOffset =
+  iosCamDragStartOffsetX - dx * IOS_CAM_DRAG.pxToWorld;
 
   iosCamUserOffsetXTarget = THREE.MathUtils.clamp(
     nextOffset,
