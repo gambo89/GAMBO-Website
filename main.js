@@ -866,13 +866,13 @@ const IOS_CAM = {
   enabled: true,
 
   // iOS camera POSITION offsets from desktop framing
-  x: 0.3,   // + = right, - = left
+  x: 0.4,   // + = right, - = left
   y: 0.0,   // + = up,    - = down
   z: 4.5,   // + = farther, - = closer
 
   // iOS camera AIM offsets from desktop target
-  targetX: -0.2, // + = look right, - = look left
-  targetY: 8.5, // + = look up,    - = look down
+  targetX: 0.0, // + = look right, - = look left
+  targetY: 0.0, // + = look up,    - = look down
   targetZ: 0.0,
 
   // optional iOS-only FOV adjustment
@@ -889,7 +889,7 @@ const IOS_CAM_DRAG = {
 
   // how far user can move from the iOS landing position
   minOffsetX: -16.0,
-  maxOffsetX:  14.0,
+  maxOffsetX:  18.0,
 
   // drag sensitivity
   pxToWorld: 0.018,
@@ -911,10 +911,12 @@ let iosCamDragStartClientX = 0;
 let iosCamDragStartOffsetX = 0;
 let iosCamDragged = false;
 
+let iosCamLandingTarget = null;
+
 const IOS_LAMP = {
   scale: 1.0,
-  x: 10.5,
-  y: 3.5,
+  x: 13.5,
+  y: 0.5,
   z: 4.0,
 };
 
@@ -930,32 +932,26 @@ function applyFinalIOSCameraFraming() {
   if (!isIOSDevice()) return;
   if (!IOS_CAM.enabled) return;
 
-  // apply from the current final camera state only once per settle pass
-  if (!camera.userData.__finalIOSCamBase) {
-    camera.userData.__finalIOSCamBase = {
-      position: camera.position.clone(),
-      fov: camera.fov,
-      target: baseCamTarget0 ? baseCamTarget0.clone() : new THREE.Vector3(0, 0, 0),
-    };
-  }
+  // ALWAYS rebuild from the canonical desktop framing
+  setInitialCameraFraming();
 
-  const base = camera.userData.__finalIOSCamBase;
-
-  camera.position.copy(base.position);
   camera.position.x += IOS_CAM.x;
   camera.position.y += IOS_CAM.y;
   camera.position.z += IOS_CAM.z;
 
-  const target = base.target.clone().add(
+  const target = baseCamTarget0.clone().add(
     new THREE.Vector3(
       IOS_CAM.targetX,
       IOS_CAM.targetY,
       IOS_CAM.targetZ
     )
   );
+
+  iosCamLandingTarget = target.clone();
+
   camera.lookAt(target);
 
-  camera.fov = base.fov + IOS_CAM.fovOffset;
+  camera.fov = 31.5 + IOS_CAM.fovOffset;
   camera.updateProjectionMatrix();
 
   baseCamPos = camera.position.clone();
@@ -966,16 +962,9 @@ function captureIOSCameraDragBase() {
   if (!IOS_CAM_DRAG.enabled) return;
 
   iosCamBasePos = camera.position.clone();
-
-  iosCamBaseTarget = baseCamTarget0
-    ? baseCamTarget0.clone().add(
-        new THREE.Vector3(
-          IOS_CAM.targetX,
-          IOS_CAM.targetY,
-          IOS_CAM.targetZ
-        )
-      )
-    : new THREE.Vector3(0, 0, 0);
+  iosCamBaseTarget = iosCamLandingTarget
+    ? iosCamLandingTarget.clone()
+    : (baseCamTarget0 ? baseCamTarget0.clone() : new THREE.Vector3(0, 0, 0));
 
   iosCamBaseCaptured = true;
 }
@@ -1009,6 +998,10 @@ function updateIOSCameraDrag() {
 function resetIOSCameraDragBaseFromCurrentFraming() {
   if (!isIOSDevice()) return;
   if (!IOS_CAM_DRAG.enabled) return;
+
+  // landing view must start centered every fresh settle/load
+  iosCamUserOffsetX = 0;
+  iosCamUserOffsetXTarget = 0;
 
   captureIOSCameraDragBase();
   applyIOSCameraDragNow();
@@ -1512,9 +1505,9 @@ const IOS_REMOTE_TWEAK = {
   pushBackFactor: 0.000,
 
   // shared movement for remote body + all buttons
-  offsetX: 0.0,
-  offsetY: 0.2,
-  offsetZ: 6.6,
+  offsetX: -0.5,
+  offsetY: -0.5,
+  offsetZ: 3.0,
 };
 
 const IOS_CIGARETTE_TWEAK = {
@@ -7713,6 +7706,7 @@ const hitInfo = tvHitInfo ?? hits[0];
 const hit = hitInfo.object;
 
 const cigaretteHit = hits.find(h => cigaretteRoot && isInHierarchy(h.object, cigaretteRoot));
+
 if (cigaretteHit) {
   console.log("🚬 cigarette hit:", cigaretteHit.object.name);
 
@@ -13250,7 +13244,87 @@ if (instagramKey === "Instagram") {
   console.log("📸 Instagram button mesh set:", o.name);
 }
 
+
 });
+
+// ------------------------------------------------------------
+// SOCIAL BUTTON REFS
+// ------------------------------------------------------------
+const socialKey = [
+  o.parent?.parent?.name,
+  o.parent?.name,
+  o.name,
+  originalMatName,
+].find((k) => k === "TikTok");
+
+if (socialKey === "TikTok") {
+  socialTikTokMeshRef = o;
+  ensurePressState(o);
+
+  if (o.material) {
+    o.material = o.material.clone();
+    o.material.needsUpdate = true;
+  }
+
+  console.log("🎵 TikTok button mesh set:", o.name);
+}
+
+const contactKey = [
+  o.parent?.parent?.name,
+  o.parent?.name,
+  o.name,
+  originalMatName,
+].find((k) => k === "Contact");
+
+if (contactKey === "Contact") {
+  socialContactMeshRef = o;
+  ensurePressState(o);
+
+  if (o.material) {
+    o.material = o.material.clone();
+    o.material.needsUpdate = true;
+  }
+
+  console.log("📇 Contact button mesh set:", o.name);
+}
+
+const youtubeKey = [
+  o.parent?.parent?.name,
+  o.parent?.name,
+  o.name,
+  originalMatName,
+].find((k) => k === "Youtube");
+
+if (youtubeKey === "Youtube") {
+  socialYoutubeMeshRef = o;
+  ensurePressState(o);
+
+  if (o.material) {
+    o.material = o.material.clone();
+    o.material.needsUpdate = true;
+  }
+
+  console.log("▶️ Youtube button mesh set:", o.name);
+}
+
+const instagramKey = [
+  o.parent?.parent?.name,
+  o.parent?.name,
+  o.name,
+  originalMatName,
+].find((k) => k === "Instagram");
+
+if (instagramKey === "Instagram") {
+  socialInstagramMeshRef = o;
+  ensurePressState(o);
+
+  if (o.material) {
+    o.material = o.material.clone();
+    o.material.needsUpdate = true;
+  }
+
+  console.log("📸 Instagram button mesh set:", o.name);
+}
 
     socialButtons.updateMatrixWorld(true);
     console.log("✅ Social Buttons loaded:", socialButtons);
