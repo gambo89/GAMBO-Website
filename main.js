@@ -14,6 +14,22 @@ const log  = (...args) => DEBUG && console.log(...args);
 const warn = (...args) => DEBUG && console.warn(...args);
 const err  = (...args) => DEBUG && console.error(...args);
 
+// ============================================================
+// ✅ iOS SINGLE LINE HINT FIX
+// ============================================================
+function applySingleLineHintStyle(el) {
+  if (!el) return;
+
+  // ONLY affect iOS
+  if (!isIOSDevice()) return;
+
+  el.style.whiteSpace = "nowrap";
+  el.style.wordBreak = "keep-all";
+  el.style.overflowWrap = "normal";
+  el.style.maxWidth = "calc(100vw - 32px)";
+  el.style.boxSizing = "border-box";
+}
+
 function trackSceneClick(action, extra = {}) {
   if (typeof window.gtag !== "function") return;
 
@@ -2362,6 +2378,8 @@ tvHint.style.transition = "opacity 0.25s ease";
 
 tvHint.style.zIndex = "9998";
 
+applySingleLineHintStyle(tvHint);
+
 document.body.appendChild(tvHint);
 
 let tvHintVisible = false;
@@ -2427,6 +2445,7 @@ powerHint.style.transition = "opacity 0.25s ease";
 
 powerHint.style.zIndex = "9998";
 
+applySingleLineHintStyle(powerHint);
 document.body.appendChild(powerHint);
 
 let powerHintVisible = false;
@@ -2468,6 +2487,7 @@ lampHint.style.transition = "opacity 0.25s ease";
 
 lampHint.style.zIndex = "9998";
 
+applySingleLineHintStyle(lampHint);
 document.body.appendChild(lampHint);
 
 let lampHintVisible = false;
@@ -2512,6 +2532,7 @@ allDvdHint.style.transition = "opacity 0.25s ease";
 
 allDvdHint.style.zIndex = "9998";
 
+applySingleLineHintStyle(allDvdHint);
 document.body.appendChild(allDvdHint);
 
 let allDvdHintVisible = false;
@@ -2547,6 +2568,7 @@ dvdPlayer1Hint.style.transition = "opacity 0.25s ease";
 
 dvdPlayer1Hint.style.zIndex = "9998";
 
+applySingleLineHintStyle(dvdPlayer1Hint);
 document.body.appendChild(dvdPlayer1Hint);
 
 let dvdPlayer1HintVisible = false;
@@ -2582,6 +2604,7 @@ book4Hint.style.transition = "opacity 0.25s ease";
 
 book4Hint.style.zIndex = "9998";
 
+applySingleLineHintStyle(book4Hint);
 document.body.appendChild(book4Hint);
 
 let book4HintVisible = false;
@@ -2617,6 +2640,7 @@ dogTagHint.style.transition = "opacity 0.25s ease";
 
 dogTagHint.style.zIndex = "9998";
 
+applySingleLineHintStyle(dogTagHint);
 document.body.appendChild(dogTagHint);
 
 let dogTagHintVisible = false;
@@ -2652,6 +2676,7 @@ door4Hint.style.transition = "opacity 0.25s ease";
 
 door4Hint.style.zIndex = "9998";
 
+applySingleLineHintStyle(door4Hint);
 document.body.appendChild(door4Hint);
 
 let door4HintVisible = false;
@@ -2687,6 +2712,7 @@ picture1Hint.style.transition = "opacity 0.25s ease";
 
 picture1Hint.style.zIndex = "9998";
 
+applySingleLineHintStyle(picture1Hint);
 document.body.appendChild(picture1Hint);
 
 let picture1HintVisible = false;
@@ -2792,6 +2818,7 @@ cigaretteHint.style.transition = "opacity 0.25s ease";
 
 cigaretteHint.style.zIndex = "9998";
 
+applySingleLineHintStyle(cigaretteHint);
 document.body.appendChild(cigaretteHint);
 
 let cigaretteHintVisible = false;
@@ -2827,7 +2854,8 @@ function makeMiniHint(text) {
   el.style.transition = "opacity 0.25s ease";
   el.style.zIndex = "9998";
 
-  document.body.appendChild(el);
+applySingleLineHintStyle(el);
+document.body.appendChild(el);
 
   let visible = false;
   function show(show) {
@@ -4203,6 +4231,22 @@ tvCanvas.height = 1080;
 const tvCtx = tvCanvas.getContext("2d");
 tvCtx.imageSmoothingEnabled = true;
 
+// ✅ Stable photo styling buffers
+// We blur the TV photo using a low-res offscreen pass so iOS always keeps the look.
+const tvPhotoFxCanvas = document.createElement("canvas");
+tvPhotoFxCanvas.width = 1920;
+tvPhotoFxCanvas.height = 1080;
+const tvPhotoFxCtx = tvPhotoFxCanvas.getContext("2d");
+tvPhotoFxCtx.imageSmoothingEnabled = true;
+
+// Tunable photo look
+const TV_PHOTO_STYLE = {
+  finalAlpha: 0.72,   // lower opacity of the visible photo layer
+  blurAlpha: 0.34,    // strength of the blurred haze underneath
+  blurScale: 0.12,    // lower = blurrier
+  vignetteAlpha: 0.18 // subtle darkening so images feel softer
+};
+
 const tvTex = new THREE.CanvasTexture(tvCanvas);
 tvTex.colorSpace = THREE.SRGBColorSpace;
 tvTex.flipY = false;
@@ -4319,7 +4363,6 @@ const TV_PREVIEW_IMAGES = {
       "./assets/Video/Music/02-Music.jpg",
       "./assets/Video/Music/03-Music.jpg",
       "./assets/Video/Music/04-Music.jpg",
-      "./assets/Video/Music/05-Music.jpg",
       
     ],
     experimental: [
@@ -5486,6 +5529,136 @@ function moveMenuSelection(delta) {
   }
 }
 
+function handleTvChromeButtonTapFromUv(uv) {
+  const pos = getTvCanvasPxPyFromUv(uv);
+  if (!pos) return false;
+
+  const { w, h, px, py } = pos;
+
+  const BTN = getTvMenuBtn();
+  const bx = w - BTN.pad - BTN.w;
+  const by = BTN.pad;
+
+  const BACK = getTvBackBtn();
+  const backX = BACK.pad;
+  const backY = BACK.pad;
+
+  const pyA = py;
+  const pyB = h - py;
+
+  const inMenuBtnA =
+    px >= bx && px <= bx + BTN.w &&
+    pyA >= by && pyA <= by + BTN.h;
+
+  const inMenuBtnB =
+    px >= bx && px <= bx + BTN.w &&
+    pyB >= by && pyB <= by + BTN.h;
+
+  if (inMenuBtnA || inMenuBtnB) {
+    if (isIOSDevice()) tvIgnoreNextPointerUp = true;
+    goBackToTvMenu();
+    return true;
+  }
+
+  const inBackBtnA =
+    px >= backX && px <= backX + BACK.w &&
+    pyA >= backY && pyA <= backY + BACK.h;
+
+  const inBackBtnB =
+    px >= backX && px <= backX + BACK.w &&
+    pyB >= backY && pyB <= backY + BACK.h;
+
+  if (tvUiState !== "MENU" && (inBackBtnA || inBackBtnB)) {
+    if (isIOSDevice()) tvIgnoreNextPointerUp = true;
+    goBackOnePage();
+    return true;
+  }
+
+  return false;
+}
+
+function confirmLockedTvTouchSelection() {
+  if (!tvOn) return;
+
+  // --------------------------------------------------
+  // MENU -> confirm exactly what was highlighted
+  // when the finger first touched the screen
+  // --------------------------------------------------
+  if (tvTouchStartUiState === "MENU") {
+    if (tvTouchStartTargetKind === "social" && tvTouchStartSocialId) {
+      const selectedSocial = TV_SOCIAL_ITEMS.find(
+        (item) => item.id === tvTouchStartSocialId
+      );
+
+      if (selectedSocial) {
+        tvSocialHoverId = selectedSocial.id;
+        drawTvMenu();
+        activateTvSocialHit(selectedSocial);
+        return;
+      }
+    }
+
+    const selected = MENU_ITEMS[tvTouchStartMenuIndex];
+    if (!selected) return;
+
+    menuIndex = tvTouchStartMenuIndex;
+    tvSocialHoverId = null;
+    tvParentCategory = selected;
+    subcategoryIndex = 0;
+    selectedSubcategory = null;
+    tvUiState = "SUBCATEGORY_MENU";
+    tvSubcategoryHoverFlipV = null;
+
+    blinkT0 = performance.now();
+    syncTvHighlightToCurrentSelection(true);
+    drawTvSubcategoryMenu();
+    return;
+  }
+
+  // --------------------------------------------------
+  // SUBCATEGORY_MENU -> confirm exactly what was highlighted
+  // when the finger first touched the screen
+  // --------------------------------------------------
+  if (tvTouchStartUiState === "SUBCATEGORY_MENU") {
+    const items = SUBCATEGORY_ITEMS[tvParentCategory] || [];
+    const selected = items[tvTouchStartSubcategoryIndex];
+    if (!selected) return;
+
+    subcategoryIndex = tvTouchStartSubcategoryIndex;
+    selectedSubcategory = selected;
+    tvUiState = tvParentCategory;
+
+    photoIndex = 0;
+    videoIndex = 0;
+    modelIndex = 0;
+
+    if (tvUiState === "PHOTO") {
+      photoImage = null;
+      photoLoading = false;
+      loadPhotoAt(0);
+      popIosFullscreenHint();
+      return;
+    }
+
+    if (tvUiState === "VIDEO") {
+      stopVideoCompletely();
+      videoIndex = 0;
+      loadVideoAt(0, { autoPlay: true });
+      popIosFullscreenHint();
+      return;
+    }
+
+    if (tvUiState === "3D MODEL") {
+      ensureModelVideoEl();
+      loadModelAt(0, { autoPlay: true });
+      popIosFullscreenHint();
+      return;
+    }
+  }
+
+  confirmMenuSelection();
+}
+
 function confirmMenuSelection() {
   if (!tvOn) return;
 
@@ -5658,7 +5831,6 @@ const VIDEO_CATEGORIES = {
     "./assets/Video/Music/02-Music.mp4",
     "./assets/Video/Music/03-Music.mp4",
     "./assets/Video/Music/04-Music.mp4",
-    "./assets/Video/Music/05-Music.mp4",
   ],
   EXPERIMENTAL: [
     "./assets/Video/Experimental/01-Experimental.mp4",
@@ -5728,6 +5900,40 @@ function loadPhotoAt(index) {
   );
 }
 
+function drawSoftBlurredCoverImage(ctx, img, dx, dy, dw, dh) {
+  const w = tvPhotoFxCanvas.width;
+  const h = tvPhotoFxCanvas.height;
+
+  const tinyCanvas = drawSoftBlurredCoverImage._tinyCanvas || document.createElement("canvas");
+  const tinyCtx = drawSoftBlurredCoverImage._tinyCtx || tinyCanvas.getContext("2d");
+
+  drawSoftBlurredCoverImage._tinyCanvas = tinyCanvas;
+  drawSoftBlurredCoverImage._tinyCtx = tinyCtx;
+
+  const sw = Math.max(1, Math.floor(w * TV_PHOTO_STYLE.blurScale));
+  const sh = Math.max(1, Math.floor(h * TV_PHOTO_STYLE.blurScale));
+
+  if (tinyCanvas.width !== sw) tinyCanvas.width = sw;
+  if (tinyCanvas.height !== sh) tinyCanvas.height = sh;
+
+  // full-size work pass
+  tvPhotoFxCtx.clearRect(0, 0, w, h);
+  tvPhotoFxCtx.imageSmoothingEnabled = true;
+  tvPhotoFxCtx.drawImage(img, dx, dy, dw, dh);
+
+  // tiny pass
+  tinyCtx.clearRect(0, 0, sw, sh);
+  tinyCtx.imageSmoothingEnabled = true;
+  tinyCtx.drawImage(tvPhotoFxCanvas, 0, 0, w, h, 0, 0, sw, sh);
+
+  // upscale tiny back to full size = stable soft blur
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.globalAlpha = TV_PHOTO_STYLE.blurAlpha;
+  ctx.drawImage(tinyCanvas, 0, 0, sw, sh, 0, 0, w, h);
+  ctx.restore();
+}
+
 function drawPhotoToTv(img) {
   const w = tvCanvas.width;
   const h = tvCanvas.height;
@@ -5750,83 +5956,111 @@ function drawPhotoToTv(img) {
   const dx = (w - dw) * 0.5;
   const dy = (h - dh) * 0.5;
 
+  // --------------------------------------------------
+  // ✅ PASS 1: soft blurred base
+  // Reliable on iOS because it uses low-res upscale blur simulation
+  // --------------------------------------------------
+  drawSoftBlurredCoverImage(tvCtx, img, dx, dy, dw, dh);
+
+  // --------------------------------------------------
+  // ✅ PASS 2: main image with reduced opacity
+  // --------------------------------------------------
+  tvCtx.save();
+  tvCtx.imageSmoothingEnabled = true;
+  tvCtx.globalAlpha = TV_PHOTO_STYLE.finalAlpha;
   tvCtx.drawImage(img, dx, dy, dw, dh);
+  tvCtx.restore();
+
+  // --------------------------------------------------
+  // ✅ PASS 3: subtle dark vignette so the image always feels softer
+  // --------------------------------------------------
+  tvCtx.save();
+  const vg = tvCtx.createRadialGradient(
+    w * 0.5, h * 0.5, Math.min(w, h) * 0.18,
+    w * 0.5, h * 0.5, Math.max(w, h) * 0.62
+  );
+  vg.addColorStop(0.0, `rgba(0,0,0,0.0)`);
+  vg.addColorStop(1.0, `rgba(0,0,0,${TV_PHOTO_STYLE.vignetteAlpha})`);
+  tvCtx.fillStyle = vg;
+  tvCtx.fillRect(0, 0, w, h);
+  tvCtx.restore();
+
   drawDesktopTvSideArrows(tvCtx, w, h);
 
   if (tvOn && (tvUiState === "PHOTO" || tvUiState === "3D MODEL")) {
-  const BACK = getTvBackBtn();
-  const backX = BACK.pad;
-  const backY = BACK.pad;
+    const BACK = getTvBackBtn();
+    const backX = BACK.pad;
+    const backY = BACK.pad;
 
-  tvCtx.save();
+    tvCtx.save();
 
-  if (backHover) {
-    tvCtx.globalAlpha = 1.0;
-    tvCtx.fillStyle = "rgba(255,255,255,0.06)";
-    tvCtx.shadowColor = "rgba(255,255,255,0.5)";
-    tvCtx.shadowBlur = 18;
-  } else {
-    tvCtx.globalAlpha = 0.85;
-    tvCtx.fillStyle = "rgba(255,255,255,0.06)";
+    if (backHover) {
+      tvCtx.globalAlpha = 1.0;
+      tvCtx.fillStyle = "rgba(255,255,255,0.06)";
+      tvCtx.shadowColor = "rgba(255,255,255,0.5)";
+      tvCtx.shadowBlur = 18;
+    } else {
+      tvCtx.globalAlpha = 0.85;
+      tvCtx.fillStyle = "rgba(255,255,255,0.06)";
+    }
+
+    roundRect(tvCtx, backX, backY, BACK.w, BACK.h, 14);
+    tvCtx.fill();
+
+    tvCtx.strokeStyle = "rgba(255,255,255,0.25)";
+    tvCtx.lineWidth = 2;
+    roundRect(tvCtx, backX, backY, BACK.w, BACK.h, 14);
+    tvCtx.stroke();
+
+    tvCtx.fillStyle = "#fff";
+    tvCtx.font = "46px Arial";
+    tvCtx.textAlign = "center";
+    tvCtx.textBaseline = "middle";
+    tvCtx.fillText("← back", backX + BACK.w * 0.5, backY + BACK.h * 0.52);
+
+    tvCtx.restore();
   }
 
-  roundRect(tvCtx, backX, backY, BACK.w, BACK.h, 14);
-  tvCtx.fill();
+  if (tvOn && (tvUiState === "PHOTO" || tvUiState === "3D MODEL")) {
+    const BTN = getTvMenuBtn();
+    const bx = w - BTN.pad - BTN.w;
+    const by = BTN.pad;
 
-  tvCtx.strokeStyle = "rgba(255,255,255,0.25)";
-  tvCtx.lineWidth = 2;
-  roundRect(tvCtx, backX, backY, BACK.w, BACK.h, 14);
-  tvCtx.stroke();
+    tvCtx.save();
 
-  tvCtx.fillStyle = "#fff";
-  tvCtx.font = "46px Arial";
-  tvCtx.textAlign = "center";
-  tvCtx.textBaseline = "middle";
-  tvCtx.fillText("← back", backX + BACK.w * 0.5, backY + BACK.h * 0.52);
+    if (menuHover) {
+      tvCtx.globalAlpha = 0.9;
+      tvCtx.fillStyle = "#222";
+      tvCtx.shadowColor = "rgba(255,255,255,0.5)";
+      tvCtx.shadowBlur = 25;
+    } else {
+      tvCtx.globalAlpha = 0.65;
+      tvCtx.fillStyle = "#000";
+    }
 
-  tvCtx.restore();
-}
+    roundRect(tvCtx, bx, by, BTN.w, BTN.h, 18);
+    tvCtx.fill();
+    tvCtx.restore();
 
-if (tvOn && (tvUiState === "PHOTO" || tvUiState === "3D MODEL")) {
-  const BTN = getTvMenuBtn();
-  const bx = w - BTN.pad - BTN.w;
-  const by = BTN.pad;
+    // border
+    tvCtx.save();
+    tvCtx.globalAlpha = 0.35;
+    tvCtx.strokeStyle = "#fff";
+    tvCtx.lineWidth = 3;
+    roundRect(tvCtx, bx, by, BTN.w, BTN.h, 18);
+    tvCtx.stroke();
+    tvCtx.restore();
 
-  tvCtx.save();
-
-  if (menuHover) {
-    tvCtx.globalAlpha = 0.9;
-    tvCtx.fillStyle = "#222";
-    tvCtx.shadowColor = "rgba(255,255,255,0.5)";
-    tvCtx.shadowBlur = 25;
-  } else {
-    tvCtx.globalAlpha = 0.65;
-    tvCtx.fillStyle = "#000";
+    // text
+    tvCtx.save();
+    tvCtx.fillStyle = "#fff";
+    tvCtx.globalAlpha = 0.92;
+    tvCtx.font = "bold 46px Arial";
+    tvCtx.textAlign = "center";
+    tvCtx.textBaseline = "middle";
+    tvCtx.fillText("MENU", bx + BTN.w * 0.5, by + BTN.h * 0.52);
+    tvCtx.restore();
   }
-
-  roundRect(tvCtx, bx, by, BTN.w, BTN.h, 18);
-  tvCtx.fill();
-  tvCtx.restore();
-
-  // border
-  tvCtx.save();
-  tvCtx.globalAlpha = 0.35;
-  tvCtx.strokeStyle = "#fff";
-  tvCtx.lineWidth = 3;
-  roundRect(tvCtx, bx, by, BTN.w, BTN.h, 18);
-  tvCtx.stroke();
-  tvCtx.restore();
-
-  // text
-  tvCtx.save();
-  tvCtx.fillStyle = "#fff";
-  tvCtx.globalAlpha = 0.92;
-  tvCtx.font = "bold 46px Arial";
-  tvCtx.textAlign = "center";
-  tvCtx.textBaseline = "middle";
-  tvCtx.fillText("MENU", bx + BTN.w * 0.5, by + BTN.h * 0.52);
-  tvCtx.restore();
-}
 
   tvTex.needsUpdate = true;
 }
@@ -7322,6 +7556,113 @@ function getTvCanvasPxPyFromUv(uv) {
   return { w, h, px: u * w, py: v * h };
 }
 
+function getTvTouchStartTargetFromUv(uv) {
+  const pos = getTvCanvasPxPyFromUv(uv);
+  if (!pos) {
+    return {
+      kind: "none",
+      menuIndex: menuIndex,
+      subcategoryIndex: subcategoryIndex,
+      socialId: null,
+    };
+  }
+
+  const { w, h, px, py } = pos;
+
+  // ------------------------------------------
+  // MENU state
+  // ------------------------------------------
+  if (tvUiState === "MENU") {
+    // 1) real social hit from actual finger-down point
+    const socialHitA = getTvSocialHit(px, py, w, h);
+    const socialHitB = getTvSocialHit(px, h - py, w, h);
+    const socialHit = socialHitA || socialHitB;
+
+    if (socialHit) {
+      return {
+        kind: "social",
+        menuIndex: menuIndex,
+        subcategoryIndex: -1,
+        socialId: socialHit.id,
+      };
+    }
+
+    // 2) otherwise lock the actual menu row from touch position
+    const layout = getTvMenuLayout("MENU");
+    const startY = getMenuStartY(MENU_ITEMS.length, layout.listCenterY, layout.gapY);
+    const gapY = layout.gapY;
+    const n = MENU_ITEMS.length;
+
+    const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+
+    const idxA = clamp(Math.round((py - startY) / gapY), 0, n - 1);
+    const idxB = clamp(Math.round(((h - py) - startY) / gapY), 0, n - 1);
+
+    const centerA = startY + idxA * gapY;
+    const centerB = startY + idxB * gapY;
+
+    const distA = Math.abs(py - centerA);
+    const distB = Math.abs((h - py) - centerB);
+
+    const lockedMenuIndex = distA <= distB ? idxA : idxB;
+
+    return {
+      kind: "menu-item",
+      menuIndex: lockedMenuIndex,
+      subcategoryIndex: -1,
+      socialId: null,
+    };
+  }
+
+  // ------------------------------------------
+  // SUBCATEGORY state
+  // ------------------------------------------
+  if (tvUiState === "SUBCATEGORY_MENU") {
+    const items = SUBCATEGORY_ITEMS[tvParentCategory] || [];
+    const n = items.length;
+
+    if (!n) {
+      return {
+        kind: "none",
+        menuIndex: menuIndex,
+        subcategoryIndex: -1,
+        socialId: null,
+      };
+    }
+
+    const layout = getTvMenuLayout("SUBCATEGORY_MENU");
+    const startY = getMenuStartY(items.length, layout.listCenterY, layout.gapY);
+    const gapY = layout.gapY;
+
+    const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+
+    const idxA = clamp(Math.round((py - startY) / gapY), 0, n - 1);
+    const idxB = clamp(Math.round(((h - py) - startY) / gapY), 0, n - 1);
+
+    const centerA = startY + idxA * gapY;
+    const centerB = startY + idxB * gapY;
+
+    const distA = Math.abs(py - centerA);
+    const distB = Math.abs((h - py) - centerB);
+
+    const lockedSubIndex = distA <= distB ? idxA : idxB;
+
+    return {
+      kind: "menu-item",
+      menuIndex: menuIndex,
+      subcategoryIndex: lockedSubIndex,
+      socialId: null,
+    };
+  }
+
+  return {
+    kind: "none",
+    menuIndex: menuIndex,
+    subcategoryIndex: subcategoryIndex,
+    socialId: null,
+  };
+}
+
 function handleIOSTvTap(uv) {
   const pos = getTvCanvasPxPyFromUv(uv);
   if (!pos) return false;
@@ -7412,11 +7753,11 @@ if (tvUiState === "MENU") {
     }
   }
 
-  // ✅ iOS: if a social icon is already highlighted, keep it highlighted.
-  // Do NOT clear it here — pointerup will use that selection to open it.
-  if (isIOSDevice() && tvSocialHoverId) {
-    return false;
-  }
+// 3) not a social click -> clear social hover and continue normal menu flow
+if (tvSocialHoverId !== null) {
+  tvSocialHoverId = null;
+  drawTvMenu();
+}
 
   // 3) not a social click -> clear social hover and continue normal menu flow
   if (tvSocialHoverId !== null) {
@@ -7725,7 +8066,14 @@ let tvTouchStartedWhileOff = false;   // ✅ prevents “auto-enter PHOTO” on 
 let tvTouchPointerId = null;          // ✅ for pointer capture
 let tvTouchDragSelectMoved = false;   // ✅ finger-drag changed TV selection
 
-
+// ✅ iOS touch intent lock
+// Lock the ACTUAL thing the user touched on the TV canvas.
+// Never trust stale tvSocialHoverId for activation.
+let tvTouchStartUiState = null;
+let tvTouchStartMenuIndex = -1;
+let tvTouchStartSubcategoryIndex = -1;
+let tvTouchStartTargetKind = "none";
+let tvTouchStartSocialId = null;
 
 // swipe tuning
 const TV_SWIPE_MIN_PX = 34;       // how far finger must move
@@ -8193,30 +8541,132 @@ if (tvScreenMeshRef && isInHierarchy(hit, tvScreenMeshRef)) {
 // (only add this if you actually have these vars/functions)
 if (typeof stopIosRemotePulse === "function") stopIosRemotePulse();
 
-  // iOS swipe/tap tracking (only if you still want it)
   if (isIOSDevice()) {
-    tvTouchActive = true;
-    tvTouchStartX = e.clientX;
-    tvTouchStartY = e.clientY;
-    tvTouchStartT = performance.now();
-    tvTouchPointerId = e.pointerId;
-    tvTouchDragSelectMoved = false;
+  tvTouchActive = true;
+  tvTouchStartX = e.clientX;
+  tvTouchStartY = e.clientY;
+  tvTouchStartT = performance.now();
+  tvTouchPointerId = e.pointerId;
+  tvTouchDragSelectMoved = false;
 
-    try { renderer.domElement.setPointerCapture(e.pointerId); } catch {}
-  }
+// ✅ LOCK THE CURRENTLY HIGHLIGHTED SELECTION.
+// Do NOT recompute from touch-down UV.
+// The user should open what is already highlighted on screen.
+tvTouchStartUiState = tvUiState;
+tvTouchStartMenuIndex = menuIndex;
+tvTouchStartSubcategoryIndex = subcategoryIndex;
 
-  const uv = hitInfo?.uv;
+if (tvUiState === "MENU" && tvSocialHoverId) {
+  tvTouchStartTargetKind = "social";
+  tvTouchStartSocialId = tvSocialHoverId;
+} else {
+  tvTouchStartTargetKind = "menu-item";
+  tvTouchStartSocialId = null;
+}
 
-  // ✅ TV interaction ONLY (no remote emission / press code allowed to run)
-  if (uv) {
-    handleIOSTvTap(uv);
-  } else {
-    // fallback if uv missing
-    if (!tvOn) {
+try { renderer.domElement.setPointerCapture(e.pointerId); } catch {}
+}
+
+const uv = tvHitInfo?.uv;
+
+// ✅ DESKTOP / MOUSE / TRACKPAD
+// iOS uses the locked-touch flow below.
+// Desktop should immediately confirm the CURRENT highlighted selection.
+if (!isIOSDevice()) {
+  // TV OFF -> clicking the TV powers it on
+  if (!tvOn) {
+    if (uv) {
+      handleIOSTvTap(uv);
+    } else {
       playTvOnSound();
       setTvPower(true);
     }
+    return;
   }
+
+  // TV ON -> top chrome buttons still work
+  if (uv && handleTvChromeButtonTapFromUv(uv)) {
+    return;
+  }
+
+  // TV ON -> in menu/subcategory, click should open the highlighted item
+  if (tvUiState === "MENU" || tvUiState === "SUBCATEGORY_MENU") {
+    if (tvUiState === "MENU" && tvSocialHoverId) {
+      const selectedSocial = TV_SOCIAL_ITEMS.find(
+        (item) => item.id === tvSocialHoverId
+      );
+
+      if (selectedSocial) {
+        activateTvSocialHit(selectedSocial);
+        return;
+      }
+    }
+
+    confirmMenuSelection();
+    return;
+  }
+
+  // TV ON -> content states keep using the existing direct TV tap logic
+  if (
+    uv &&
+    (tvUiState === "PHOTO" ||
+     tvUiState === "VIDEO" ||
+     tvUiState === "3D MODEL")
+  ) {
+    handleIOSTvTap(uv);
+    return;
+  }
+
+  return;
+}
+
+// ✅ TV OFF -> touch powers on
+if (!tvOn) {
+  if (uv) {
+    handleIOSTvTap(uv);
+  } else {
+    tvTouchStartedWhileOff = true;
+    tvTouchDragSelectMoved = false;
+    playTvOnSound();
+    setTvPower(true);
+    showIosMenuControlsHintOnce();
+  }
+  return; // 🔒 stop here
+}
+
+// ✅ TV ON -> BACK / MENU buttons still work immediately
+if (uv && handleTvChromeButtonTapFromUv(uv)) {
+  return; // 🔒 stop here
+}
+
+// ✅ TV ON -> CONTENT VIEWER states must still use direct tap logic
+// Restore left/right navigation, center tap actions, and double-tap fullscreen.
+if (
+  uv &&
+  (tvUiState === "PHOTO" ||
+   tvUiState === "VIDEO" ||
+   tvUiState === "3D MODEL")
+) {
+  handleIOSTvTap(uv);
+  return; // 🔒 stop here
+}
+
+// ✅ TV ON -> only MENU and SUBCATEGORY_MENU use locked-highlight confirmation
+tvTouchStartUiState = tvUiState;
+tvTouchStartMenuIndex = menuIndex;
+tvTouchStartSubcategoryIndex = subcategoryIndex;
+
+if (tvUiState === "MENU" && tvSocialHoverId) {
+  tvTouchStartTargetKind = "social";
+  tvTouchStartSocialId = tvSocialHoverId;
+} else {
+  tvTouchStartTargetKind = "menu-item";
+  tvTouchStartSocialId = null;
+}
+
+try { renderer.domElement.setPointerCapture(e.pointerId); } catch {}
+
+return; // 🔒 stop here
 
   return; // 🔒 CRITICAL: nothing below runs
 }
@@ -8728,7 +9178,13 @@ if (isTap) {
     return;
   }
 
-  // ✅ If a social icon is highlighted, tap should open THAT
+  // ✅ iOS uses the LOCKED selection from touch-start
+  if (isIOSDevice()) {
+    confirmLockedTvTouchSelection();
+    return;
+  }
+
+  // desktop / fallback behavior
   if (tvUiState === "MENU" && tvSocialHoverId) {
     const selectedSocial = TV_SOCIAL_ITEMS.find(
       (item) => item.id === tvSocialHoverId
@@ -8752,6 +9208,14 @@ if (isTap) {
 function onPointerCancel() {
   tvTouchActive = false;
   tvTouchDragSelectMoved = false;
+
+    tvTouchStartUiState = null;
+  tvTouchStartMenuIndex = -1;
+  tvTouchStartSubcategoryIndex = -1;
+  tvTouchStartTargetKind = "none";
+  tvTouchStartSocialId = null;
+  tvTouchStartedWhileOff = false;
+  tvTouchPointerId = null;
 
   iosCamDragActive = false;
   iosCamDragPointerId = null;
@@ -11604,24 +12068,21 @@ const cigaretteAshMat = (() => {
     { roughness: 1.0, metalness: 0.0 }
   );
 
-  // darker coal/ash base
   m.color.multiplyScalar(0.82);
 
-  // subtle built-in heat, not the main visible glow
-  m.emissive = new THREE.Color(0x5a0500);
-m.emissiveIntensity = 3.2;
+  m.emissive = new THREE.Color(0x4a0800);
+  m.emissiveIntensity = 0.55;
 
-  // ✅ IMPORTANT: no emissiveMap here anymore
   m.emissiveMap = null;
 
-  m.toneMapped = false;
+  m.toneMapped = true;
   return m;
 })();
 
 const cigaretteEmberMat = new THREE.MeshStandardMaterial({
-  color: 0x2a0500,
-  emissive: 0xff5a10,
-  emissiveIntensity: 140.0,
+  color: 0x240400,
+  emissive: 0xff3a12,
+  emissiveIntensity: 2.2,
   roughness: 1.0,
   metalness: 0.0,
   side: THREE.DoubleSide,
@@ -13991,12 +14452,12 @@ cigaretteLoader.load(
     m.name = "cigaretteEmberMat";
     newMats.push(m);
 
-    emberTipRef = o;
-    emberTipMatRef = m;
-    m.emissive.setRGB(1.0, 0.5, 0.1);   // hot orange
-    m.emissiveIntensity = 40.0;           // 🔥 big jump (was basically nothing)
-    m.toneMapped = false;                // CRITICAL → makes it pop
-    emberTipMatIndex = i;
+ emberTipRef = o;
+emberTipMatRef = m;
+m.emissive.setRGB(1.0, 0.22, 0.03);
+m.emissiveIntensity = 2.6;
+m.toneMapped = true;
+emberTipMatIndex = i;
 
     console.log("🔥 EMBER material captured:", {
       object: o.name,
@@ -14079,7 +14540,7 @@ if (matName.includes("ash")) {
     });
 
 if (emberTipRef && !emberLightRef) {
-  emberLightRef = new THREE.PointLight(0xff6024, 8.0, 0.65, 2.0);
+  emberLightRef = new THREE.PointLight(0xff3a12, 0.18, 0.12, 2.0);
   emberLightRef.castShadow = false;
   emberTipRef.add(emberLightRef);
 
@@ -14092,9 +14553,9 @@ if (emberTipRef && !emberLightRef) {
 if (emberTipRef && !emberHaloRef) {
   emberHaloMatRef = new THREE.SpriteMaterial({
     map: emberHaloTex,
-    color: 0xff5a1f,
+    color: 0xff2a0a,
     transparent: true,
-    opacity: 0.45,
+    opacity: 0.02,
     depthWrite: false,
     depthTest: true,
     blending: THREE.NormalBlending,
