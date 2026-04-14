@@ -4330,13 +4330,12 @@ const TV_PREVIEW_LABELS = {
 const TV_PREVIEW_IMAGES = {
   PHOTO: {
     portraits: [
-      "./assets/Photo/Portrait/01-Portrait.jpg",
       "./assets/Photo/Portrait/02-Portrait.jpg",
       "./assets/Photo/Portrait/03-Portrait.jpg",
       "./assets/Photo/Portrait/07-Portrait.jpg",
-      "./assets/Photo/Portrait/13-Portrait.jpg",
       "./assets/Photo/Portrait/08-Portrait.jpg",
       "./assets/Photo/Portrait/09-Portrait.jpg",
+      "./assets/Photo/Portrait/14-Portrait.jpg",
     ],
     surfaces: [
       "./assets/Photo/Surfaces/01-Surfaces.jpg",
@@ -4383,7 +4382,6 @@ const TV_PREVIEW_IMAGES = {
       "./assets/3D Model/Objects/05-Objects.jpg",
       "./assets/3D Model/Objects/06-Objects.jpg",
       "./assets/3D Model/Objects/07-Objects.jpg",
-      "./assets/3D Model/Objects/08-Objects.jpg",
     ],
     architecture: [
       "./assets/3D Model/Architecture/01-Architecture.jpg",
@@ -6090,33 +6088,38 @@ function ensureVideoEl() {
   if (videoEl) return;
 
   videoEl = document.createElement("video");
-  videoEl.crossOrigin = "anonymous";
-  videoEl.preload = "metadata";
-  videoEl.playsInline = true;
-  videoEl.setAttribute("webkit-playsinline", ""); // iOS Safari
-  videoEl.loop = true; // optional (feel free to set false)
-  videoEl.muted = false;
-  videoEl.volume = 1.0;
-  videoEl.controls = false;
+videoEl.crossOrigin = "anonymous";
+videoEl.preload = "auto";
+videoEl.playsInline = true;
+videoEl.setAttribute("playsinline", "");
+videoEl.setAttribute("webkit-playsinline", ""); // iOS Safari
+videoEl.loop = true;
+videoEl.muted = true;
+videoEl.defaultMuted = true;
+videoEl.volume = 0.0;
+videoEl.controls = false;
 
 videoEl.addEventListener("loadeddata", async () => {
   videoReady = true;
 
-  // draw a first frame immediately
-  if (tvOn && tvUiState === "VIDEO") drawVideoFrameToTv();
+  // draw first frame immediately once it exists
+  if (tvOn && tvUiState === "VIDEO" && !tvVideoSuppressed) {
+    drawVideoFrameToTv();
+  }
 
+  // autoplay only after first frame is ready
   if (tvOn && tvUiState === "VIDEO" && videoWantsAutoPlay && videoEl.paused) {
     try {
       await playVideo();
-      videoWantsAutoPlay = false; // ✅ only clear if play succeeded
-    } catch {}
+      videoWantsAutoPlay = false;
+    } catch (err) {
+      console.warn("Autoplay after loadeddata failed:", err);
+    }
   }
-
 });
 
-
-  videoEl.addEventListener("pause", () => (videoPlaying = false));
-  videoEl.addEventListener("play", () => (videoPlaying = true));
+videoEl.addEventListener("pause", () => (videoPlaying = false));
+videoEl.addEventListener("play", () => (videoPlaying = true));
 }
 
 function loadVideoAt(index, { autoPlay = false } = {}) {
@@ -6143,6 +6146,7 @@ function loadVideoAt(index, { autoPlay = false } = {}) {
 
   videoReady = false;
   videoPlaying = false;
+  videoWantsAutoPlay = autoPlay;
 
   const __endVid = () => {};
 
@@ -6173,10 +6177,6 @@ function loadVideoAt(index, { autoPlay = false } = {}) {
   setTimeout(done, 8000);
 
   clearTvScreen();
-
-  if (autoPlay) {
-    playVideo();
-  }
 }
 
 async function playVideo() {
@@ -6185,8 +6185,11 @@ async function playVideo() {
   if (!videoEl) return;
 
   try {
-    videoEl.muted = false;
-    videoEl.volume = 1.0;
+    if (isIOSDevice()) {
+      videoEl.muted = true;
+      videoEl.defaultMuted = true;
+      videoEl.volume = 0.0;
+    }
 
     await videoEl.play();
     videoPlaying = true;
@@ -15385,14 +15388,17 @@ const useNightVisionFX =
   nightVisionOn &&
   composer &&
   nightVisionPass &&
-  (MOBILE_PROFILE.postFX || isIOSDevice());
+  MOBILE_PROFILE.postFX &&
+  !isIOSDevice();
 
 // ============================================================
 // ✅ FORCE TONEMAP + EXPOSURE RIGHT BEFORE RENDER
-// (prevents "it does nothing" from overrides or composer passes)
 // ============================================================
-renderer.toneMapping = THREE.ACESFilmicToneMapping;  // exposure works with this
-renderer.toneMappingExposure = LOOK.exposure;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+
+if (!nightVisionOn) {
+  renderer.toneMappingExposure = LOOK.exposure;
+}
 
 if (useNightVisionFX) {
   updateNightVisionAutoGain(dt);
