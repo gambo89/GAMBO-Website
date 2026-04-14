@@ -13388,7 +13388,7 @@ extraMaterialsLoader.load(
   if (hasMatName("fabric")) {
     const mat = makePBR(
       {
-        albedo: "./assets/Textures/Cloth/Cloth Albedo8.jpg",
+        albedo: "./assets/Textures/Cloth/cloth albedo8.jpg",
       },
       {
         roughness: 1.0,
