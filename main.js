@@ -157,7 +157,7 @@ const renderer = new THREE.WebGLRenderer({
 });
 
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.85; // subtle cinematic darkening (try 0.88–0.98)
+renderer.toneMappingExposure = 0.95; // subtle cinematic darkening (try 0.88–0.98)
 
 // ============================================================
 // ✅ Color pipeline consistency (desktop + iOS)
@@ -888,7 +888,7 @@ const IOS_CAM = {
 
   // iOS camera AIM offsets from desktop target
   targetX: 0.0, // + = look right, - = look left
-  targetY: 0.0, // + = look up,    - = look down
+  targetY: -0.1, // + = look up,    - = look down
   targetZ: 0.0,
 
   // optional iOS-only FOV adjustment
@@ -10211,11 +10211,21 @@ const materials = {
   ),
 
   //MAIN OBJECTS
-  pasted_remote: makePBR({
-    albedo: "./assets/Textures/Remote/Main object/Remote Albeto.jpg",
+pasted_remote: (() => {
+  const mat = makePBR(
+    {
+      albedo: "./assets/Textures/Remote/Main object/Remote Albeto.jpg",
     },
-    { roughness: 1.0, metalness: 0.0}
-),
+    { roughness: 0.9, metalness: 0.0 }
+  );
+
+  // slight brightness lift so it stays readable against the bed
+  mat.color.multiplyScalar(1.08);
+
+  mat.color.lerp(new THREE.Color(0xaaa39a), 0.08);
+
+  return mat;
+})(),
 
  TV_Box2: makePBR({
     albedo: "./assets/Textures/TV Box/TV Box Albeto.jpg",
@@ -10549,11 +10559,19 @@ All_Cartridges: makePBR({
     { roughness: 0.8, metalness: 0.0}
 ),
 
-Bed1: makePBR({
-    albedo: "./assets/Textures/Bed/Bed Albedo2.jpg",
+Bed1: (() => {
+  const mat = makePBR(
+    {
+      albedo: "./assets/Textures/Bed/Bed Albedo2.jpg",
     },
-    { roughness: 1.0, metalness: 0.0}
-),
+    { roughness: 0.8, metalness: 0.0 }
+  );
+
+  mat.color.multiplyScalar(1.15);
+  mat.color.lerp(new THREE.Color(0xffffff), 0.035);
+
+  return mat;
+})(),
 
   // SKETCHBOOK
   Sheets_Spine: makePBR(
@@ -12193,8 +12211,8 @@ if (materials.Picture1) {
 // ✅ Picture1 interchangeable textures (01–06)
 // ============================================================
 const PICTURE1_TEXTURES = [
-  "./assets/Textures/Picture/08_Picture81.jpg",
   "./assets/Textures/Picture/02_Picture21.jpg",
+  "./assets/Textures/Picture/08_Picture81.jpg",
   "./assets/Textures/Picture/03_Picture31.jpg",
   "./assets/Textures/Picture/04_Picture41.jpg",
   "./assets/Textures/Picture/05_Picture51.jpg",
