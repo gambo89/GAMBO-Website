@@ -10330,7 +10330,7 @@ TV_stand: makePBR({
     //WALLS & Door
   front_wall1: makePBR(
     {
-      albedo: "./assets/Textures/Walls/Front Wall/Front Wall10 Albedo.jpg",
+      albedo: "./assets/Textures/Walls/Front Wall/Front Wall12 Albedo.jpg",
     },
     { metalness: 0.0, roughness: 2.0 }
   ),
@@ -10550,7 +10550,7 @@ All_Cartridges: makePBR({
 ),
 
 Bed1: makePBR({
-    albedo: "./assets/Textures/Bed/Bed Albedo.jpg",
+    albedo: "./assets/Textures/Bed/Bed Albedo2.jpg",
     },
     { roughness: 1.0, metalness: 0.0}
 ),
@@ -12193,14 +12193,14 @@ if (materials.Picture1) {
 // ✅ Picture1 interchangeable textures (01–06)
 // ============================================================
 const PICTURE1_TEXTURES = [
-  "./assets/Textures/Picture/01_Picture11.jpg",
+  "./assets/Textures/Picture/08_Picture81.jpg",
   "./assets/Textures/Picture/02_Picture21.jpg",
   "./assets/Textures/Picture/03_Picture31.jpg",
   "./assets/Textures/Picture/04_Picture41.jpg",
   "./assets/Textures/Picture/05_Picture51.jpg",
   "./assets/Textures/Picture/06_Picture61.jpg",
   "./assets/Textures/Picture/07_Picture71.jpg",
-  "./assets/Textures/Picture/08_Picture81.jpg",
+  "./assets/Textures/Picture/01_Picture11.jpg",
   "./assets/Textures/Picture/09_Picture91.jpg",
   "./assets/Textures/Picture/10_Picture101.jpg",
   
@@ -12244,7 +12244,7 @@ let wallMarkerColor = WALL_MARKER_COLORS[wallMarkerColorIndex];
 const WALL_PEN_RADIUS = 8.0;
 const WALL_PEN_LINE_WIDTH = 10;
 
-const WALL_SPRAY_CORE_DABS = 34;
+const WALL_SPRAY_CORE_DABS = 17;
 const WALL_SPRAY_EDGE_DABS = 7;
 
 const WALL_SPRAY_JITTER = 6.0;
@@ -12634,6 +12634,7 @@ model.traverse((o) => {
   o.castShadow = true;
 o.receiveShadow = true;
 
+
   console.log(
     "[MESH]",
     "name:", o.name,
@@ -12704,6 +12705,21 @@ if (o.isMesh && o.geometry && o.geometry.attributes.uv && !o.geometry.attributes
 }
 
       const n = (o.name || "").toLowerCase();
+
+      // ============================================================
+// ✅ HIDE CLOTH (fabric)
+// ============================================================
+const matName = (o.material?.name || "").toLowerCase();
+const parentName = (o.parent?.name || "").toLowerCase();
+
+// match ANY part of your Blender hierarchy
+if (
+  n.includes("mesh.009") ||        // mesh name
+  parentName.includes("cloth") ||  // parent group
+  matName.includes("fabric")       // material name
+) {
+  o.visible = false;
+}
 
       // ============================================================
 // ✅ FOOT — reduce brightness without killing color
@@ -13319,9 +13335,12 @@ setTimeout(() => {
   }
 );
 
+
 const interactiveLoader = new GLTFLoader();
 
 const newMaterialsLoader = new GLTFLoader();
+
+const extraMaterialsLoader = new GLTFLoader();
 
 const newRemoteLoader = new GLTFLoader();
 
@@ -13334,6 +13353,130 @@ const smokeTipLoader = new GLTFLoader();
 const sketchbookLoader = new GLTFLoader();
 
 const __endUI = __beginAsset("Interactives GLB");
+
+extraMaterialsLoader.load(
+  "./assets/models/Extra Materials2.glb",
+  (gltf) => {
+    const model = gltf.scene;
+
+    model.traverse((o) => {
+  if (!o.isMesh) return;
+
+  const meshName = (o.name || "").toLowerCase();
+
+  // collect this mesh + all parent names
+  let node = o;
+  const hierarchyNames = [];
+
+  while (node) {
+    hierarchyNames.push((node.name || "").toLowerCase());
+    node = node.parent;
+  }
+
+  const inHierarchy = (namePart) =>
+    hierarchyNames.some((n) => n.includes(namePart.toLowerCase()));
+
+  const materials = Array.isArray(o.material) ? o.material : [o.material];
+  const matNames = materials.map((m) => (m?.name || "").toLowerCase());
+
+  const hasMatName = (namePart) =>
+    matNames.some((n) => n.includes(namePart.toLowerCase()));
+
+  // ============================================================
+  // 🧵 CLOTH
+  // ============================================================
+  if (hasMatName("fabric")) {
+    const mat = makePBR(
+      {
+        albedo: "./assets/Textures/Cloth/Cloth albedo8.jpg",
+      },
+      {
+        roughness: 1.0,
+        metalness: 0.0,
+      }
+    );
+
+    mat.map.anisotropy = 4;
+    mat.map.minFilter = THREE.LinearMipmapLinearFilter;
+    mat.map.magFilter = THREE.LinearFilter;
+
+    mat.color.multiplyScalar(0.95);
+    mat.color.lerp(new THREE.Color(0x777777), 0.05);
+
+    o.material = mat;
+  }
+
+  else if (
+  inHierarchy("converse") ||
+  meshName.includes("mesh.002")
+) {
+  const mat = makePBR(
+    {
+      albedo: "./assets/Textures/Converse/Converse Albedo3.jpg",
+    },
+    {
+      roughness: 0.95,
+      metalness: 0.0,
+    }
+  );
+
+  mat.map.anisotropy = 4;
+  mat.map.minFilter = THREE.LinearMipmapLinearFilter;
+  mat.map.magFilter = THREE.LinearFilter;
+
+  // darken more so it sits in the room
+  mat.color.multiplyScalar(0.25);
+
+  // warm it up
+  mat.color.multiply(new THREE.Color(1.03, 1.00, 0.96));
+
+  // kill the purple/blue cast and dirty it
+  mat.color.lerp(new THREE.Color(0x4f4a43), 0.08);
+
+  o.material = mat;
+}
+
+  else if (
+  inHierarchy("towel") ||
+  meshName.includes("mesh.003")
+) {
+  const mat = makePBR(
+    {
+      albedo: "./assets/Textures/Towel/Towel Albedo3.jpg",
+    },
+    {
+      roughness: 0.95,
+      metalness: 0.0,
+    }
+  );
+
+  mat.map.anisotropy = 2;
+  mat.map.minFilter = THREE.LinearMipmapLinearFilter;
+  mat.map.magFilter = THREE.LinearFilter;
+
+  // darken slightly less than before so folds still read
+  mat.color.multiplyScalar(0.45);
+
+  // warm up the towel so it stops reading icy blue
+  mat.color.multiply(new THREE.Color(1.08, 1.00, 0.88));
+
+  // desaturate / dirty it a little so it feels lived-in
+  mat.color.lerp(new THREE.Color(0x8a8175), 0.18);
+
+  o.material = mat;
+}
+
+  o.castShadow = true;
+  o.receiveShadow = true;
+});
+
+    anchor.add(model);
+  },
+  undefined,
+  (err) => {
+    console.error("Extra Materials.glb failed to load ❌", err);
+  }
+);
 
 interactiveLoader.load(
   "./assets/models/Interactive Materials.glb",
