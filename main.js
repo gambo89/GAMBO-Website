@@ -13373,7 +13373,7 @@ const sketchbookLoader = new GLTFLoader();
 const __endUI = __beginAsset("Interactives GLB");
 
 extraMaterialsLoader.load(
-  "./assets/models/Extra Materials2.glb",
+  "./assets/models/Extra Materials4.glb",
   (gltf) => {
     const model = gltf.scene;
 
@@ -13430,7 +13430,7 @@ extraMaterialsLoader.load(
 ) {
   const mat = makePBR(
     {
-      albedo: "./assets/Textures/Converse/Converse Albedo3.jpg",
+      albedo: "./assets/Textures/Converse/Converse Albedo4.jpg",
     },
     {
       roughness: 0.95,
@@ -13480,6 +13480,66 @@ extraMaterialsLoader.load(
 
   // desaturate / dirty it a little so it feels lived-in
   mat.color.lerp(new THREE.Color(0x8a8175), 0.18);
+
+  o.material = mat;
+}
+
+else if (
+  inHierarchy("Basketball") ||
+  meshName.includes("mesh.004")
+) {
+  const mat = makePBR(
+    {
+      albedo: "./assets/Textures/Basketball/Basketball Albedo.jpg",
+    },
+    {
+      roughness: 0.95,
+      metalness: 0.0,
+    }
+  );
+
+  mat.map.anisotropy = 4;
+  mat.map.minFilter = THREE.LinearMipmapLinearFilter;
+  mat.map.magFilter = THREE.LinearFilter;
+
+  // darken more so it sits in the room
+  mat.color.multiplyScalar(0.25);
+
+  // warm it up
+  mat.color.multiply(new THREE.Color(1.03, 1.00, 0.96));
+
+  // kill the purple/blue cast and dirty it
+  mat.color.lerp(new THREE.Color(0x4f4a43), 0.08);
+
+  o.material = mat;
+}
+
+else if (
+  inHierarchy("Skull") ||
+  meshName.includes("mesh.003")
+) {
+  const mat = makePBR(
+    {
+      albedo: "./assets/Textures/Skull/Skull Albedo.jpg",
+    },
+    {
+      roughness: 0.95,
+      metalness: 0.0,
+    }
+  );
+
+  mat.map.anisotropy = 4;
+  mat.map.minFilter = THREE.LinearMipmapLinearFilter;
+  mat.map.magFilter = THREE.LinearFilter;
+
+  // darken more so it sits in the room
+  mat.color.multiplyScalar(0.25);
+
+  // warm it up
+  mat.color.multiply(new THREE.Color(1.03, 1.00, 0.96));
+
+  // kill the purple/blue cast and dirty it
+  mat.color.lerp(new THREE.Color(0x4f4a43), 0.08);
 
   o.material = mat;
 }
