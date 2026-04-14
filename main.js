@@ -10465,11 +10465,11 @@ Door4: (() => {
     { roughness: 1.0, metalness: 0.5}
 ),
 
- cloth: makePBR({
-    albedo: "./assets/Textures/Cloth/Cloth Albeto copy.jpg",
-    },
-    { roughness: 1.0, metalness: 0.0}
-),
+ //cloth: makePBR({
+    //albedo: "./assets/Textures/Cloth/Cloth Albeto copy.jpg",
+    //},
+    //{ roughness: 1.0, metalness: 0.0}
+//),
 
  DvD_player: makePBR({
     albedo: "./assets/Textures/DVD Player/DVD Player Albeto.jpg",
@@ -13388,7 +13388,7 @@ extraMaterialsLoader.load(
   if (hasMatName("fabric")) {
     const mat = makePBR(
       {
-        albedo: "./assets/Textures/Cloth/Cloth albedo8.jpg",
+        albedo: "./assets/Textures/Cloth/Cloth Albedo8.jpg",
       },
       {
         roughness: 1.0,
