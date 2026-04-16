@@ -51,11 +51,11 @@ const isIOS =
 const SAFE_MOBILE = isIOS; // flip to true to test on desktop
 
 const MOBILE_PROFILE = {
-  maxDpr: SAFE_MOBILE ? 2.0 : 2.0,   // desktop lower resolution
+  maxDpr: SAFE_MOBILE ? 2.0 : 2.0,
   shadows: SAFE_MOBILE ? false : true,
   maxAniso: SAFE_MOBILE ? 2 : null,
   shadowMapSize: SAFE_MOBILE ? 4096 : 4096,
-  postFX: SAFE_MOBILE ? false : true,
+  postFX: true,
 };
 
 const LAYER_WORLD = 0;
@@ -157,7 +157,7 @@ const renderer = new THREE.WebGLRenderer({
 });
 
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.95; // subtle cinematic darkening (try 0.88–0.98)
+renderer.toneMappingExposure = 0.95; // desktop maybe 1.0
 
 // ============================================================
 // ✅ Color pipeline consistency (desktop + iOS)
@@ -170,7 +170,7 @@ renderer.toneMappingExposure = renderer.toneMappingExposure ?? 1.3;
 // renderer settings...
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = isIOS ? 1.1 : 0.92;
+renderer.toneMappingExposure = isIOS ? 0.99 : 0.92;
 renderer.physicallyCorrectLights = true;
 
 renderer.shadowMap.enabled = MOBILE_PROFILE.shadows;
@@ -338,7 +338,7 @@ function updateNightVisionAutoGain(dt) {
 
   // sample ~12 times per second (adjust if you want)
   aeSampleAccum += dt;
-  if (aeSampleAccum < (1 / 12)) return;
+  if (aeSampleAccum < (1 / 6)) return;
   aeSampleAccum = 0;
 
   // render scene into tiny RT (no NV shader here — we want actual scene brightness)
@@ -4586,12 +4586,20 @@ function updateGhostPreviewFx(dt) {
   );
 }
 
+const tvGhostFxCanvas = document.createElement("canvas");
+tvGhostFxCanvas.width = 1920;
+tvGhostFxCanvas.height = 1080;
+const tvGhostFxCtx = tvGhostFxCanvas.getContext("2d");
+tvGhostFxCtx.imageSmoothingEnabled = true;
+
+const TV_GHOST_DRAW_STYLE = {
+  blurScale: 0.10,      // lower = blurrier
+  blurBaseAlpha: 0.32,  // strength of soft haze
+  finalAlphaMul: 0.72,  // keeps visible layer subdued
+};
+
 function drawOneGhostImage(ctx, img, alpha, w, h) {
   if (!img || !img.complete || alpha <= 0.001) return;
-
-ctx.save();
-ctx.globalAlpha = alpha;
-ctx.filter = "blur(4px)";
 
   const scale = Math.max(
     (w * TV_GHOST_PREVIEW.zoom) / img.width,
@@ -4603,6 +4611,46 @@ ctx.filter = "blur(4px)";
   const dx = (w - dw) * 0.5;
   const dy = (h - dh) * 0.5;
 
+  // --------------------------------------------------
+  // PASS 1: iOS-safe soft blur using tiny upscale trick
+  // --------------------------------------------------
+  const tinyCanvas =
+    drawOneGhostImage._tinyCanvas || document.createElement("canvas");
+  const tinyCtx =
+    drawOneGhostImage._tinyCtx || tinyCanvas.getContext("2d");
+
+  drawOneGhostImage._tinyCanvas = tinyCanvas;
+  drawOneGhostImage._tinyCtx = tinyCtx;
+
+  const sw = Math.max(1, Math.floor(w * TV_GHOST_DRAW_STYLE.blurScale));
+  const sh = Math.max(1, Math.floor(h * TV_GHOST_DRAW_STYLE.blurScale));
+
+  if (tinyCanvas.width !== sw) tinyCanvas.width = sw;
+  if (tinyCanvas.height !== sh) tinyCanvas.height = sh;
+
+  // full-size work pass
+  tvGhostFxCtx.clearRect(0, 0, w, h);
+  tvGhostFxCtx.imageSmoothingEnabled = true;
+  tvGhostFxCtx.drawImage(img, dx, dy, dw, dh);
+
+  // tiny pass
+  tinyCtx.clearRect(0, 0, sw, sh);
+  tinyCtx.imageSmoothingEnabled = true;
+  tinyCtx.drawImage(tvGhostFxCanvas, 0, 0, w, h, 0, 0, sw, sh);
+
+  // draw blurred haze back up full-size
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.globalAlpha = alpha * TV_GHOST_DRAW_STYLE.blurBaseAlpha;
+  ctx.drawImage(tinyCanvas, 0, 0, sw, sh, 0, 0, w, h);
+  ctx.restore();
+
+  // --------------------------------------------------
+  // PASS 2: softened visible layer (always lower opacity)
+  // --------------------------------------------------
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.globalAlpha = alpha * TV_GHOST_DRAW_STYLE.finalAlphaMul;
   ctx.drawImage(img, dx, dy, dw, dh);
   ctx.restore();
 }
@@ -6743,17 +6791,16 @@ const tracks = [
   "./assets/Audio/04-12r-011.mp3",
   "./assets/Audio/05-Promise.mp3",
   "./assets/Audio/06-bline-01.mp3",
-  "./assets/Audio/07-centaurella-44-011.mp3",
-  "./assets/Audio/08-under-the-same-name-011.mp3",
-  "./assets/Audio/09-a-sad-cartoon-011.mp3", 
-  "./assets/Audio/10-one-weak-011.mp3",
+  "./assets/Audio/07-I-Dream.mp3",
+  "./assets/Audio/08-Bingethinking.mp3",
+  "./assets/Audio/09-under-the-same-name-011.mp3",
+  "./assets/Audio/10-a-sad-cartoon-011.mp3", 
   "./assets/Audio/11-xo-011.mp3",
   "./assets/Audio/12-min-dag1.mp3",
-  "./assets/Audio/13-relay-011.mp3",
-  "./assets/Audio/14-Counting-Hands.mp3",
-  "./assets/Audio/15-pistol-011.mp3",
-  "./assets/Audio/16-widowdusk-011.mp3",
-  "./assets/Audio/17-letters-to-frances_011.mp3",
+  "./assets/Audio/13-Counting-Hands.mp3",
+  "./assets/Audio/14-pistol-011.mp3",
+  "./assets/Audio/15-widowdusk-011.mp3",
+  "./assets/Audio/16-letters-to-frances_011.mp3",
 ];
 
 let trackIndex = 0;
@@ -10223,7 +10270,7 @@ pasted_remote: (() => {
   );
 
   // slight brightness lift so it stays readable against the bed
-  mat.color.multiplyScalar(1.08);
+  mat.color.multiplyScalar(0.75);
 
   mat.color.lerp(new THREE.Color(0xaaa39a), 0.08);
 
@@ -10245,12 +10292,20 @@ TV_stand: makePBR({
 
     //ALL DVD's
 
-    All_DVD: makePBR(
+  All_DVD: (() => {
+  const m = makePBR(
     {
       albedo: "./assets/Textures/DVD's/All DVD albeto.jpg",
     },
-    { metalness: 0.0, roughness: 0.0 }
-  ),
+    { metalness: 0.0, roughness: 0.78 }
+  );
+
+  m.color.multiplyScalar(1.22);
+  m.color.lerp(new THREE.Color(0xffffff), 0.08);
+  m.envMapIntensity = 0.55;
+
+  return m;
+})(),
 
     DVD_on_Player1: makePBR(
     {
@@ -10340,13 +10395,20 @@ TV_stand: makePBR({
     { roughness: 1.0, metalness: 0.0}
 ),
 
-    //WALLS & Door
-  front_wall1: makePBR(
+front_wall1: (() => {
+  const m = makePBR(
     {
       albedo: "./assets/Textures/Walls/Front Wall/Front Wall12 Albedo.jpg",
     },
-    { metalness: 0.0, roughness: 2.0 }
-  ),
+    { metalness: 0.0, roughness: 0.94 }
+  );
+
+  m.color.multiplyScalar(1.04);
+  m.color.lerp(new THREE.Color(0xffffff), 0.015);
+  m.envMapIntensity = 0.05;
+
+  return m;
+})(),
 
     front_wall2: makePBR(
     {
@@ -10432,18 +10494,12 @@ Door4: (() => {
     {
       albedo: "./assets/Textures/Album/Album Albedo2.jpg",
     },
-    { roughness: -0.2, metalness: 0.2 }
+    { roughness: 0.72, metalness: 0.0 }
   );
 
-  // ✅ brighten the texture slightly
-  m.color.multiplyScalar(0.7);
-
-  // ✅ subtle self-light so it reads even in dark areas
-  m.emissive = new THREE.Color(0xffffff);
-  m.emissiveIntensity = 0.0102;
-
-  // ✅ reduce harsh reflections from lamp
-  if ("envMapIntensity" in m) m.envMapIntensity = 0.04;
+  m.color.multiplyScalar(1.22);
+  m.color.lerp(new THREE.Color(0xffffff), 0.06);
+  m.envMapIntensity = 0.55;
 
   return m;
 })(),
@@ -10475,14 +10531,8 @@ Door4: (() => {
  Tank4: makePBR({
     albedo: "./assets/Textures/Tank/Tank Albeto.jpg",
     },
-    { roughness: 1.0, metalness: 0.5}
+    { roughness: 0.3, metalness: 0.0}
 ),
-
- //cloth: makePBR({
-    //albedo: "./assets/Textures/Cloth/Cloth Albeto copy.jpg",
-    //},
-    //{ roughness: 1.0, metalness: 0.0}
-//),
 
  DvD_player: makePBR({
     albedo: "./assets/Textures/DVD Player/DVD Player Albeto.jpg",
@@ -10567,11 +10617,12 @@ Bed1: (() => {
     {
       albedo: "./assets/Textures/Bed/Bed Albedo2.jpg",
     },
-    { roughness: 0.8, metalness: 0.0 }
+    { roughness: 0.92, metalness: 0.0 }
   );
 
-  mat.color.multiplyScalar(1.15);
-  mat.color.lerp(new THREE.Color(0xffffff), 0.035);
+  mat.color.multiplyScalar(1.08);
+  mat.color.lerp(new THREE.Color(0xffffff), 0.025);
+  mat.envMapIntensity = 0.1;
 
   return mat;
 })(),
@@ -10871,18 +10922,26 @@ Shoelase: makePBR({
 
 //INTERACTIVE MATERIALS
 
-BluetoothSpeaker: makePBR(
-{
-      albedo: "./assets/Textures/Speaker/Speaker Albeto.jpg",
+BluetoothSpeaker: (() => {
+  const m = makePBR(
+    {
+      albedo: "./assets/Textures/Speaker/Speaker Albeto7.jpg",
     },
-    { roughness: 0.3, metalness: 0.0 }
-  ),
+    { roughness: 0.72, metalness: 0.05 }
+  );
+
+  m.color.multiplyScalar(1.0);
+  m.color.lerp(new THREE.Color(0xffffff), 0.035);
+  m.envMapIntensity = 0.05;
+
+  return m;
+})(),
 
   Left_Button_Remote: makePBR(
 {
       albedo: "./assets/Textures/Remote/Left Arrow Button/Left Arrow Albeto.jpg",
     },
-    { roughness: 0.0, metalness: 0.0 }
+    { roughness: 0.0, metalness: 0.2 }
   ),
 
  Ok_Button_Remote2: makePBR(
@@ -13376,12 +13435,13 @@ const sketchbookLoader = new GLTFLoader();
 const __endUI = __beginAsset("Interactives GLB");
 
 extraMaterialsLoader.load(
-  "./assets/models/Extra Materials4.glb",
+  "./assets/models/Extra Materials14.glb",
   (gltf) => {
     const model = gltf.scene;
 
     model.traverse((o) => {
   if (!o.isMesh) return;
+  
 
   const meshName = (o.name || "").toLowerCase();
 
@@ -13545,6 +13605,124 @@ else if (
   mat.color.lerp(new THREE.Color(0x4f4a43), 0.08);
 
   o.material = mat;
+}
+
+else if (
+  inHierarchy("Remington870") ||
+  meshName.includes("mesh.011")
+) {
+  const mat = makePBR(
+    {
+      albedo: "./assets/Textures/Shotgun/Shotgun Albedo3.jpg",
+    },
+    {
+      roughness: 0.85,
+      metalness: 0.0,
+    }
+  );
+
+  mat.map.anisotropy = 4;
+  mat.map.minFilter = THREE.LinearMipmapLinearFilter;
+  mat.map.magFilter = THREE.LinearFilter;
+
+  // darken more so it sits in the room
+  mat.color.multiplyScalar(-0.2);
+
+  // warm it up
+  mat.color.multiply(new THREE.Color(1.03, 1.00, 0.96));
+
+
+  o.material = mat;
+}
+
+else if (
+  inHierarchy("Bearded_Dragon") ||
+  meshName.includes("mesh.083")
+) {
+  const mat = makePBR(
+    {
+      albedo: "./assets/Textures/Bearded Dragon/Bearded Dragon Albedo.jpg",
+    },
+    {
+      roughness: 0.3,
+      metalness: 0.0,
+    }
+  );
+
+  mat.map.anisotropy = 4;
+  mat.map.minFilter = THREE.LinearMipmapLinearFilter;
+  mat.map.magFilter = THREE.LinearFilter;
+
+  // darken more so it sits in the room
+  mat.color.multiplyScalar(0.2);
+
+  // warm it up
+  mat.color.multiply(new THREE.Color(1.03, 1.00, 0.96));
+
+
+  o.material = mat;
+}
+
+
+else if (
+  inHierarchy("cashpile_04") ||
+  meshName.includes("mesh.035")
+) {
+  const mat = makePBR(
+    {
+      albedo: "./assets/Textures/Money/Money Albedo.jpg",
+    },
+    {
+      roughness: 1.0,
+      metalness: 0.0,
+    }
+  );
+
+  mat.map.anisotropy = 4;
+  mat.map.minFilter = THREE.LinearMipmapLinearFilter;
+  mat.map.magFilter = THREE.LinearFilter;
+
+  // darken more so it sits in the room
+  mat.color.multiplyScalar(0.10);
+
+  // warm it up
+  mat.color.multiply(new THREE.Color(1.03, 1.00, 0.96));
+
+  // kill the purple/blue cast and dirty it
+  mat.color.lerp(new THREE.Color(0x4f4a43), 0.08);
+
+  o.material = mat;
+}
+
+const isJokerOrHarley =
+  inHierarchy("joker") ||
+  inHierarchy("jokerbody1") ||
+  inHierarchy("jokerface1") ||
+  inHierarchy("harley_quinn") ||
+  inHierarchy("harleyquinn") ||
+  inHierarchy("harleyquinnbody1") ||
+  inHierarchy("harleyquinneyes1");
+
+if (isJokerOrHarley) {
+  const mats = Array.isArray(o.material) ? o.material : [o.material];
+
+  const darkerMats = mats.map((mat) => {
+    if (!mat) return mat;
+
+    const m = mat.clone();
+
+    if (m.map) m.map = m.map.clone();
+    if (m.color) m.color.multiplyScalar(0.65);
+    if ("emissiveIntensity" in m) m.emissiveIntensity = 0.0;
+    if ("envMapIntensity" in m) m.envMapIntensity = 0.0;
+    if ("metalness" in m) m.metalness = 0.0;
+    if ("roughness" in m) m.roughness = 1.0;
+
+    m.needsUpdate = true;
+    return m;
+  });
+
+  o.material = Array.isArray(o.material) ? darkerMats : darkerMats[0];
 }
 
   o.castShadow = true;
@@ -15388,8 +15566,7 @@ const useNightVisionFX =
   nightVisionOn &&
   composer &&
   nightVisionPass &&
-  MOBILE_PROFILE.postFX &&
-  !isIOSDevice();
+  MOBILE_PROFILE.postFX;
 
 // ============================================================
 // ✅ FORCE TONEMAP + EXPOSURE RIGHT BEFORE RENDER
