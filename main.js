@@ -13613,7 +13613,7 @@ else if (
 ) {
   const mat = makePBR(
     {
-      albedo: "./assets/Textures/Shotgun/Shotgun Albedo3.jpg",
+      albedo: "./assets/Textures/shotgun/Shotgun Albedo3.jpg",
     },
     {
       roughness: 0.85,
