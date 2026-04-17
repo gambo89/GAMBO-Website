@@ -1382,9 +1382,14 @@ let chainMeshRef = null;
 
 let lampMood = 0; // 0 = warm (default), 1 = cold/blue, 2 = red (optional)
 
-//Bug Animation
+// Bug Animation
 let bugMixer = null;
 let bugActions = [];
+
+// Bearded Dragon Animation
+let dragonMixer = null;
+let dragonAction = null;
+let dragonModelRef = null;
 
 // ============================================================
 // LAMP FLICKER (subtle, cinematic)
@@ -12160,13 +12165,13 @@ const cigaretteAshMat = (() => {
 })();
 
 const cigaretteEmberMat = new THREE.MeshStandardMaterial({
-  color: 0x240400,
-  emissive: 0xff3a12,
-  emissiveIntensity: 2.2,
+  color: 0x080201,
+  emissive: 0x551100,
+  emissiveIntensity: 0.25,
   roughness: 1.0,
   metalness: 0.0,
   side: THREE.DoubleSide,
-  toneMapped: false,
+  toneMapped: true,
 });
 
 darkenMaterial(cigaretteFilterMat, {
@@ -13435,9 +13440,53 @@ const sketchbookLoader = new GLTFLoader();
 const __endUI = __beginAsset("Interactives GLB");
 
 extraMaterialsLoader.load(
-  "./assets/models/Extra Materials14.glb",
+  "./assets/models/Extra Materials16.glb",
   (gltf) => {
     const model = gltf.scene;
+
+        // ============================================================
+    // ✅ START BEARDED DRAGON ANIMATION
+    // ============================================================
+    dragonModelRef = model;
+
+    if (gltf.animations && gltf.animations.length) {
+      console.log(
+        "🦎 Extra Materials16 animations:",
+        gltf.animations.map((clip) => ({
+          name: clip.name,
+          duration: clip.duration
+        }))
+      );
+
+      dragonMixer = new THREE.AnimationMixer(model);
+
+      // Prefer a dragon/armature-related clip by name if one exists.
+      // Otherwise fall back to the first clip in the GLB.
+      const dragonClip =
+        gltf.animations.find((clip) =>
+          /bearded|dragon|armature/i.test(clip.name)
+        ) || gltf.animations[0];
+
+      dragonAction = dragonMixer.clipAction(dragonClip);
+
+      dragonAction.reset();
+      dragonAction.enabled = true;
+      dragonAction.time = 0;
+
+      // Play immediately and loop forever
+      dragonAction.setLoop(THREE.LoopRepeat, Infinity);
+      dragonAction.clampWhenFinished = false;
+      dragonAction.paused = false;
+      dragonAction.timeScale = 1.0;
+
+      dragonAction.play();
+
+      console.log(
+        `🦎 Playing dragon clip: ${dragonClip.name} (${dragonClip.duration.toFixed(2)}s)`
+      );
+    } else {
+      console.warn("⚠️ No animations found in Extra Materials16.glb");
+    }
 
     model.traverse((o) => {
   if (!o.isMesh) return;
@@ -13627,6 +13676,31 @@ else if (
 
   // darken more so it sits in the room
   mat.color.multiplyScalar(-0.2);
+
+  // warm it up
+  mat.color.multiply(new THREE.Color(1.03, 1.00, 0.96));
+
+
+  o.material = mat;
+}
+
+else if (
+  inHierarchy("Stickers") ||
+  meshName.includes("mesh.009")
+) {
+  const mat = makePBR(
+    {
+      albedo: "./assets/Textures/Sticker/Sticker Albedo.jpg",
+    },
+    {
+      roughness: 0.4,
+      metalness: 0.0,
+    }
+  );
+
+  mat.map.anisotropy = 4;
+  mat.map.minFilter = THREE.LinearMipmapLinearFilter;
+  mat.map.magFilter = THREE.LinearFilter;
 
   // warm it up
   mat.color.multiply(new THREE.Color(1.03, 1.00, 0.96));
@@ -14851,23 +14925,30 @@ cigaretteLoader.load(
     parentName.includes("tip")
   ) {
     const m = cigaretteEmberMat.clone();
-    m.name = "cigaretteEmberMat";
-    newMats.push(m);
+m.name = "cigaretteEmberMat";
 
- emberTipRef = o;
+emberTipRef = o;
 emberTipMatRef = m;
-m.emissive.setRGB(1.0, 0.22, 0.03);
-m.emissiveIntensity = 2.6;
-m.toneMapped = true;
 emberTipMatIndex = i;
 
-    console.log("🔥 EMBER material captured:", {
-      object: o.name,
-      slot: i,
-      material: mat?.name
-    });
+// Fiery ember look
+m.color.setRGB(0.22, 0.04, 0.01);       // dark burnt base
+m.emissive.setRGB(1.00, 0.22, 0.05);    // hot orange-red glow
+m.emissiveIntensity = 0.20;             // moderate glow
+m.roughness = 1.0;                      // no shiny white highlights
+m.metalness = 0.0;
+if ("envMapIntensity" in m) m.envMapIntensity = 0.0;
+m.toneMapped = true;
 
-    continue;
+newMats.push(m);
+
+console.log("EMBER FINAL OVERRIDE", {
+  objectName: o.name,
+  materialName: m.name,
+  slotIndex: i
+});
+
+continue;
   }
 
 // ASH
@@ -14916,6 +14997,27 @@ if (matName.includes("ash")) {
 
       o.material = Array.isArray(o.material) ? newMats : newMats[0];
 
+      if (emberTipRef === o && emberTipMatRef) {
+  if ("color" in emberTipMatRef) {
+    emberTipMatRef.color.setRGB(0.22, 0.04, 0.01);
+  }
+  if ("emissive" in emberTipMatRef) {
+    emberTipMatRef.emissive.setRGB(1.00, 0.22, 0.05);
+  }
+  if ("emissiveIntensity" in emberTipMatRef) {
+    emberTipMatRef.emissiveIntensity = 0.65;
+  }
+  if ("roughness" in emberTipMatRef) {
+    emberTipMatRef.roughness = 1.0;
+  }
+  if ("metalness" in emberTipMatRef) {
+    emberTipMatRef.metalness = 0.0;
+  }
+  if ("envMapIntensity" in emberTipMatRef) {
+    emberTipMatRef.envMapIntensity = 0.0;
+  }
+}
+
       if (Array.isArray(o.material)) {
         o.material.forEach((m) => {
           if (m) m.needsUpdate = true;
@@ -14942,7 +15044,7 @@ if (matName.includes("ash")) {
     });
 
 if (emberTipRef && !emberLightRef) {
-  emberLightRef = new THREE.PointLight(0xff3a12, 0.18, 0.12, 2.0);
+  emberLightRef = new THREE.PointLight(0xff5a1a, 0.025, 0.035, 2.0);
   emberLightRef.castShadow = false;
   emberTipRef.add(emberLightRef);
 
@@ -14957,7 +15059,7 @@ if (emberTipRef && !emberHaloRef) {
     map: emberHaloTex,
     color: 0xff2a0a,
     transparent: true,
-    opacity: 0.02,
+    opacity: 0.004,
     depthWrite: false,
     depthTest: true,
     blending: THREE.NormalBlending,
@@ -15076,9 +15178,21 @@ smokeTipLoader.load(
         });
       }
 
-            // keep original Smoke_tip2 material
       if (o.material) {
-        o.material.needsUpdate = true;
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+
+        mats.forEach((m) => {
+          if (!m) return;
+
+          if ("color" in m) m.color.setRGB(0.18, 0.18, 0.18);
+if ("emissive" in m) m.emissive.setRGB(0.0, 0.0, 0.0);
+if ("emissiveIntensity" in m) m.emissiveIntensity = 0.0;
+if ("metalness" in m) m.metalness = 0.0;
+if ("roughness" in m) m.roughness = 1.0;
+if ("envMapIntensity" in m) m.envMapIntensity = 0.0;
+m.toneMapped = true;
+m.needsUpdate = true;
+        });
       }
     });
 
@@ -15502,6 +15616,7 @@ function animate() {
 }
 
 if (bugMixer) bugMixer.update(dt);
+  if (dragonMixer) dragonMixer.update(dt);
 
 if (cigaretteMixer) cigaretteMixer.update(dt);
 if (smokeTipMixer) smokeTipMixer.update(dt);
