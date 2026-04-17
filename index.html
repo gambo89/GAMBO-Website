@@ -53,6 +53,10 @@
   background-color: #000;
 }
 
+body.ios #loader {
+  height: calc(var(--vh, 1vh) * 100);
+}
+
 #loader-bg {
   position: absolute;
   inset: 0;
@@ -91,7 +95,7 @@
 }
 
 body.ios .loader-inner {
-  transform: translateY(-4%);
+  transform: translateY(-6%);
 }
 
 #loader-status {
@@ -178,7 +182,8 @@ body.ios #loader-status {
 }
 
 body.ios #loader-status {
-  margin-top: 15px;
+  margin-top: 16px;
+  font-size: 17px;
 }
 
 .loader-logo-wrap {
@@ -193,8 +198,8 @@ body.ios #loader-status {
 
 /* iOS only */
 body.ios .loader-logo-wrap {
-  width: clamp(260px, 45svw, 360px);
-  transform: translate(-6px, 6px);
+  width: clamp(250px, 44vw, 340px);
+  transform: translate(-6px, 4px);
 }
 
 .loader-logo {
