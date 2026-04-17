@@ -14,7 +14,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>GAMBO</title>
-<link rel="icon" type="image/png" href="./assets/Loading Page/Black-logo.png?v=2" />
+  <link rel="preload" as ="image" href="./assets/Loading Page/Background.jpg" fetchpriority="high">
+  <link rel="icon" type="image/png" href="./assets/Loading Page/Black-logo.png?v=2" />
 
 <link rel="icon" type="image/png" sizes="32x32" href="./assets/Loading Page/Black-logo.png?v=2" />
 <link rel="icon" type="image/png" sizes="16x16" href="./assets/Loading Page/Black-logo.png?v=2" />
@@ -22,13 +23,14 @@
 
   <style>
     html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: #000;
-    }
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: url("./assets/Loading Page/Background.jpg") center center / cover no-repeat;
+  background-color: #000;
+}
 
     :root { --vh: 1vh; }
 
@@ -43,16 +45,23 @@
 #loader {
   position: fixed;
   inset: 0;
-  background: url("./assets/Loading Page/Background.jpg") center center / cover no-repeat;
-
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 9999;
+  overflow: hidden;
+  background-color: #000;
+}
 
-  /* 🔥 subtle motion */
+#loader-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
   animation: loaderBgDrift 20s ease-in-out infinite;
   will-change: transform;
+  pointer-events: none;
 }
 
 
@@ -105,19 +114,20 @@ body.ios #loader-status {
 
 #loader-status.is-enter-ready {
   display: inline-block;
-  animation: loaderEnterPulse 2.2s ease-in-out infinite;
-  -webkit-animation: loaderEnterPulse 2.2s ease-in-out infinite;
+  animation: loaderEnterPulse 2.6s ease-in-out infinite;
+  -webkit-animation: loaderEnterPulse 2.6s ease-in-out infinite;
   color: #ffffff;
   text-shadow:
     0 0 4px rgba(255,255,255,0.18),
     0 0 10px rgba(255,255,255,0.08);
   letter-spacing: 0.06em;
   will-change: transform, opacity, text-shadow;
+  opacity: 0.85; /* 👈 ADD THIS */
 }
 
 @keyframes loaderEnterPulse {
   0% {
-    opacity: 0.78;
+    opacity: 0.75;
     transform: translateY(0) scale(1);
     text-shadow:
       0 0 3px rgba(255,255,255,0.10),
@@ -125,7 +135,7 @@ body.ios #loader-status {
   }
 
   50% {
-    opacity: 1;
+    opacity: 0.95;
     transform: translateY(-1px) scale(1.025);
     text-shadow:
       0 0 6px rgba(255,255,255,0.22),
@@ -133,7 +143,7 @@ body.ios #loader-status {
   }
 
   100% {
-    opacity: 0.78;
+    opacity: 0.75;
     transform: translateY(0) scale(1);
     text-shadow:
       0 0 3px rgba(255,255,255,0.10),
@@ -173,7 +183,7 @@ body.ios #loader-status {
 
 .loader-logo-wrap {
   position: relative;
-  width: min(60vw, 600px); /* desktop */
+  width: min(55vw, 520px);
   transform: translateX(-23px);
   aspect-ratio: 1 / 1;
   display: flex;
@@ -224,6 +234,12 @@ body.ios .loader-logo-wrap {
 <body>
 
 <div id="loader">
+  <img
+    id="loader-bg"
+    src="./assets/Loading Page/Background.jpg"
+    alt=""
+    aria-hidden="true"
+  />
   <div class="loader-inner">
     <div class="loader-logo-wrap">
       <img

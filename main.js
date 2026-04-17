@@ -58,6 +58,9 @@ const MOBILE_PROFILE = {
   postFX: true,
 };
 
+const IOS_DRAG_DPR = 1.5;
+let iosQualityRestoreTimer = null;
+
 const LAYER_WORLD = 0;
 const LAYER_ACCENT = 2;
 const LAYER_PIN = 3;
@@ -187,6 +190,27 @@ if (isIOS) {
 const dpr = window.devicePixelRatio || 1;
 renderer.setPixelRatio(Math.min(dpr, MOBILE_PROFILE.maxDpr));
 renderer.setSize(window.innerWidth, window.innerHeight);
+
+function setIOSInteractionQuality(lowQuality) {
+  if (!isIOS) return;
+
+  const dpr = window.devicePixelRatio || 1;
+  const targetMaxDpr = lowQuality ? IOS_DRAG_DPR : MOBILE_PROFILE.maxDpr;
+  const targetDpr = Math.min(dpr, targetMaxDpr);
+
+  renderer.setPixelRatio(targetDpr);
+  renderer.setSize(window.innerWidth, window.innerHeight, false);
+
+  if (composer) {
+    composer.setSize(window.innerWidth, window.innerHeight);
+  }
+
+  console.log(
+    lowQuality
+      ? `📱 iOS drag quality ON (DPR ${targetDpr})`
+      : `📱 iOS drag quality OFF (DPR ${targetDpr})`
+  );
+}
 
 // ✅ iOS SAFARI INPUT FIX (does NOT change desktop look)
 if (isIOS) {
@@ -1390,6 +1414,8 @@ let bugActions = [];
 let dragonMixer = null;
 let dragonAction = null;
 let dragonModelRef = null;
+let dragonHitRootRef = null;
+let dragonIsPlaying = false;
 
 // ============================================================
 // LAMP FLICKER (subtle, cinematic)
@@ -1818,6 +1844,10 @@ let tvScreenMatRef = null;      // ✅ keep ONE stable material reference
 let interactivesRootRef = null; // ✅ store the UI root for raycasting
 let tvScreenScale0 = new THREE.Vector3(1, 1, 1); // ✅ remembers original TV screen scale
 let speakerMeshRef = null;
+let speakerBaseScale = null;
+let speakerPulseCurrent = 0;
+let speakerPulseTarget = 0;
+let speakerPulseKick = 0;
 let upArrowMeshRef = null;
 let downArrowMeshRef = null;
 let okButtonMeshRef = null;
@@ -1904,6 +1934,35 @@ function updatePress() {
 
 function clearAllButtonPresses() {
   pressState.forEach((st) => (st.target = 0));
+}
+
+function updateSpeakerPulse(dt) {
+  if (!speakerMeshRef || !speakerBaseScale) return;
+
+  const a = currentAudio ? currentAudio() : null;
+  const audioIsPlaying = !!(a && !a.paused && !a.ended && isPlaying);
+
+  speakerPulseTarget = audioIsPlaying ? 1 : 0;
+
+  // smoother fade in/out
+  speakerPulseCurrent += (speakerPulseTarget - speakerPulseCurrent) * 0.08;
+
+  // much softer click kick
+  speakerPulseKick *= 0.65;
+
+  // slower motion
+  const t = performance.now() * 0.0055;
+  const wave = Math.sin(t) * 0.5 + 0.5;
+
+  // much smaller amplitude
+  const pulseAmount =
+    speakerPulseCurrent * (0.0045 * wave + 0.0030 * speakerPulseKick);
+
+  speakerMeshRef.scale.set(
+    speakerBaseScale.x * (1 + pulseAmount * 0.12),
+    speakerBaseScale.y * (1 + pulseAmount),
+    speakerBaseScale.z * (1 + pulseAmount * 0.12)
+  );
 }
 
 // ============================================================
@@ -2624,7 +2683,7 @@ function showBook4Hint(show) {
 // DOG_TAG1 HOVER HINT (Press to go to playlist)
 // ============================================================
 const dogTagHint = document.createElement("div");
-dogTagHint.innerText = "press to view playlist";
+dogTagHint.innerText = "press to view speaker's playlist";
 
 dogTagHint.style.position = "fixed";
 dogTagHint.style.left = "50%";
@@ -3804,7 +3863,7 @@ modelOverlayEl.loop = true;
 modelOverlayEl.preload = "auto";
 
 // ✅ make iOS model overlay behave like a gesture-safe inline player
-modelOverlayEl.muted = isIOSDevice() ? true : false;
+modelOverlayEl.muted = isIOSDevice() ? false : false;
 modelOverlayEl.defaultMuted = isIOSDevice() ? true : false;
 if (isIOSDevice()) modelOverlayEl.setAttribute("muted", "");
 
@@ -4277,6 +4336,72 @@ let tvLeftArrowHover = false;
 let tvRightArrowHover = false;
 
 let tvSubcategoryHoverFlipV = null;
+
+const tvTransitionCanvas = document.createElement("canvas");
+tvTransitionCanvas.width = 1920;
+tvTransitionCanvas.height = 1080;
+const tvTransitionCtx = tvTransitionCanvas.getContext("2d");
+
+let tvTransitionActive = false;
+let tvTransitionStartMs = 0;
+const TV_TRANSITION_MS = 180;
+
+let tvTransitionType = "slide";
+
+function beginTvPageTransition(type = "slide") {
+  if (!tvCanvas || !tvCtx || !tvTransitionCanvas || !tvTransitionCtx) return;
+
+  tvTransitionCtx.clearRect(
+    0,
+    0,
+    tvTransitionCanvas.width,
+    tvTransitionCanvas.height
+  );
+
+  tvTransitionCtx.drawImage(tvCanvas, 0, 0);
+
+  tvTransitionType = type;
+tvTransitionActive = true;
+tvTransitionStartMs = performance.now();
+}
+
+function applyTvPageTransitionOverlay() {
+  if (!tvTransitionActive) return;
+  if (!tvCanvas || !tvCtx) return;
+
+  const now = performance.now();
+  const t = Math.min(1, (now - tvTransitionStartMs) / TV_TRANSITION_MS);
+  const eased = 1 - Math.pow(1 - t, 3);
+
+  const w = tvCanvas.width;
+const h = tvCanvas.height;
+
+let oldOffsetX = -32 * eased;
+let oldAlpha = 1 - eased;
+
+// ✅ softer transition only for SUBCATEGORY_MENU -> content
+if (tvTransitionType === "contentFade") {
+  oldOffsetX = 0;
+  oldAlpha = 1 - eased;
+}
+
+// subtle TV dim → restore effect
+const dim = 0.9 + 0.1 * eased; // starts slightly dim, returns to normal
+tvCtx.save();
+tvCtx.globalAlpha = 1;
+tvCtx.fillStyle = `rgba(0,0,0,${1 - dim})`;
+tvCtx.fillRect(0, 0, w, h);
+tvCtx.restore();
+
+tvCtx.save();
+tvCtx.globalAlpha = oldAlpha;
+tvCtx.drawImage(tvTransitionCanvas, oldOffsetX, 0, w, h);
+tvCtx.restore();
+
+  if (t >= 1) {
+    tvTransitionActive = false;
+  }
+}
 
 // ============================================================
 // TV MENU POLISH: animated highlight + bottom carousel
@@ -5365,6 +5490,8 @@ function drawTvMenu() {
 
   drawTvSocialRow(tvCtx, w, h);
 
+  applyTvPageTransitionOverlay();
+
   tvTex.needsUpdate = true;
 }
 
@@ -5519,6 +5646,8 @@ drawMenuItemsAnimated(tvCtx, items, startY, layout.gapY, cx, subcategoryIndex);
   tvCtx.textBaseline = "middle";
   tvCtx.fillText("MENU", bx + BTN.w * 0.5, by + BTN.h * 0.52);
   tvCtx.restore();
+
+  applyTvPageTransitionOverlay();
 
   tvTex.needsUpdate = true;
 }
@@ -5728,6 +5857,8 @@ function confirmMenuSelection() {
     const selected = MENU_ITEMS[menuIndex];
     console.log("✅ Top-level selected:", selected);
 
+    beginTvPageTransition("slide");
+
     tvSocialHoverId = null;
     tvParentCategory = selected;
     subcategoryIndex = 0;
@@ -5745,6 +5876,8 @@ function confirmMenuSelection() {
   if (tvUiState === "SUBCATEGORY_MENU") {
     const items = SUBCATEGORY_ITEMS[tvParentCategory] || [];
     const selected = items[subcategoryIndex];
+
+   beginTvPageTransition("contentFade");
 
     selectedSubcategory = selected;
     tvUiState = tvParentCategory; // "PHOTO" | "VIDEO" | "3D MODEL"
@@ -5791,6 +5924,8 @@ function goBackOnePage() {
   if (tvUiState === "VIDEO") stopVideoCompletely();
   if (tvUiState === "3D MODEL") stopModelCompletely();
 
+  beginTvPageTransition("slide");
+
   tvUiState = "SUBCATEGORY_MENU";
 
   // keep the current selected row and hover orientation
@@ -5821,6 +5956,8 @@ function goBackToTvMenu() {
   // stop any active media so it doesn't keep running
   if (tvUiState === "VIDEO") stopVideoCompletely();
   if (tvUiState === "3D MODEL") stopModelCompletely();
+
+  beginTvPageTransition("slide");
 
   tvUiState = "MENU";
   tvParentCategory = null;
@@ -5939,10 +6076,11 @@ function loadPhotoAt(index) {
   imgLoader.load(
     url,
     (img) => {
-      photoImage = img;
-      photoLoading = false;
-      drawPhotoToTv(img);
-    },
+  photoImage = img;
+  photoLoading = false;
+  drawPhotoToTv(img);
+  applyTvPageTransitionOverlay();
+},
     undefined,
     (err) => {
       console.warn("❌ Photo failed to load:", url, err);
@@ -6113,6 +6251,8 @@ function drawPhotoToTv(img) {
     tvCtx.restore();
   }
 
+  applyTvPageTransitionOverlay();
+
   tvTex.needsUpdate = true;
 }
 
@@ -6147,9 +6287,10 @@ videoEl.playsInline = true;
 videoEl.setAttribute("playsinline", "");
 videoEl.setAttribute("webkit-playsinline", ""); // iOS Safari
 videoEl.loop = true;
-videoEl.muted = true;
-videoEl.defaultMuted = true;
-videoEl.volume = 0.0;
+videoEl.muted = false;
+videoEl.defaultMuted = false;
+videoEl.removeAttribute("muted");
+videoEl.volume = 1.0;
 videoEl.controls = false;
 
 videoEl.addEventListener("loadeddata", async () => {
@@ -6157,8 +6298,9 @@ videoEl.addEventListener("loadeddata", async () => {
 
   // draw first frame immediately once it exists
   if (tvOn && tvUiState === "VIDEO" && !tvVideoSuppressed) {
-    drawVideoFrameToTv();
-  }
+  drawVideoFrameToTv();
+  applyTvPageTransitionOverlay();
+}
 
   // autoplay only after first frame is ready
   if (tvOn && tvUiState === "VIDEO" && videoWantsAutoPlay && videoEl.paused) {
@@ -6237,16 +6379,15 @@ async function playVideo() {
   if (tvUiState !== "VIDEO") return;
   if (!videoEl) return;
 
-  try {
-    if (isIOSDevice()) {
-      videoEl.muted = true;
-      videoEl.defaultMuted = true;
-      videoEl.volume = 0.0;
-    }
+ try {
+  videoEl.muted = false;
+  videoEl.defaultMuted = false;
+  videoEl.removeAttribute("muted");
+  videoEl.volume = 1.0;
 
-    await videoEl.play();
-    videoPlaying = true;
-  } catch (err) {
+  await videoEl.play();
+  videoPlaying = true;
+} catch (err) {
     console.warn("Video play blocked (needs user gesture):", err);
     videoPlaying = false;
   }
@@ -6436,6 +6577,8 @@ if (tvOn && tvUiState === "VIDEO") {
   tvCtx.restore();
 }
 
+applyTvPageTransitionOverlay();
+
   tvTex.needsUpdate = true;
 }
 
@@ -6486,7 +6629,7 @@ function ensureModelVideoEl() {
   modelVideoEl.playsInline = true;
   modelVideoEl.setAttribute("webkit-playsinline", "");
   modelVideoEl.loop = true;
-  modelVideoEl.muted = isIOS ? true : false;
+  modelVideoEl.muted = isIOS ? false : false;
   modelVideoEl.controls = false;
 
   modelVideoEl.addEventListener("loadeddata", async () => {
@@ -6549,10 +6692,11 @@ function loadModelAt(index, { autoPlay = false } = {}) {
 
     modelImageLoading = true;
     modelImageEl.onload = () => {
-      modelImageLoading = false;
-      modelReady = true;
-      drawModelToTv();
-    };
+  modelImageLoading = false;
+  modelReady = true;
+  drawModelToTv();
+  applyTvPageTransitionOverlay();
+};
 
     modelImageEl.onerror = (e) => {
       modelImageLoading = false;
@@ -6763,6 +6907,8 @@ function drawModelFrameToTv() {
     tvCtx.restore();
   }
 
+  applyTvPageTransitionOverlay();
+
   tvTex.needsUpdate = true;
 }
 
@@ -6816,6 +6962,9 @@ let audioUnlocked = false;
 
 let bgAudio = null;
 let bgAudioEnabled = true;
+
+let bgAudioResumePending = false;
+let bgAudioResumeTimer = null;
 
 async function unlockAudioOnce() {
   if (audioUnlocked) return;
@@ -6889,9 +7038,85 @@ function ensureBackgroundAudio() {
   bgAudio.loop = true;
   bgAudio.volume = isIOS ? 0.28 : 0.60; // ✅ lower on iOS only
   bgAudio.playsInline = true;
-  bgAudio.setAttribute?.("webkit-playsinline", "");
+    bgAudio.setAttribute?.("webkit-playsinline", "");
+
+  bgAudio.addEventListener("pause", () => {
+    if (!bgAudioEnabled) return;
+    if (!isIOS) return;
+    if (document.hidden) return;
+
+    bgAudioResumePending = true;
+    scheduleBackgroundAudioResume(120);
+  });
+
+  bgAudio.addEventListener("ended", () => {
+    if (!bgAudioEnabled) return;
+    if (!isIOS) return;
+
+    bgAudioResumePending = true;
+    scheduleBackgroundAudioResume(0);
+  });
 
   return bgAudio;
+}
+
+function scheduleBackgroundAudioResume(delay = 0) {
+  if (!bgAudioEnabled) return;
+  if (!isIOS) return;
+
+  bgAudioResumePending = true;
+
+  if (bgAudioResumeTimer) {
+    clearTimeout(bgAudioResumeTimer);
+    bgAudioResumeTimer = null;
+  }
+
+  bgAudioResumeTimer = setTimeout(async () => {
+    bgAudioResumeTimer = null;
+
+    const bg = ensureBackgroundAudio();
+    if (!bg) return;
+    if (!bgAudioResumePending) return;
+
+    try {
+      bg.loop = true;
+      bg.volume = isIOS ? 0.28 : 0.60;
+      bg.playsInline = true;
+      bg.setAttribute?.("webkit-playsinline", "");
+
+      if (bg.paused) {
+        await bg.play();
+        console.log("🌫️ Background ambience resumed");
+      }
+
+      bgAudioResumePending = false;
+    } catch (err) {
+      console.warn("Background ambience resume blocked:", err);
+    }
+  }, delay);
+}
+
+async function forceResumeBackgroundAudioNow() {
+  if (!bgAudioEnabled) return;
+
+  const bg = ensureBackgroundAudio();
+  if (!bg) return;
+
+  try {
+    bg.loop = true;
+    bg.volume = isIOS ? 0.28 : 0.60;
+    bg.playsInline = true;
+    bg.setAttribute?.("webkit-playsinline", "");
+
+    if (bg.paused) {
+      await bg.play();
+      console.log("🌫️ Background ambience forced resume");
+    }
+
+    bgAudioResumePending = false;
+  } catch (err) {
+    console.warn("Background ambience forced resume blocked:", err);
+  }
 }
 
 const IOS_LAMP_VOLUME = 0.12;
@@ -7306,11 +7531,18 @@ async function playBackgroundAudio() {
 
   const bg = ensureBackgroundAudio();
 
-  try {
+    try {
+    bg.loop = true;
+    bg.volume = isIOS ? 0.28 : 0.60;
+    bg.playsInline = true;
+    bg.setAttribute?.("webkit-playsinline", "");
+
     if (bg.paused) {
       await bg.play();
       console.log("🌫️ Background ambience playing");
     }
+
+    bgAudioResumePending = false;
   } catch (err) {
     console.warn("Background ambience play blocked:", err);
   }
@@ -7372,6 +7604,22 @@ ensureSmokeChirpAudio();
 ensureTvOnSound();
 ensureTvOffSound();
 
+document.addEventListener("visibilitychange", () => {
+  if (!isIOS) return;
+  if (!bgAudioEnabled) return;
+
+  if (!document.hidden) {
+    scheduleBackgroundAudioResume(150);
+  }
+});
+
+window.addEventListener("pageshow", () => {
+  if (!isIOS) return;
+  if (!bgAudioEnabled) return;
+
+  scheduleBackgroundAudioResume(150);
+});
+
 
 async function playCurrent() {
   const a = currentAudio();
@@ -7395,18 +7643,21 @@ async function startBackgroundAudioFromUserGesture() {
 
   let startedAnything = false;
 
-  try {
+    try {
+    bg.loop = true;
+    bg.volume = isIOS ? 0.28 : 0.60;
+    bg.playsInline = true;
+    bg.setAttribute?.("webkit-playsinline", "");
+
     if (bg.paused) {
       await bg.play();
       console.log("🌫️ Background ambience started from early gesture");
       startedAnything = true;
     }
+
+    bgAudioResumePending = false;
   } catch (err) {
     console.warn("Background ambience early gesture start blocked:", err);
-  }
-
-  if (startedAnything) {
-    bgAudioStartedOnce = true;
   }
 }
 
@@ -8392,9 +8643,34 @@ function hitIsDrawWall(obj) {
   return false;
 }
 
+function hitIsDragon(obj) {
+  if (!obj || !dragonHitRootRef) return false;
+  return isInHierarchy(obj, dragonHitRootRef);
+}
+
+function playDragonOnce() {
+  if (!dragonMixer || !dragonAction || dragonIsPlaying) return;
+
+  dragonIsPlaying = true;
+
+  dragonAction.reset();
+  dragonAction.enabled = true;
+  dragonAction.time = 0;
+  dragonAction.paused = false;
+  dragonAction.setLoop(THREE.LoopOnce, 1);
+  dragonAction.clampWhenFinished = true;
+  dragonAction.play();
+
+  console.log("🦎 Dragon animation started");
+}
+
 async function onPointerDown(e) {
   if (isIOSPortraitBlocked()) return;
-  if (isIOSDevice()) nudgeIosRemotePulse();
+
+if (isIOSDevice()) {
+  nudgeIosRemotePulse();
+  forceResumeBackgroundAudioNow();
+}
 
   if (!setPointerFromEvent(e)) return; // ✅ ignore clicks in black bars
   raycaster.setFromCamera(pointer, camera);
@@ -8405,28 +8681,36 @@ if (interactivesRootRef) {
   hits = hits.concat(raycaster.intersectObject(interactivesRootRef, true));
 }
 
-  // ============================================================
-  // ✅ iOS horizontal camera drag start
-  // - only when touch begins on NON-interactive scene space
-  // ============================================================
-  if (
-    isIOSDevice() &&
-    IOS_CAM_DRAG.enabled &&
-    !overlayOpen &&
-    !videoOverlayOpen &&
-    !modelOverlayOpen
-  ) {
-    const touchingInteractive = isInteractiveHitForIOSCameraDrag(hits);
+// ✅ check the speaker early WITHOUT making the whole world block drag
+const speakerHits = speakerMeshRef
+  ? raycaster.intersectObject(speakerMeshRef, true)
+  : [];
 
-    if (!touchingInteractive) {
-      iosCamDragActive = true;
-      iosCamDragPointerId = e.pointerId;
-      iosCamDragStartClientX = e.clientX;
-      iosCamDragStartOffsetX = iosCamUserOffsetXTarget;
-      iosCamDragged = false;
-    }
+// ============================================================
+// ✅ iOS horizontal camera drag start
+// - only when touch begins on NON-interactive scene space
+// ============================================================
+if (
+  isIOSDevice() &&
+  IOS_CAM_DRAG.enabled &&
+  !overlayOpen &&
+  !videoOverlayOpen &&
+  !modelOverlayOpen
+) {
+  const touchingInteractive =
+    isInteractiveHitForIOSCameraDrag(hits) || speakerHits.length > 0;
+
+  if (!touchingInteractive) {
+    iosCamDragActive = true;
+    iosCamDragPointerId = e.pointerId;
+    iosCamDragStartClientX = e.clientX;
+    iosCamDragStartOffsetX = iosCamUserOffsetXTarget;
+    iosCamDragged = false;
+    setIOSInteractionQuality(true);
   }
+}
 
+// ✅ now collect the rest of the world hits normally
 hits = hits.concat(raycaster.intersectObject(anchor, true));
 
 // ✅ choose the closest hit overall
@@ -8450,6 +8734,11 @@ const tvHitInfo =
 
 const hitInfo = tvHitInfo ?? hits[0];
 const hit = hitInfo.object;
+
+if (hitIsDragon(hit)) {
+  playDragonOnce();
+  return;
+}
 
 const cigaretteHit = hits.find(h => cigaretteRoot && isInHierarchy(h.object, cigaretteRoot));
 
@@ -9096,6 +9385,8 @@ if (speakerMeshRef && isInHierarchy(hit, speakerMeshRef)) {
   // 🔓 make sure audio is unlocked on the same user click
   await unlockAudioOnce();
 
+    speakerPulseKick = 0.35;
+
   if (isDouble) {
     console.log("🔁 Speaker double click → next song");
     await nextTrack(true); // force play
@@ -9115,14 +9406,19 @@ if (speakerMeshRef && isInHierarchy(hit, speakerMeshRef)) {
 // ============================================================
 async function onPointerUp(e) {
   // ✅ end iOS horizontal camera drag first
-  if (
-    isIOSDevice() &&
-    IOS_CAM_DRAG.enabled &&
-    iosCamDragActive &&
-    e.pointerId === iosCamDragPointerId
-  ) {
-    iosCamDragActive = false;
-    iosCamDragPointerId = null;
+if (
+  isIOSDevice() &&
+  IOS_CAM_DRAG.enabled &&
+  iosCamDragActive &&
+  e.pointerId === iosCamDragPointerId
+) {
+  iosCamDragActive = false;
+  iosCamDragPointerId = null;
+
+  clearTimeout(iosQualityRestoreTimer);
+  iosQualityRestoreTimer = setTimeout(() => {
+    setIOSInteractionQuality(false);
+  }, 250);
 
   // if it was a camera drag, do not also treat it like a tap
   // BUT if a TV touch gesture is active, let the TV swipe logic handle it
@@ -9275,6 +9571,11 @@ function onPointerCancel() {
   iosCamDragActive = false;
   iosCamDragPointerId = null;
   iosCamDragged = false;
+
+  clearTimeout(iosQualityRestoreTimer);
+iosQualityRestoreTimer = setTimeout(() => {
+  setIOSInteractionQuality(false);
+}, 250);
 
   setHoverKey(null);
   clearAllButtonGlows();
@@ -13444,49 +13745,54 @@ extraMaterialsLoader.load(
   (gltf) => {
     const model = gltf.scene;
 
-        // ============================================================
-    // ✅ START BEARDED DRAGON ANIMATION
-    // ============================================================
-    dragonModelRef = model;
+        dragonModelRef = model;
+dragonHitRootRef = model;
 
-    if (gltf.animations && gltf.animations.length) {
-      console.log(
-        "🦎 Extra Materials16 animations:",
-        gltf.animations.map((clip) => ({
-          name: clip.name,
-          duration: clip.duration
-        }))
-      );
+if (gltf.animations && gltf.animations.length) {
+  console.log(
+    "🦎 Extra Materials16 animations:",
+    gltf.animations.map((clip) => ({
+      name: clip.name,
+      duration: clip.duration
+    }))
+  );
 
-      dragonMixer = new THREE.AnimationMixer(model);
+  dragonMixer = new THREE.AnimationMixer(model);
 
-      // Prefer a dragon/armature-related clip by name if one exists.
-      // Otherwise fall back to the first clip in the GLB.
-      const dragonClip =
-        gltf.animations.find((clip) =>
-          /bearded|dragon|armature/i.test(clip.name)
-        ) || gltf.animations[0];
+  const dragonClip =
+    gltf.animations.find((clip) =>
+      /bearded|dragon|armature/i.test(clip.name)
+    ) || gltf.animations[0];
 
-      dragonAction = dragonMixer.clipAction(dragonClip);
+  dragonAction = dragonMixer.clipAction(dragonClip);
 
-      dragonAction.reset();
-      dragonAction.enabled = true;
-      dragonAction.time = 0;
+  dragonAction.reset();
+  dragonAction.enabled = true;
+  dragonAction.time = 0;
+  dragonAction.timeScale = 1.0;
 
-      // Play immediately and loop forever
-      dragonAction.setLoop(THREE.LoopRepeat, Infinity);
-      dragonAction.clampWhenFinished = false;
-      dragonAction.paused = false;
-      dragonAction.timeScale = 1.0;
+  // ✅ play once only when pressed
+  dragonAction.setLoop(THREE.LoopOnce, 1);
+  dragonAction.clampWhenFinished = true;
+  dragonAction.paused = true;
 
-      dragonAction.play();
+  // keep it frozen on frame 0 at start
+  dragonMixer.update(0);
 
-      console.log(
-        `🦎 Playing dragon clip: ${dragonClip.name} (${dragonClip.duration.toFixed(2)}s)`
-      );
-    } else {
-      console.warn("⚠️ No animations found in Extra Materials16.glb");
+  dragonMixer.addEventListener("finished", (e) => {
+    if (e.action === dragonAction) {
+      dragonIsPlaying = false;
+      dragonAction.paused = true;
+      console.log("🦎 Dragon animation finished");
     }
+  });
+
+  console.log(
+    `🦎 Dragon ready on press: ${dragonClip.name} (${dragonClip.duration.toFixed(2)}s)`
+  );
+} else {
+  console.warn("⚠️ No animations found in Extra Materials16.glb");
+}
 
     model.traverse((o) => {
   if (!o.isMesh) return;
@@ -13665,7 +13971,7 @@ else if (
       albedo: "./assets/Textures/shotgun/Shotgun Albedo3.jpg",
     },
     {
-      roughness: 0.85,
+      roughness: 0.9,
       metalness: 0.0,
     }
   );
@@ -14047,10 +14353,11 @@ if (isRightArrow) {
     matName.includes("bluetoothspeaker") ||
     matName.includes("speaker");
 
-  if (isSpeaker) {
-    speakerMeshRef = o;
-    console.log("✅ Speaker mesh:", o.name, "material:", o.material?.name);
-  }
+if (isSpeaker) {
+  speakerMeshRef = o;
+  speakerBaseScale = o.scale.clone();
+  console.log("✅ Speaker mesh:", o.name, "material:", o.material?.name);
+}
 
   // TV SCREEN (name OR material name)
   const isTvScreen =
@@ -15616,7 +15923,7 @@ function animate() {
 }
 
 if (bugMixer) bugMixer.update(dt);
-  if (dragonMixer) dragonMixer.update(dt);
+  if (dragonMixer && dragonIsPlaying) dragonMixer.update(dt);
 
 if (cigaretteMixer) cigaretteMixer.update(dt);
 if (smokeTipMixer) smokeTipMixer.update(dt);
@@ -15641,6 +15948,7 @@ if (!blocked) {
   updateDust(dt);
   updateGlow();
   updatePress();
+  updateSpeakerPulse(dt);
   updateCigaretteEmber();
   updateCigaretteSmoke(dt);
   updateExhaleSmoke(dt);
@@ -15735,6 +16043,8 @@ let renderH = window.innerHeight;
 function handleResize() {
   if (!renderer || !renderer.domElement) return;
   if (!camera) return;
+
+  clearTimeout(iosQualityRestoreTimer);
 
   const vv = window.visualViewport;
   const w = Math.round(vv?.width  ?? window.innerWidth);
