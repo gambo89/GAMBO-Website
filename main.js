@@ -1208,7 +1208,7 @@ let dustPoints = null;
 let dustGeo = null;
 let dustMat = null;
 
-const DUST_COUNT = 320;        // fewer = more spaced out (try 220–500)
+const DUST_COUNT = isIOS ? 80 : 320;   // fewer = more spaced out (try 220–500)
 const DUST_BOX = {             // volume around camera (world units)
   x: 2.2,
   y: 1.3,
