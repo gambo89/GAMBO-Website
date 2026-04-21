@@ -51,14 +51,24 @@ const isIOS =
 const SAFE_MOBILE = isIOS; // flip to true to test on desktop
 
 const MOBILE_PROFILE = {
-  maxDpr: SAFE_MOBILE ? 2.0 : 2.0,
+  maxDpr: SAFE_MOBILE ? 1.65 : 2.0,
   shadows: SAFE_MOBILE ? false : true,
   maxAniso: SAFE_MOBILE ? 2 : null,
-  shadowMapSize: SAFE_MOBILE ? 4096 : 4096,
+  shadowMapSize: SAFE_MOBILE ? 1024 : 4096,
   postFX: true,
 };
 
-const IOS_DRAG_DPR = 1.5;
+const IOS_DRAG_DPR = 1.1;
+
+const IOS_PERF = {
+  bugFps: 24,
+  nvDpr: 1.15,
+  normalDpr: 1.65,
+  skipNvAutoGain: true
+};
+
+let bugAnimAccum = 0;
+
 let iosQualityRestoreTimer = null;
 
 const LAYER_WORLD = 0;
@@ -212,6 +222,21 @@ function setIOSInteractionQuality(lowQuality) {
   );
 }
 
+function updateIOSNightVisionQuality() {
+  if (!isIOS) return;
+
+  const dpr = window.devicePixelRatio || 1;
+  const maxDpr = nightVisionOn ? IOS_PERF.nvDpr : MOBILE_PROFILE.maxDpr;
+  const targetDpr = Math.min(dpr, maxDpr);
+
+  renderer.setPixelRatio(targetDpr);
+  renderer.setSize(window.innerWidth, window.innerHeight, false);
+
+  if (composer) {
+    composer.setSize(window.innerWidth, window.innerHeight);
+  }
+}
+
 // ✅ iOS SAFARI INPUT FIX (does NOT change desktop look)
 if (isIOS) {
   renderer.domElement.style.touchAction = "none";
@@ -359,6 +384,7 @@ let aeSampleAccum = 0;      // to sample at ~10–15 Hz instead of every frame
 
 function updateNightVisionAutoGain(dt) {
   if (!nightVisionOn || !nightVisionPass) return;
+  if (isIOS && IOS_PERF.skipNvAutoGain) return;
 
   // sample ~12 times per second (adjust if you want)
   aeSampleAccum += dt;
@@ -787,6 +813,11 @@ function setNightVision(on) {
       ? "contrast(155%) brightness(115%)"
       : "contrast(140%) brightness(90%)";
   }
+
+if (isIOS) {
+  updateIOSNightVisionQuality();
+}
+
 }
 
 
@@ -4476,6 +4507,7 @@ const TV_PREVIEW_IMAGES = {
       "./assets/Photo/Environment/01-Environment.jpg",
       "./assets/Photo/Environment/02-Environment.jpg",
       "./assets/Photo/Environment/03-Environment.jpg",
+      "./assets/Photo/Environment/04-Environment.jpg",
     ],
   },
 
@@ -5989,7 +6021,6 @@ const PHOTO_CATEGORIES = {
     "./assets/Photo/Portrait/10-Portrait.jpg",
     "./assets/Photo/Portrait/11-Portrait.jpg",
     "./assets/Photo/Portrait/12-Portrait.jpg",
-    "./assets/Photo/Portrait/13-Portrait.jpg",
     "./assets/Photo/Portrait/14-Portrait.jpg",
   ],
 
@@ -6001,8 +6032,10 @@ const PHOTO_CATEGORIES = {
   ],
 
   ENVIRONMENTS: [
-    "./assets/Photo/Environment/01-Environment.JPEG",
+    "./assets/Photo/Environment/01-Environment.jpg",
     "./assets/Photo/Environment/02-Environment.jpg",
+    "./assets/Photo/Environment/03-Environment.jpg",
+    "./assets/Photo/Environment/04-Environment.JPEG",
   ],
 };
 
@@ -9418,7 +9451,7 @@ if (
   clearTimeout(iosQualityRestoreTimer);
   iosQualityRestoreTimer = setTimeout(() => {
     setIOSInteractionQuality(false);
-  }, 250);
+  }, 80);
 
   // if it was a camera drag, do not also treat it like a tap
   // BUT if a TV touch gesture is active, let the TV swipe logic handle it
@@ -15922,7 +15955,19 @@ function animate() {
   exhaleSmokeDebugBuilt = true;
 }
 
-if (bugMixer) bugMixer.update(dt);
+if (bugMixer) {
+  if (isIOS) {
+    bugAnimAccum += dt;
+    const step = 1 / IOS_PERF.bugFps;
+
+    if (bugAnimAccum >= step) {
+      bugMixer.update(step);
+      bugAnimAccum %= step;
+    }
+  } else {
+    bugMixer.update(dt);
+  }
+}
   if (dragonMixer && dragonIsPlaying) dragonMixer.update(dt);
 
 if (cigaretteMixer) cigaretteMixer.update(dt);
@@ -15991,9 +16036,6 @@ const useNightVisionFX =
   nightVisionPass &&
   MOBILE_PROFILE.postFX;
 
-// ============================================================
-// ✅ FORCE TONEMAP + EXPOSURE RIGHT BEFORE RENDER
-// ============================================================
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 
 if (!nightVisionOn) {
@@ -16001,7 +16043,14 @@ if (!nightVisionOn) {
 }
 
 if (useNightVisionFX) {
-  updateNightVisionAutoGain(dt);
+  if (!isIOS) {
+    updateNightVisionAutoGain(dt);
+  } else {
+    // cheap fake gain on iOS
+    const t = performance.now() * 0.001;
+    nightVisionPass.uniforms.uGain.value = 1.28 + Math.sin(t * 1.2) * 0.04;
+  }
+
   nightVisionPass.uniforms.uTime.value = performance.now() * 0.001;
   composer.render();
 } else {
