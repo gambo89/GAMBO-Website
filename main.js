@@ -58,7 +58,7 @@ const MOBILE_PROFILE = {
   postFX: true,
 };
 
-const IOS_DRAG_DPR = 1.1;
+const IOS_DRAG_DPR = 1.5;
 
 const IOS_PERF = {
   bugFps: 24,
@@ -68,6 +68,13 @@ const IOS_PERF = {
 };
 
 let bugAnimAccum = 0;
+
+// ✅ NEW: throttle secondary iOS FX
+let iosSpeakerAccum = 0;
+const IOS_SPEAKER_FPS = 18;
+
+let iosFxAccum = 0;
+const IOS_FX_FPS = 20;
 
 let iosQualityRestoreTimer = null;
 
@@ -1974,6 +1981,17 @@ function updateSpeakerPulse(dt) {
   const audioIsPlaying = !!(a && !a.paused && !a.ended && isPlaying);
 
   speakerPulseTarget = audioIsPlaying ? 1 : 0;
+
+  // ✅ iOS: only update the speaker pulse at a capped rate
+  if (isIOS) {
+    iosSpeakerAccum += dt;
+    const step = 1 / IOS_SPEAKER_FPS;
+
+    if (iosSpeakerAccum < step) return;
+
+    dt = iosSpeakerAccum;
+    iosSpeakerAccum = 0;
+  }
 
   // smoother fade in/out
   speakerPulseCurrent += (speakerPulseTarget - speakerPulseCurrent) * 0.08;
@@ -9451,7 +9469,7 @@ if (
   clearTimeout(iosQualityRestoreTimer);
   iosQualityRestoreTimer = setTimeout(() => {
     setIOSInteractionQuality(false);
-  }, 80);
+  }, 50);
 
   // if it was a camera drag, do not also treat it like a tap
   // BUT if a TV touch gesture is active, let the TV swipe logic handle it
@@ -15989,14 +16007,34 @@ if (
 if (!blocked) {
   updateIOSCameraDrag();
   updateTv();
-  updateLampFlicker();
-  updateDust(dt);
-  updateGlow();
-  updatePress();
-  updateSpeakerPulse(dt);
-  updateCigaretteEmber();
-  updateCigaretteSmoke(dt);
-  updateExhaleSmoke(dt);
+
+  if (isIOS) {
+    iosFxAccum += dt;
+    const fxStep = 1 / IOS_FX_FPS;
+
+    if (iosFxAccum >= fxStep) {
+      updateLampFlicker();
+
+      // dust is already effectively off on iOS, but keep desktop-only behavior clean
+      updateGlow();
+      updatePress();
+      updateSpeakerPulse(iosFxAccum);
+      updateCigaretteEmber();
+      updateCigaretteSmoke(iosFxAccum);
+      updateExhaleSmoke(iosFxAccum);
+
+      iosFxAccum = 0;
+    }
+  } else {
+    updateLampFlicker();
+    updateDust(dt);
+    updateGlow();
+    updatePress();
+    updateSpeakerPulse(dt);
+    updateCigaretteEmber();
+    updateCigaretteSmoke(dt);
+    updateExhaleSmoke(dt);
+  }
 }
 
   // ✅ TV menu animation
