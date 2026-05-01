@@ -4553,6 +4553,7 @@ const TV_PREVIEW_IMAGES = {
     boards: [
       "./assets/3D Model/Boards/01-Boards.jpg",
       "./assets/3D Model/Boards/02-Boards.jpg",
+      "./assets/3D Model/Boards/03-Boards.jpg",
     ],
     objects: [
       "./assets/3D Model/Objects/01-Objects.jpg",
@@ -6080,6 +6081,7 @@ const MODEL_CATEGORIES = {
   BOARDS: [
     "./assets/3D Model/Boards/01-Boards.mp4",
     "./assets/3D Model/Boards/02-Boards.mp4",
+    "./assets/3D Model/Boards/03-Boards.mp4",
   ],
 
   OBJECTS: [
