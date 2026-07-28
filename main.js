@@ -123,10 +123,8 @@ function setLoaderPct(p) {
 
 if (loaderStatusEl) {
   if (displayPct >= 100) {
-    loaderStatusEl.textContent = "click to enter";
-    loaderStatusEl.classList.remove("is-enter-ready");
-    void loaderStatusEl.offsetWidth; // force reflow so animation always starts
-    loaderStatusEl.classList.add("is-enter-ready");
+   loaderStatusEl.textContent = "100%";
+  loaderStatusEl.classList.remove("is-enter-ready"); 
   } else {
     loaderStatusEl.textContent = `${displayPct}%`;
     loaderStatusEl.classList.remove("is-enter-ready");
@@ -144,20 +142,7 @@ function hideLoader() {
 async function enterSceneFromLoader() {
   if (!loaderReadyToEnter) return;
 
-  try {
-    await startBackgroundAudioFromUserGesture();
-  } catch (e) {
-    console.warn("Background audio did not start on enter:", e);
-  }
-
   hideLoader();
-
-// start smoke alarm chirp schedule (desktop only)
-if (!isIOS) {
-  startSmokeChirpCycle();
-} else {
-  stopSmokeChirpCycle();
-}
 
   // ✅ lazy load playlist AFTER first entry
   startLazyPlaylistLoad();
@@ -167,8 +152,32 @@ if (!isIOS) {
   }, 600);
 }
 
-loaderEl?.addEventListener("pointerdown", enterSceneFromLoader);
-loaderEl?.addEventListener("click", enterSceneFromLoader);
+// ============================================================
+// START BACKGROUND AUDIO ON FIRST MOUSE MOVEMENT
+// ============================================================
+let backgroundAudioUnlocked = false;
+
+async function startAudioOnFirstMouseMove() {
+  if (backgroundAudioUnlocked) return;
+
+  backgroundAudioUnlocked = true;
+
+  try {
+    await startBackgroundAudioFromUserGesture();
+    console.log("Background audio started from mouse movement");
+  } catch (error) {
+    console.warn("Background audio could not start:", error);
+
+    // Allow another attempt if the browser rejected this movement
+    backgroundAudioUnlocked = false;
+    return;
+  }
+
+  // Remove listener after audio successfully starts
+  window.removeEventListener("mousemove", startAudioOnFirstMouseMove);
+}
+
+window.addEventListener("mousemove", startAudioOnFirstMouseMove);
 
 const renderer = new THREE.WebGLRenderer({
   canvas,
@@ -318,9 +327,18 @@ function __maybeFinishLoader() {
 
     setLoaderPct(100);
 
-    setTimeout(() => {
-      loaderReadyToEnter = true;
-    }, delay + 250);
+    setTimeout(async () => {
+  loaderReadyToEnter = true;
+
+  hideLoader();
+
+  startLazyPlaylistLoad();
+
+  setTimeout(() => {
+    initPostFXLazy();
+  }, 600);
+
+}, delay + 250);
   }
 }
 
@@ -4497,7 +4515,7 @@ const TV_PREVIEW_LABELS = {
     cinematic:     ["wide", "night", "tracking", "slow", "frame"],
     commercial:    ["clean", "product", "brand", "cut", "shine"],
     music:         ["performance", "flash", "beat", "crowd", "stage"],
-    experimental:  ["abstract", "glitch", "loop", "distort", "noise"],
+    animation:  ["abstract", "glitch", "loop", "distort", "noise"],
   },
   "3D MODEL": {
     boards:        ["deck", "truck", "wheel", "grip", "shape"],
@@ -4509,12 +4527,20 @@ const TV_PREVIEW_LABELS = {
 const TV_PREVIEW_IMAGES = {
   PHOTO: {
     portraits: [
+      "./assets/Photo/Portrait/23-Portrait.jpg",
+      "./assets/Photo/Portrait/27-Portrait.jpg",
       "./assets/Photo/Portrait/02-Portrait.jpg",
       "./assets/Photo/Portrait/03-Portrait.jpg",
       "./assets/Photo/Portrait/07-Portrait.jpg",
       "./assets/Photo/Portrait/08-Portrait.jpg",
       "./assets/Photo/Portrait/09-Portrait.jpg",
       "./assets/Photo/Portrait/14-Portrait.jpg",
+      "./assets/Photo/Portrait/15-Portrait.jpg",
+      "./assets/Photo/Portrait/16-Portrait.jpg",
+      "./assets/Photo/Portrait/22-Portrait.jpg",
+      "./assets/Photo/Portrait/24-Portrait.jpg",
+      "./assets/Photo/Portrait/25-Portrait.jpg",
+      "./assets/Photo/Portrait/29-Portrait.jpg",
     ],
     surfaces: [
       "./assets/Photo/Surfaces/01-Surfaces.jpg",
@@ -4523,7 +4549,6 @@ const TV_PREVIEW_IMAGES = {
     ],
     environments: [
       "./assets/Photo/Environment/01-Environment.jpg",
-      "./assets/Photo/Environment/02-Environment.jpg",
       "./assets/Photo/Environment/03-Environment.jpg",
       "./assets/Photo/Environment/04-Environment.jpg",
     ],
@@ -4534,8 +4559,11 @@ const TV_PREVIEW_IMAGES = {
       "./assets/Video/Cinematic/01-Cinematic.jpg",
     ],
     commercial: [
-      "./assets/Video/Commercial/01-Commercial.jpg",
       "./assets/Video/Commercial/02-Commercial.jpg",
+      "./assets/Video/Commercial/03-Commercial.jpg",
+      "./assets/Video/Commercial/04-Commercial.jpg",
+      "./assets/Video/Commercial/05-Commercial.jpg",
+      "./assets/Video/Commercial/01-Commercial.jpg",
     ],
     music: [
       "./assets/Video/Music/01-Music.jpg",
@@ -4544,8 +4572,8 @@ const TV_PREVIEW_IMAGES = {
       "./assets/Video/Music/04-Music.jpg",
       
     ],
-    experimental: [
-      "./assets/Video/Experimental/01-Experimental.jpg",
+    animation: [
+      "./assets/Video/Animation/01-Maggi Animation.jpg",
     ],
   },
 
@@ -5550,7 +5578,7 @@ const MENU_ITEMS = ["PHOTO", "VIDEO", "3D MODEL"];
 
 const SUBCATEGORY_ITEMS = {
   PHOTO: ["portraits", "surfaces", "environments"],
-  VIDEO: ["cinematic", "commercial", "music", "experimental"],
+  VIDEO: ["cinematic", "commercial", "music", "animation"],
   "3D MODEL": ["boards", "objects", "architecture"],
 };
 
@@ -6041,6 +6069,21 @@ const PHOTO_CATEGORIES = {
     "./assets/Photo/Portrait/11-Portrait.jpg",
     "./assets/Photo/Portrait/12-Portrait.jpg",
     "./assets/Photo/Portrait/14-Portrait.jpg",
+    "./assets/Photo/Portrait/15-Portrait.jpg",
+    "./assets/Photo/Portrait/16-Portrait.jpg",
+    "./assets/Photo/Portrait/17-Portrait.jpg",
+    "./assets/Photo/Portrait/18-Portrait.jpg",
+    "./assets/Photo/Portrait/19-Portrait.jpg",
+      "./assets/Photo/Portrait/20-Portrait.jpg",
+      "./assets/Photo/Portrait/21-Portrait.jpg",
+      "./assets/Photo/Portrait/22-Portrait.jpg",
+      "./assets/Photo/Portrait/23-Portrait.jpg",
+      "./assets/Photo/Portrait/24-Portrait.jpg",
+      "./assets/Photo/Portrait/25-Portrait.jpg",
+      "./assets/Photo/Portrait/26-Portrait.jpg",
+      "./assets/Photo/Portrait/27-Portrait.jpg",
+      "./assets/Photo/Portrait/28-Portrait.jpg",
+      "./assets/Photo/Portrait/29-Portrait.jpg",
   ],
 
   SURFACES: [
@@ -6052,7 +6095,6 @@ const PHOTO_CATEGORIES = {
 
   ENVIRONMENTS: [
     "./assets/Photo/Environment/01-Environment.jpg",
-    "./assets/Photo/Environment/02-Environment.jpg",
     "./assets/Photo/Environment/03-Environment.jpg",
     "./assets/Photo/Environment/04-Environment.JPEG",
   ],
@@ -6063,8 +6105,11 @@ const VIDEO_CATEGORIES = {
     "./assets/Video/Cinematic/01-Cinematic.mp4",
   ],
   COMMERCIAL: [
-    "./assets/Video/Commercial/01-Commercial.mp4",
     "./assets/Video/Commercial/02-Commercial.mp4",
+    "./assets/Video/Commercial/03-Commercial.mp4",
+    "./assets/Video/Commercial/04-Commercial.mp4",
+    "./assets/Video/Commercial/05-Commercial.mp4",
+    "./assets/Video/Commercial/01-Commercial.mp4",
   ],
   MUSIC: [
     "./assets/Video/Music/01-Music.mp4",
@@ -6072,8 +6117,8 @@ const VIDEO_CATEGORIES = {
     "./assets/Video/Music/03-Music.mp4",
     "./assets/Video/Music/04-Music.mp4",
   ],
-  EXPERIMENTAL: [
-    "./assets/Video/Experimental/01-Experimental.mp4",
+  ANIMATION: [
+    "./assets/Video/Animation/01-Maggi Animation.mp4",
   ],
 };
 
@@ -7086,7 +7131,7 @@ function ensureBackgroundAudio() {
   if (bgAudio) return bgAudio;
 
   bgAudio = new Audio("./assets/Audio/Background-sound11.mp3");
-  bgAudio.preload = "metadata";
+  bgAudio.preload = "auto";
   bgAudio.crossOrigin = "anonymous";
   bgAudio.loop = true;
   bgAudio.volume = isIOS ? 0.28 : 0.60; // ✅ lower on iOS only
@@ -7101,6 +7146,8 @@ function ensureBackgroundAudio() {
     bgAudioResumePending = true;
     scheduleBackgroundAudioResume(120);
   });
+
+
 
   bgAudio.addEventListener("ended", () => {
     if (!bgAudioEnabled) return;
@@ -7177,10 +7224,6 @@ const DESKTOP_LAMP_VOLUME = 0.22;
 
 let lampAudio = null;
 
-let smokeChirpAudio = null;
-let smokeChirpStartTimeout = null;
-let smokeChirpInterval = null;
-
 function applyLampAudioVolume(a) {
   if (!a) return;
   a.volume = isIOS ? IOS_LAMP_VOLUME : DESKTOP_LAMP_VOLUME;
@@ -7202,74 +7245,6 @@ function ensureLampAudio() {
   lampAudio.load();
 
   return lampAudio;
-}
-
-function ensureSmokeChirpAudio() {
-  if (smokeChirpAudio) return smokeChirpAudio;
-
-  smokeChirpAudio = new Audio("./assets/Audio/Smoke-Chirp.mp3");
-  smokeChirpAudio.preload = "auto";
-  smokeChirpAudio.crossOrigin = "anonymous";
-  smokeChirpAudio.loop = false;
-  smokeChirpAudio.playsInline = true;
-  smokeChirpAudio.setAttribute?.("webkit-playsinline", "");
-  smokeChirpAudio.volume = isIOS ? 0.12 : 0.08;
-  smokeChirpAudio.load();
-
-  return smokeChirpAudio;
-}
-
-function playSmokeChirp() {
-  const a = ensureSmokeChirpAudio();
-  if (!a) return;
-
-  try {
-    a.pause();
-    a.currentTime = 0;
-
-    const p = a.play();
-    if (p?.catch) {
-      p.catch((err) => {
-        console.warn("Smoke chirp play blocked:", err);
-      });
-    }
-  } catch (err) {
-    console.warn("Smoke chirp failed:", err);
-  }
-}
-
-function stopSmokeChirpCycle() {
-  if (smokeChirpStartTimeout) {
-    clearTimeout(smokeChirpStartTimeout);
-    smokeChirpStartTimeout = null;
-  }
-
-  if (smokeChirpInterval) {
-    clearInterval(smokeChirpInterval);
-    smokeChirpInterval = null;
-  }
-
-  if (smokeChirpAudio) {
-    try {
-      smokeChirpAudio.pause();
-      smokeChirpAudio.currentTime = 0;
-    } catch {}
-  }
-}
-
-function startSmokeChirpCycle() {
-  // prevent duplicates
-  stopSmokeChirpCycle();
-
-  // first chirp after 15s in scene
-  smokeChirpStartTimeout = setTimeout(() => {
-    playSmokeChirp();
-
-    // then every 30s forever
-    smokeChirpInterval = setInterval(() => {
-      playSmokeChirp();
-    }, 75000);
-  }, 15000);
 }
 
 const TV_ON_SOUND_SRC = "./assets/Audio/Tv On Sound1-01.mp3";
@@ -7547,6 +7522,7 @@ function stopMusicBecauseUserLeft() {
       a.currentTime = 0;
     } catch {}
   }
+}
 
   // stop background ambience
   if (bgAudio) {
@@ -7564,13 +7540,6 @@ function stopMusicBecauseUserLeft() {
     } catch {}
   }
 
-  // stop smoke chirp cycle
-  stopSmokeChirpCycle();
-
-  isPlaying = false;
-  updateSpeakerHintText?.();
-}
-
 function pauseAll() {
   for (const a of audioEls) {
     a.pause();
@@ -7580,11 +7549,12 @@ function pauseAll() {
 }
 
 async function playBackgroundAudio() {
-  if (!bgAudioEnabled) return;
+  if (!bgAudioEnabled) return false;
 
   const bg = ensureBackgroundAudio();
+  if (!bg) return false;
 
-    try {
+  try {
     bg.loop = true;
     bg.volume = isIOS ? 0.28 : 0.60;
     bg.playsInline = true;
@@ -7592,14 +7562,123 @@ async function playBackgroundAudio() {
 
     if (bg.paused) {
       await bg.play();
-      console.log("🌫️ Background ambience playing");
     }
 
     bgAudioResumePending = false;
+
+    console.log("🌫️ Background ambience playing");
+
+    return !bg.paused;
   } catch (err) {
     console.warn("Background ambience play blocked:", err);
+
+    return false;
   }
 }
+
+// ============================================================
+// START BACKGROUND AMBIENCE AFTER SCENE LOAD
+// Desktop: first mouse movement
+// Mobile: first touch
+// Click/pointerdown remains as an invisible browser fallback
+// ============================================================
+
+let backgroundAudioStartedByInteraction = false;
+let backgroundAudioStartInProgress = false;
+
+function sceneHasFinishedLoading() {
+  // The scene is ready when your loader has reached its enter-ready state.
+  // This prevents normal mouse movement during loading from starting audio early.
+  return loaderReadyToEnter === true;
+}
+
+async function tryStartBackgroundAudioFromInteraction() {
+  // Stop if the sound has already started successfully.
+  if (backgroundAudioStartedByInteraction) return;
+
+  // Stop duplicate playback attempts from happening simultaneously.
+  if (backgroundAudioStartInProgress) return;
+
+  // Do not start while the loading screen is still preparing the scene.
+  if (!sceneHasFinishedLoading()) return;
+
+  backgroundAudioStartInProgress = true;
+
+  try {
+    bgAudioEnabled = true;
+
+    const started = await playBackgroundAudio();
+
+    if (!started) {
+      // The browser rejected this particular type of interaction.
+      // Keep the listeners active so a click or touch can try again.
+      return;
+    }
+
+    backgroundAudioStartedByInteraction = true;
+    bgAudioResumePending = false;
+
+    console.log(
+      "🌫️ Background-sound11.mp3 started after user interaction"
+    );
+
+    removeBackgroundAudioStartListeners();
+  } catch (err) {
+    console.warn(
+      "Background ambience could not start from this interaction:",
+      err
+    );
+  } finally {
+    backgroundAudioStartInProgress = false;
+  }
+}
+
+function removeBackgroundAudioStartListeners() {
+  window.removeEventListener(
+    "mousemove",
+    tryStartBackgroundAudioFromInteraction
+  );
+
+  window.removeEventListener(
+    "pointerdown",
+    tryStartBackgroundAudioFromInteraction
+  );
+
+  window.removeEventListener(
+    "touchstart",
+    tryStartBackgroundAudioFromInteraction
+  );
+
+  window.removeEventListener(
+    "keydown",
+    tryStartBackgroundAudioFromInteraction
+  );
+}
+
+// Desktop request: attempt playback on first mouse movement.
+window.addEventListener(
+  "mousemove",
+  tryStartBackgroundAudioFromInteraction
+);
+
+// Fallback: many browsers require a click or pointer press for sound.
+window.addEventListener(
+  "pointerdown",
+  tryStartBackgroundAudioFromInteraction
+);
+
+// Mobile/iPhone fallback.
+window.addEventListener(
+  "touchstart",
+  tryStartBackgroundAudioFromInteraction,
+  { passive: true }
+);
+
+// Keyboard accessibility fallback.
+window.addEventListener(
+  "keydown",
+  tryStartBackgroundAudioFromInteraction
+);
 
 function playLampAudio() {
   const base = ensureLampAudio();
@@ -7653,7 +7732,6 @@ function pauseBackgroundAudio() {
 
 ensureBackgroundAudio();
 ensureLampAudio();
-ensureSmokeChirpAudio();
 ensureTvOnSound();
 ensureTvOffSound();
 
