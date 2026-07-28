@@ -8295,7 +8295,7 @@ function getTikTokProfileUrl() {
   return TIKTOK_PROFILE_URL;
 }
 
-const INSTAGRAM_PROFILE_URL = "https://www.instagram.com/g_a_m_b_o/";
+const INSTAGRAM_PROFILE_URL = "https://www.instagram.com/tucker.riley_/?hl=en";
 
 function getInstagramProfileUrl() {
   return INSTAGRAM_PROFILE_URL;
