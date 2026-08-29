@@ -4560,10 +4560,13 @@ const TV_PREVIEW_IMAGES = {
     ],
     commercial: [
       "./assets/Video/Commercial/02-Commercial.jpg",
+      "./assets/Video/Commercial/06-Commercial.jpg",
+      "./assets/Video/Commercial/07-Commercial.jpg",
       "./assets/Video/Commercial/03-Commercial.jpg",
       "./assets/Video/Commercial/04-Commercial.jpg",
       "./assets/Video/Commercial/05-Commercial.jpg",
       "./assets/Video/Commercial/01-Commercial.jpg",
+
     ],
     music: [
       "./assets/Video/Music/01-Music.jpg",
@@ -6106,9 +6109,11 @@ const VIDEO_CATEGORIES = {
   ],
   COMMERCIAL: [
     "./assets/Video/Commercial/02-Commercial.mp4",
-    "./assets/Video/Commercial/03-Commercial.mp4",
-    "./assets/Video/Commercial/04-Commercial.mp4",
+    "./assets/Video/Commercial/07-Commercial.mp4",
+    "./assets/Video/Commercial/06-Commercial.mp4",
     "./assets/Video/Commercial/05-Commercial.mp4",
+    "./assets/Video/Commercial/04-Commercial.mp4",
+    "./assets/Video/Commercial/03-Commercial.mp4",
     "./assets/Video/Commercial/01-Commercial.mp4",
   ],
   MUSIC: [
