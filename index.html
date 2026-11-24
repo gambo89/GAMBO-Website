@@ -1,85 +1,72 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-JQ4FQ7SHNR"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-
-  gtag('config', 'G-JQ4FQ7SHNR');
-</script>
-
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>GAMBO</title>
-  <link rel="preload" as ="image" href="./assets/Loading Page/Background.jpg" fetchpriority="high">
-  <link rel="icon" type="image/png" href="./assets/Loading Page/Black-logo.png?v=2" />
 
-<link rel="icon" type="image/png" sizes="32x32" href="./assets/Loading Page/Black-logo.png?v=2" />
-<link rel="icon" type="image/png" sizes="16x16" href="./assets/Loading Page/Black-logo.png?v=2" />
-<link rel="shortcut icon" href="./assets/Loading Page/Black-logo.png?v=2" />
+  <link
+    rel="preload"
+    as="image"
+    href="./assets/Loading%20Page/GAMBO%20word.png"
+    fetchpriority="high"
+  />
+  <link
+    rel="icon"
+    type="image/png"
+    href="./assets/Loading%20Page/GAMBO%20word.png"
+  />
+
+  <!-- Google Analytics -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-JQ4FQ7SHNR"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+
+    function gtag() {
+      dataLayer.push(arguments);
+    }
+
+    gtag("js", new Date());
+    gtag("config", "G-JQ4FQ7SHNR");
+  </script>
 
   <style>
-    html, body {
-  margin: 0;
-  padding: 0;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  background: url("./assets/Loading Page/Background.jpg") center center / cover no-repeat;
-  background-color: #000;
-}
+    :root {
+      --vh: 1vh;
+    }
 
-    :root { --vh: 1vh; }
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #000;
+    }
 
-   #c {
-  position: fixed;
-  inset: 0;
-  display: block;
-  width: 100%;
-  height: 100%;
-}
+    #c {
+      position: fixed;
+      inset: 0;
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
 
-#loader {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-  overflow: hidden;
-  background-color: #000;
-}
+    #loader {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background-color: #000;
+    }
 
-body.ios #loader {
-  height: calc(var(--vh, 1vh) * 100);
-}
-
-#loader-bg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  animation: loaderBgDrift 20s ease-in-out infinite;
-  will-change: transform;
-  pointer-events: none;
-}
-
-
-@keyframes loaderBgDrift {
-  0% {
-    transform: scale(1) translate(0px, 0px);
-  }
-  50% {
-    transform: scale(1.03) translate(-6px, -4px);
-  }
-  100% {
-    transform: scale(1) translate(0px, 0px);
-  }
-}
+    body.ios #loader {
+      height: calc(var(--vh) * 100);
+    }
 
     #loader.hidden {
       opacity: 0;
@@ -88,187 +75,94 @@ body.ios #loader {
     }
 
     .loader-inner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
 
-body.ios .loader-inner {
-  transform: translateY(-6%);
-}
+    body.ios .loader-inner {
+      transform: translateY(-6%);
+    }
 
-#loader-status {
-  margin-top: 18px;
-  min-height: 18px;
-  color: #fff;
-  font-family: monospace;
-  font-size: 18px;
-  line-height: 1;
-  text-align: center;
-  user-select: none;
-  opacity: 0.9;
-  letter-spacing: 0.08em;
-}
+    .loader-logo-wrap {
+      width: min(70vw, 520px);
+    }
 
-body.ios #loader-status {
-  margin-top: 6px;
-  font-size: 18px;
-}
+    body.ios .loader-logo-wrap {
+      width: min(75vw, 340px);
+    }
 
-#loader-status.is-enter-ready {
-  display: inline-block;
-  animation: loaderEnterPulse 2.6s ease-in-out infinite;
-  -webkit-animation: loaderEnterPulse 2.6s ease-in-out infinite;
-  color: #ffffff;
-  text-shadow:
-    0 0 4px rgba(255,255,255,0.18),
-    0 0 10px rgba(255,255,255,0.08);
-  letter-spacing: 0.06em;
-  will-change: transform, opacity, text-shadow;
-  opacity: 0.78; /* 👈 ADD THIS */
-}
+    .loader-logo {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
 
-@keyframes loaderEnterPulse {
-  0% {
-    opacity: 0.75;
-    transform: translateY(0) scale(1);
-    text-shadow:
-      0 0 3px rgba(255,255,255,0.10),
-      0 0 8px rgba(255,255,255,0.04);
-  }
+    #loader-status {
+      margin-top: 18px;
+      min-height: 18px;
+      color: #fff;
+      font-family: monospace;
+      font-size: 18px;
+      line-height: 1;
+      text-align: center;
+      user-select: none;
+      opacity: 0.9;
+      letter-spacing: 0.08em;
+    }
 
-  50% {
-    opacity: 0.95;
-    transform: translateY(-1px) scale(1.025);
-    text-shadow:
-      0 0 6px rgba(255,255,255,0.22),
-      0 0 14px rgba(255,255,255,0.10);
-  }
+    body.ios #loader-status {
+      margin-top: 16px;
+      font-size: 17px;
+    }
 
-  100% {
-    opacity: 0.75;
-    transform: translateY(0) scale(1);
-    text-shadow:
-      0 0 3px rgba(255,255,255,0.10),
-      0 0 8px rgba(255,255,255,0.04);
-  }
-}
+    #loader-status.is-enter-ready {
+      animation: loaderEnterPulse 2.6s ease-in-out infinite;
+      letter-spacing: 0.06em;
+    }
 
-@-webkit-keyframes loaderEnterPulse {
-  0% {
-    opacity: 0.78;
-    transform: translateY(0) scale(1);
-    text-shadow:
-      0 0 3px rgba(255,255,255,0.10),
-      0 0 8px rgba(255,255,255,0.04);
-  }
+    @keyframes loaderEnterPulse {
+      0%, 100% {
+        opacity: 0.75;
+        transform: translateY(0) scale(1);
+        text-shadow:
+          0 0 3px rgba(255, 255, 255, 0.10),
+          0 0 8px rgba(255, 255, 255, 0.04);
+      }
 
-  50% {
-    opacity: 1;
-    transform: translateY(-1px) scale(1.025);
-    text-shadow:
-      0 0 6px rgba(255,255,255,0.22),
-      0 0 14px rgba(255,255,255,0.10);
-  }
-
-  100% {
-    opacity: 0.78;
-    transform: translateY(0) scale(1);
-    text-shadow:
-      0 0 3px rgba(255,255,255,0.10),
-      0 0 8px rgba(255,255,255,0.04);
-  }
-}
-
-body.ios #loader-status {
-  margin-top: 16px;
-  font-size: 17px;
-}
-
-.loader-logo-wrap {
-  position: relative;
-  width: min(55vw, 520px);
-  transform: translateX(-23px);
-  aspect-ratio: 1 / 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* iOS only */
-body.ios .loader-logo-wrap {
-  width: clamp(250px, 44vw, 340px);
-  transform: translate(-6px, 4px);
-}
-
-.loader-logo {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-
-  /* 🔥 subtle lift */
-  filter: drop-shadow(0 0 6px rgba(255,255,255,0.08))
-          drop-shadow(0 0 18px rgba(255,255,255,0.04));
-}
-
-.loader-logo-white {
-  filter: brightness(0) invert(1);
-}
-
-.logo-fill-mask {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-
-  /* starts with nothing revealed */
-  clip-path: inset(100% 0 0 0);
-  -webkit-clip-path: inset(100% 0 0 0);
-}
-
-.loader-logo-black {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
+      50% {
+        opacity: 0.95;
+        transform: translateY(-1px) scale(1.025);
+        text-shadow:
+          0 0 6px rgba(255, 255, 255, 0.22),
+          0 0 14px rgba(255, 255, 255, 0.10);
+      }
+    }
   </style>
 </head>
 
 <body>
-
-<div id="loader">
-  <img
-    id="loader-bg"
-    src="./assets/Loading Page/Background.jpg"
-    alt=""
-    aria-hidden="true"
-  />
-  <div class="loader-inner">
-    <div class="loader-logo-wrap">
-      <img
-        class="loader-logo loader-logo-black"
-        src="./assets/Loading Page/Logo-Outline.svg"
-        alt="Loading logo"
-      />
-
-      <div class="logo-fill-mask">
+  <div id="loader">
+    <div class="loader-inner">
+      <div class="loader-logo-wrap">
         <img
-          class="loader-logo loader-logo-black"
-          src="./assets/Loading Page/Black logo.svg"
-          alt=""
+          class="loader-logo"
+          src="./assets/Loading%20Page/GAMBO%20word.png"
+          alt="GAMBO"
+          fetchpriority="high"
         />
-      </div>
-    </div>
 
-    <div id="loader-status">0%</div>
+        <!-- Kept for compatibility with the loading code in main.js. -->
+        <div class="logo-fill-mask" hidden aria-hidden="true"></div>
+      </div>
+
+      <div id="loader-status">0%</div>
+    </div>
   </div>
-</div>
 
   <canvas id="c"></canvas>
 
-  <!-- Import map so main.js can import "three" -->
   <script type="importmap">
     {
       "imports": {
@@ -279,30 +173,26 @@ body.ios .loader-logo-wrap {
   </script>
 
   <script>
-  function isIOS() {
-    return (
-      /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
-    );
-  }
-
-  if (isIOS()) {
-    document.body.classList.add("ios");
-  }
-</script>
-
-  <!-- ✅ iOS viewport height fix (handles Safari tabs/address bar changing) -->
-  <script>
-    function setVH() {
-      const vv = window.visualViewport;
-      const h = vv ? vv.height : window.innerHeight;
-      document.documentElement.style.setProperty("--vh", `${h * 0.01}px`);
+    function isIOS() {
+      return (
+        /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+      );
     }
 
-    // run once
-    setVH();
+    if (isIOS()) {
+      document.body.classList.add("ios");
+    }
 
-    // keep updated
+    function setVH() {
+      const height = window.visualViewport
+        ? window.visualViewport.height
+        : window.innerHeight;
+
+      document.documentElement.style.setProperty("--vh", `${height * 0.01}px`);
+    }
+
+    setVH();
     window.addEventListener("resize", setVH);
 
     if (window.visualViewport) {
@@ -310,7 +200,6 @@ body.ios .loader-logo-wrap {
       window.visualViewport.addEventListener("scroll", setVH);
     }
 
-    // Safari sometimes "settles" after first paint
     setTimeout(setVH, 150);
     setTimeout(setVH, 600);
   </script>
